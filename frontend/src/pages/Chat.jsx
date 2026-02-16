@@ -25,7 +25,7 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const readyDocs = documents.filter(d => d.status === 'ready');
+  const readyDocs = (documents || []).filter(d => d.status === 'ready');
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;

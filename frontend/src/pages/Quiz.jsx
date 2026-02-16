@@ -17,7 +17,7 @@ export default function Quiz() {
 
   useEffect(() => { fetchDocuments(); }, [fetchDocuments]);
 
-  const readyDocs = documents.filter(d => d.status === 'ready');
+  const readyDocs = (documents || []).filter(d => d.status === 'ready');
 
   const handleGenerate = async () => {
     setLoading(true);

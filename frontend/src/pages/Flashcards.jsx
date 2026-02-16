@@ -29,7 +29,7 @@ export default function Flashcards() {
     loadDecks();
   }, [fetchDocuments]);
 
-  const readyDocs = documents.filter(d => d.status === 'ready');
+  const readyDocs = (documents || []).filter(d => d.status === 'ready');
 
   const loadDecks = async () => {
     setLoading(true);

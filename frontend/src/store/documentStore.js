@@ -11,7 +11,7 @@ const useDocumentStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const documents = await documentService.listDocuments();
-      set({ documents, loading: false });
+      set({ documents: Array.isArray(documents) ? documents : [], loading: false });
     } catch (error) {
       set({ error: error.message, loading: false });
     }

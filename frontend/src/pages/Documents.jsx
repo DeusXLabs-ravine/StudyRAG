@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Trash2, AlertCircle, CheckCircle, Clock, X, Brain, Sparkles } from 'lucide-react';
+import { FileText, Trash2, AlertCircle, CheckCircle, Clock, X, Brain, Sparkles, Upload } from 'lucide-react';
 import useDocumentStore from '../store/documentStore';
 import Spinner from '../components/common/Spinner';
 import ProgressBar from '../components/common/ProgressBar';
@@ -54,13 +54,13 @@ export default function Documents() {
 
   // Poll processing documents and auto-redirect when one becomes ready
   useEffect(() => {
-    const currentProcessing = documents.filter(d => d.status === 'processing');
+    const currentProcessing = (documents || []).filter(d => d.status === 'processing');
     const currentProcessingIds = new Set(currentProcessing.map(d => d.id));
 
     // Check if any previously-processing doc is now ready
     for (const id of processingIdsRef.current) {
       if (!currentProcessingIds.has(id)) {
-        const doc = documents.find(d => d.id === id);
+        const doc = (documents || []).find(d => d.id === id);
         if (doc && doc.status === 'ready') {
           // This doc just finished — redirect to Learn
           navigate(`/learn/${doc.id}`);
@@ -95,7 +95,7 @@ export default function Documents() {
   const activeUploads = Object.entries(uploads);
   const hasUploading = activeUploads.some(([, u]) => u.status === 'uploading');
   const hasRegistering = activeUploads.some(([, u]) => u.status === 'registering');
-  const processingDocs = documents.filter(d => d.status === 'processing');
+  const processingDocs = (documents || []).filter(d => d.status === 'processing');
   const showProcessingBanner = processingDocs.length > 0 || hasRegistering;
 
   return (
@@ -211,15 +211,15 @@ export default function Documents() {
       <div className="space-y-6">
         <div className="flex items-center justify-between px-2">
           <h2 className="text-sm font-black text-gray-400 uppercase tracking-[0.2em]">Stored Documents</h2>
-          <span className="text-xs font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">{documents.length} Files</span>
+          <span className="text-xs font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">{(documents || []).length} Files</span>
         </div>
 
-        {loading && documents.length === 0 ? (
+        {loading && (documents || []).length === 0 ? (
           <div className="sleek-card p-20 flex flex-col items-center justify-center gap-4 text-center">
             <Spinner size="lg" />
             <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">Synchronizing Library</p>
           </div>
-        ) : documents.length === 0 ? (
+        ) : (documents || []).length === 0 ? (
           <div className="sleek-card p-24 text-center group">
             <div className="w-20 h-20 bg-gray-50 text-gray-300 rounded-3xl flex items-center justify-center mx-auto mb-8 transition-transform group-hover:scale-110 duration-500">
               <FileText className="h-10 w-10 opacity-30" />
@@ -229,7 +229,7 @@ export default function Documents() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4">
-            {documents.sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate)).map((doc, idx) => {
+            {[...(documents || [])].sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate)).map((doc, idx) => {
               const status = statusConfig[doc.status] || statusConfig.processing;
               const StatusIcon = status.icon;
               return (

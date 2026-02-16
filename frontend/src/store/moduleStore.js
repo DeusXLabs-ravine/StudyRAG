@@ -11,7 +11,7 @@ const useModuleStore = create((set) => ({
     set({ loading: true, error: null });
     try {
       const modules = await moduleService.listModules(documentId);
-      set({ modules, loading: false });
+      set({ modules: Array.isArray(modules) ? modules : [], loading: false });
     } catch (error) {
       set({ error: error.message, loading: false });
     }

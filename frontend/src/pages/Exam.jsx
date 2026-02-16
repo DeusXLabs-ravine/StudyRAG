@@ -26,7 +26,7 @@ export default function Exam() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
 
-  const readyDocs = documents.filter(d => d.status === 'ready');
+  const readyDocs = (documents || []).filter(d => d.status === 'ready');
 
   const startExam = async () => {
     setGenerating(true);

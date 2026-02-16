@@ -101,7 +101,7 @@ export default function Learn() {
     return <Lightbulb className="h-3 w-3" />;
   };
 
-  const readyDocs = documents.filter(d => d.status === 'ready');
+  const readyDocs = (documents || []).filter(d => d.status === 'ready');
 
   return (
     <div className="max-w-[1600px] mx-auto px-6 py-10">
@@ -142,7 +142,7 @@ export default function Learn() {
           <Spinner size="lg" />
           <p className="text-sm font-bold text-gray-400 uppercase tracking-widest animate-pulse">Building your classroom...</p>
         </div>
-      ) : modules.length === 0 ? (
+      ) : (modules || []).length === 0 ? (
         <div className="sleek-card p-20 text-center">
           <Sparkles className="h-12 w-12 text-primary/30 mx-auto mb-4" />
           <h3 className="text-lg font-bold text-gray-900">No modules yet</h3>
@@ -155,7 +155,7 @@ export default function Learn() {
           <div className="lg:col-span-3 xl:col-span-2">
             <div className="sticky top-8 space-y-6">
               {Object.entries(
-                modules.reduce((acc, mod) => {
+                (modules || []).reduce((acc, mod) => {
                   const topic = mod.topic || 'General';
                   if (!acc[topic]) acc[topic] = [];
                   acc[topic].push(mod);
@@ -171,7 +171,7 @@ export default function Learn() {
                   </h3>
                   <div className="space-y-1">
                     {topicModules.map((mod) => {
-                      const globalIndex = modules.findIndex(m => m.id === mod.id);
+                      const globalIndex = (modules || []).findIndex(m => m.id === mod.id);
                       const accessible = isModuleAccessible(mod, globalIndex);
                       const isActive = currentModule?.id === mod.id;
                       const isCompleted = mod.progress?.completed;
@@ -219,9 +219,10 @@ export default function Learn() {
                     markModuleCompleted(currentModule.id);
 
                     // Advance to the next module after passing the quiz
-                    const currentIndex = modules.findIndex(m => m.id === currentModule.id);
-                    if (currentIndex < modules.length - 1) {
-                      const nextModule = modules[currentIndex + 1];
+                    const safeModules = modules || [];
+                    const currentIndex = safeModules.findIndex(m => m.id === currentModule.id);
+                    if (currentIndex < safeModules.length - 1) {
+                      const nextModule = safeModules[currentIndex + 1];
                       // Track this module as unlocked so it can't re-lock during this session
                       unlockedIdsRef.current.add(nextModule.id);
                       setCurrentModule(nextModule);
