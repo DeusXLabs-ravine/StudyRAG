@@ -95,32 +95,49 @@ async function processDocumentFromBuffer(docId, buffer, ext) {
 }
 
 /**
- * Download a file from Supabase Storage with retry, then process it.
+ * Download a single chunk from Supabase Storage with retry.
  */
-async function processDocumentFromStorage(docId, storagePath, ext) {
+async function downloadChunk(storagePath) {
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const t0 = Date.now();
       const { data, error } = await supabase.storage
         .from(STORAGE_BUCKET)
         .download(storagePath);
       if (error) throw new Error(`Storage download error: ${error.message}`);
-
       const arrayBuffer = await data.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      console.log(`[Pipeline ${docId.slice(0, 8)}] Storage download: ${((Date.now() - t0) / 1000).toFixed(1)}s (${(buffer.length / 1024 / 1024).toFixed(1)}MB)`);
-      const t1 = Date.now();
-      const { text, metadata } = await extractTextFromBuffer(buffer, ext);
-      console.log(`[Pipeline ${docId.slice(0, 8)}] Text extraction: ${((Date.now() - t1) / 1000).toFixed(1)}s (${text.length} chars)`);
-      return await runProcessingPipeline(docId, text, metadata);
+      return Buffer.from(arrayBuffer);
     } catch (err) {
       lastErr = err;
-      console.warn(`Storage download attempt ${attempt + 1}/3 failed for ${storagePath}: ${err.message}`);
+      console.warn(`Download attempt ${attempt + 1}/3 failed for ${storagePath}: ${err.message}`);
       if (attempt < 2) await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
     }
   }
   throw lastErr;
+}
+
+/**
+ * Download file(s) from Supabase Storage, concatenate if chunked, then process.
+ * @param {string} docId
+ * @param {string|string[]} storagePaths - single path or ordered array of chunk paths
+ * @param {string} ext - file extension
+ */
+async function processDocumentFromStorage(docId, storagePaths, ext) {
+  const paths = Array.isArray(storagePaths) ? storagePaths : [storagePaths];
+  const prefix = `[Pipeline ${docId.slice(0, 8)}]`;
+
+  // Download all chunks in parallel
+  const t0 = Date.now();
+  const buffers = await Promise.all(paths.map(p => downloadChunk(p)));
+  const buffer = buffers.length === 1 ? buffers[0] : Buffer.concat(buffers);
+  console.log(`${prefix} Storage download: ${((Date.now() - t0) / 1000).toFixed(1)}s (${(buffer.length / 1024 / 1024).toFixed(1)}MB, ${paths.length} chunk(s))`);
+
+  // Extract text
+  const t1 = Date.now();
+  const { text, metadata } = await extractTextFromBuffer(buffer, ext);
+  console.log(`${prefix} Text extraction: ${((Date.now() - t1) / 1000).toFixed(1)}s (${text.length} chars)`);
+
+  return await runProcessingPipeline(docId, text, metadata);
 }
 
 async function runProcessingPipeline(docId, text, metadata) {
@@ -309,7 +326,9 @@ async function signUpload(req, res, next) {
       return res.status(400).json({ error: 'filename is required' });
     }
 
-    const ext = path.extname(filename).toLowerCase().slice(1);
+    // For chunked uploads, filename may be "file.pdf.part0" — validate the real extension
+    const realFilename = filename.replace(/\.part\d+$/, '');
+    const ext = path.extname(realFilename).toLowerCase().slice(1);
     if (!allowedFileTypes.includes(ext)) {
       return res.status(400).json({
         error: `File type .${ext} is not allowed. Allowed: ${allowedFileTypes.join(', ')}`,
@@ -340,20 +359,23 @@ async function signUpload(req, res, next) {
  */
 async function registerDocument(req, res, next) {
   try {
-    const { storagePath, originalName, fileSize, fileType } = req.body;
+    const { storagePath, storagePaths, originalName, fileSize, fileType } = req.body;
 
-    if (!storagePath || !originalName) {
-      return res.status(400).json({ error: 'storagePath and originalName are required' });
+    // Support both single storagePath and chunked storagePaths array
+    const paths = storagePaths || (storagePath ? [storagePath] : null);
+    if (!paths || paths.length === 0 || !originalName) {
+      return res.status(400).json({ error: 'storagePath (or storagePaths) and originalName are required' });
     }
 
     const docId = uuidv4();
     const ext = fileType || path.extname(originalName).toLowerCase();
+    const primaryPath = paths[0];
 
     await vectorStore.addDocument(docId, {
       originalName,
-      filename: storagePath,
-      filePath: storagePath,
-      storagePath,
+      filename: primaryPath,
+      filePath: primaryPath,
+      storagePath: primaryPath,
       fileType: ext,
       fileSize: fileSize || 0,
       status: 'processing',
@@ -367,7 +389,7 @@ async function registerDocument(req, res, next) {
       message: 'Document registered. Processing started.',
     });
 
-    processDocumentFromStorage(docId, storagePath, ext).catch(async (err) => {
+    processDocumentFromStorage(docId, paths, ext).catch(async (err) => {
       console.error(`Error processing document ${docId}:`, err);
       await vectorStore.updateDocumentStatus(docId, { status: 'failed', error: err.message });
     });
