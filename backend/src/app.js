@@ -44,11 +44,12 @@ app.use('/api/tts', ttsRoutes);
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.join(__dirname, '../../frontend/dist');
   app.use(express.static(distPath));
-  app.get('/{*path}', (req, res) => {
+  app.get('/{*path}', (req, res, next) => {
     // Only fallback for non-API routes
-    if (!req.path.startsWith('/api')) {
-      res.sendFile(path.join(distPath, 'index.html'));
+    if (req.path.startsWith('/api')) {
+      return next();
     }
+    res.sendFile(path.join(distPath, 'index.html'));
   });
 }
 

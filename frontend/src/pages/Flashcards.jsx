@@ -35,7 +35,7 @@ export default function Flashcards() {
     setLoading(true);
     try {
       const data = await flashcardService.listFlashcards();
-      setDecks(data);
+      setDecks(Array.isArray(data) ? data : []);
     } catch (err) {
       // ignore
     } finally {

@@ -111,6 +111,7 @@ export default function useTTS() {
 
     const voiceId = getVoiceId();
     const chunks = splitTextIntoChunks(text);
+    if (!chunks || chunks.length === 0) return;
     chunksRef.current = chunks;
     prefetchRef.current.clear();
 

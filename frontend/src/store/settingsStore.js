@@ -9,7 +9,7 @@ const useSettingsStore = create((set, get) => ({
   fetchSettings: async () => {
     try {
       const settings = await getSettings();
-      set({ settings, loaded: true });
+      set({ settings: settings || {}, loaded: true });
     } catch (err) {
       console.error('Failed to load settings:', err.message);
       set({ loaded: true });
@@ -29,7 +29,7 @@ const useSettingsStore = create((set, get) => ({
     return get().settings.tts_voice_id || 'Kore';
   },
 
-  setVoices: (voices) => set({ voices }),
+  setVoices: (voices) => set({ voices: Array.isArray(voices) ? voices : [] }),
 }));
 
 export default useSettingsStore;

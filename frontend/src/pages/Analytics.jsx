@@ -25,10 +25,10 @@ export default function Analytics() {
         analyticsService.getQuizTrend(),
         analyticsService.getWeakAreas(),
       ]);
-      setOverview(overviewData);
-      setTopics(topicsData);
-      setQuizTrend(trendData);
-      setWeakAreas(weakData);
+      setOverview(overviewData || {});
+      setTopics(Array.isArray(topicsData) ? topicsData : []);
+      setQuizTrend(Array.isArray(trendData) ? trendData : []);
+      setWeakAreas(Array.isArray(weakData) ? weakData : []);
     } catch (err) {
       // ignore
     } finally {
