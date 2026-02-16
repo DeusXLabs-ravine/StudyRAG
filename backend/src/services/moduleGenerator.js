@@ -24,12 +24,16 @@ async function generateModules(docId, documentText) {
     throw new Error('Failed to parse module generation response as JSON');
   }
 
+  // Build all rows in memory first, then batch insert
+  const allModuleRows = [];
+  const allQuestionRows = [];
+
   for (let index = 0; index < parsed.modules.length; index++) {
     const mod = parsed.modules[index];
     const id = uuidv4();
     const topic = mod.topic || mod.title;
 
-    const moduleRow = {
+    allModuleRows.push({
       id,
       document_id: docId,
       order_index: index,
@@ -38,38 +42,34 @@ async function generateModules(docId, documentText) {
       objectives: mod.objectives,
       content: mod.content,
       takeaways: mod.takeaways,
-    };
+    });
 
-    const questionRows = (mod.questions || []).map(q => ({
-      id: uuidv4(),
-      module_id: id,
-      type: q.type,
-      question: q.question,
-      options: q.options || null,
-      correct: q.correct,
-      explanation: q.explanation || null,
-      topic: q.topic || topic,
-    }));
+    for (const q of (mod.questions || [])) {
+      allQuestionRows.push({
+        id: uuidv4(),
+        module_id: id,
+        type: q.type,
+        question: q.question,
+        options: q.options || null,
+        correct: q.correct,
+        explanation: q.explanation || null,
+        topic: q.topic || topic,
+      });
+    }
+  }
 
-    await insertModuleWithQuestions(moduleRow, questionRows);
+  // Single batch insert for all modules
+  const { error: modErr } = await supabase.from('modules').insert(allModuleRows);
+  if (modErr) throw modErr;
+
+  // Single batch insert for all questions
+  if (allQuestionRows.length > 0) {
+    const { error: qErr } = await supabase.from('questions').insert(allQuestionRows);
+    if (qErr) throw qErr;
   }
 
   // Re-read from DB for consistent formatting
   return await getModulesByDocument(docId);
-}
-
-async function insertModuleWithQuestions(moduleData, questions) {
-  const { error: modErr } = await supabase.from('modules').insert(moduleData);
-  if (modErr) throw modErr;
-
-  if (questions.length > 0) {
-    const { error: qErr } = await supabase.from('questions').insert(questions);
-    if (qErr) {
-      // Rollback: delete the module we just inserted
-      await supabase.from('modules').delete().eq('id', moduleData.id);
-      throw qErr;
-    }
-  }
 }
 
 async function getModulesByDocument(docId) {
@@ -79,17 +79,24 @@ async function getModulesByDocument(docId) {
     .eq('document_id', docId)
     .order('order_index');
   if (error) throw error;
+  if (!rows || rows.length === 0) return [];
 
-  const modules = [];
-  for (const row of (rows || [])) {
-    const { data: questions, error: qErr } = await supabase
-      .from('questions')
-      .select('*')
-      .eq('module_id', row.id);
-    if (qErr) throw qErr;
-    modules.push(formatModule(row, questions || []));
+  // Fetch all questions for these modules in a single query
+  const moduleIds = rows.map(r => r.id);
+  const { data: allQuestions, error: qErr } = await supabase
+    .from('questions')
+    .select('*')
+    .in('module_id', moduleIds);
+  if (qErr) throw qErr;
+
+  // Group questions by module_id
+  const questionsByModule = {};
+  for (const q of (allQuestions || [])) {
+    if (!questionsByModule[q.module_id]) questionsByModule[q.module_id] = [];
+    questionsByModule[q.module_id].push(q);
   }
-  return modules;
+
+  return rows.map(row => formatModule(row, questionsByModule[row.id] || []));
 }
 
 async function getModuleById(moduleId) {
@@ -117,17 +124,23 @@ async function getAllModules() {
     .select('*')
     .order('order_index');
   if (error) throw error;
+  if (!rows || rows.length === 0) return [];
 
-  const modules = [];
-  for (const row of (rows || [])) {
-    const { data: questions, error: qErr } = await supabase
-      .from('questions')
-      .select('*')
-      .eq('module_id', row.id);
-    if (qErr) throw qErr;
-    modules.push(formatModule(row, questions || []));
+  // Fetch all questions in a single query
+  const moduleIds = rows.map(r => r.id);
+  const { data: allQuestions, error: qErr } = await supabase
+    .from('questions')
+    .select('*')
+    .in('module_id', moduleIds);
+  if (qErr) throw qErr;
+
+  const questionsByModule = {};
+  for (const q of (allQuestions || [])) {
+    if (!questionsByModule[q.module_id]) questionsByModule[q.module_id] = [];
+    questionsByModule[q.module_id].push(q);
   }
-  return modules;
+
+  return rows.map(row => formatModule(row, questionsByModule[row.id] || []));
 }
 
 async function deleteModulesByDocument(docId) {
@@ -172,8 +185,9 @@ async function enrichModulesWithResources(docId) {
 
   const modules = await getModulesByDocument(docId);
 
+  // Build all updates, then execute in parallel
+  const updates = [];
   for (const mod of modules) {
-    // Find resources matching this module's topic
     const relevant = resources.filter(r => {
       if (!r.topic || !mod.topic) return false;
       const rTopic = r.topic.toLowerCase();
@@ -190,9 +204,13 @@ async function enrichModulesWithResources(docId) {
         return `- ${link} *(${r.resourceType})* — ${r.snippet || ''}`;
       }).join('\n');
 
-    const updatedContent = mod.content + resourceSection;
+    updates.push(
+      supabase.from('modules').update({ content: mod.content + resourceSection }).eq('id', mod.id)
+    );
+  }
 
-    await supabase.from('modules').update({ content: updatedContent }).eq('id', mod.id);
+  if (updates.length > 0) {
+    await Promise.all(updates);
   }
 }
 

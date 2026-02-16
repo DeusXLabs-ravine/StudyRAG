@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { ClipboardCheck, Play, CheckCircle, XCircle, RotateCcw, Trophy, Zap } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Play, CheckCircle, XCircle, RotateCcw, Trophy, Zap } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import * as quizService from '../services/quizService';
 import useDocumentStore from '../store/documentStore';
 import Spinner from '../components/common/Spinner';
-import { useEffect } from 'react';
 
 export default function Quiz() {
   const { documents, fetchDocuments } = useDocumentStore();
@@ -102,11 +102,10 @@ export default function Quiz() {
                   <button
                     key={level}
                     onClick={() => setConfig(prev => ({ ...prev, difficulty: level }))}
-                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium capitalize border transition-colors ${
-                      config.difficulty === level
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium capitalize border transition-colors ${config.difficulty === level
                         ? 'border-primary-500 bg-primary-50 text-primary-700'
                         : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                    }`}
+                      }`}
                   >
                     {level}
                   </button>
@@ -159,7 +158,6 @@ export default function Quiz() {
           </span>
         </div>
 
-        {/* Progress bar */}
         <div className="w-full bg-gray-200 rounded-full h-1.5 mb-6">
           <div
             className="bg-primary-600 h-1.5 rounded-full transition-all"
@@ -179,11 +177,10 @@ export default function Quiz() {
                   <button
                     key={i}
                     onClick={() => handleAnswer(q.id, letter)}
-                    className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition-colors ${
-                      isSelected
+                    className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition-colors ${isSelected
                         ? 'border-primary-500 bg-primary-50 text-primary-700'
                         : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
+                      }`}
                   >
                     {option}
                   </button>
@@ -198,11 +195,10 @@ export default function Quiz() {
                 <button
                   key={val}
                   onClick={() => handleAnswer(q.id, val)}
-                  className={`flex-1 px-4 py-3 rounded-lg border text-sm font-medium capitalize transition-colors ${
-                    answers[q.id] === val
+                  className={`flex-1 px-4 py-3 rounded-lg border text-sm font-medium capitalize transition-colors ${answers[q.id] === val
                       ? 'border-primary-500 bg-primary-50 text-primary-700'
                       : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                  }`}
+                    }`}
                 >
                   {val}
                 </button>
@@ -242,45 +238,144 @@ export default function Quiz() {
 
   // Result view
   if (view === 'result' && result) {
+    const passed = result.score >= 70;
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center mb-6">
-          <Trophy className={`h-16 w-16 mx-auto mb-4 ${result.score >= 70 ? 'text-yellow-500' : 'text-gray-400'}`} />
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">Quiz Complete!</h2>
-          <p className="text-4xl font-bold mb-1" style={{ color: result.score >= 70 ? '#16a34a' : '#dc2626' }}>
-            {result.score}%
-          </p>
-          <p className="text-gray-500 text-sm">{result.correct} of {result.total} correct</p>
-        </div>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-3xl mx-auto px-4 py-12"
+      >
+        <div className={`relative sleek-card overflow-hidden shadow-2xl mb-8 ${passed ? 'bg-gradient-to-b from-emerald-50 to-white' : 'bg-gradient-to-b from-red-50 to-white'}`}>
+          {/* Background Decoration */}
+          <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+            <div className={`absolute -top-10 -left-10 w-40 h-40 rounded-full blur-3xl ${passed ? 'bg-emerald-400' : 'bg-red-400'}`} />
+            <div className={`absolute -bottom-10 -right-10 w-40 h-40 rounded-full blur-3xl ${passed ? 'bg-emerald-400' : 'bg-red-400'}`} />
+          </div>
 
-        <div className="space-y-3 mb-6">
-          {result.results.map((r, i) => (
-            <div key={i} className={`p-4 rounded-lg border ${r.isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-              <div className="flex items-start gap-2">
-                {r.isCorrect
-                  ? <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
-                  : <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
-                }
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{r.question}</p>
-                  <p className="text-xs text-gray-600 mt-1">
-                    Your answer: <span className="font-medium">{r.userAnswer || 'No answer'}</span>
-                    {!r.isCorrect && <> | Correct: <span className="font-medium text-green-700">{r.correctAnswer}</span></>}
-                  </p>
-                  {r.explanation && <p className="text-xs text-gray-500 mt-1">{r.explanation}</p>}
-                </div>
-              </div>
+          <div className="relative z-10 p-12 text-center">
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 200, damping: 20 }}
+              className={`w-24 h-24 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-2xl ${passed ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}
+            >
+              <Trophy className="h-12 w-12" />
+            </motion.div>
+
+            <motion.h2
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="text-4xl font-black text-gray-900 mb-2"
+            >
+              Quiz Mastery
+            </motion.h2>
+
+            <div className="flex flex-col items-center mb-8">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.4 }}
+              >
+                <span className={`text-8xl font-black ${passed ? 'text-emerald-600' : 'text-red-600'} drop-shadow-sm`}>
+                  {result.score}<span className="text-4xl opacity-50">%</span>
+                </span>
+              </motion.div>
+
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ delay: 0.6 }}
+                className={`mt-4 px-8 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.3em] shadow-sm border ${passed ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-red-100 text-red-800 border-red-200'}`}
+              >
+                {passed ? 'Achievement Unlocked' : 'Level Up Needed'}
+              </motion.div>
             </div>
-          ))}
+
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.8 }}
+              className="flex justify-center gap-8 border-t border-gray-100 pt-8"
+            >
+              <div className="text-center">
+                <p className="text-2xl font-black text-gray-900">{result.correct}</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Correct</p>
+              </div>
+              <div className="w-px h-10 bg-gray-100" />
+              <div className="text-center">
+                <p className="text-2xl font-black text-gray-900">{result.total}</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total</p>
+              </div>
+              <div className="w-px h-10 bg-gray-100" />
+              <div className="text-center">
+                <p className="text-2xl font-black text-gray-900">{Math.round((result.correct / result.total) * 100)}%</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Accuracy</p>
+              </div>
+            </motion.div>
+          </div>
         </div>
 
-        <button
+        <div className="space-y-6 mb-12">
+          <div className="px-2 mb-2">
+            <h3 className="text-2xl font-black text-gray-900">Performance Breakdown</h3>
+            <p className="text-sm text-gray-500 font-medium">Review your responses and learn from the explanations.</p>
+          </div>
+
+          <AnimatePresence>
+            {result.results.map((r, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 1 + (i * 0.1) }}
+                className={`group relative p-8 rounded-[2.5rem] border-2 transition-all duration-300 shadow-sm hover:shadow-md ${r.isCorrect ? 'bg-emerald-50/20 border-emerald-100/50 hover:border-emerald-200' : 'bg-red-50/20 border-red-100/50 hover:border-red-200'}`}
+              >
+                <div className="flex items-start gap-6">
+                  <div className={`mt-1 w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm ${r.isCorrect ? 'bg-emerald-100 text-emerald-600 border border-emerald-200' : 'bg-red-100 text-red-600 border border-red-200'}`}>
+                    {r.isCorrect ? <CheckCircle className="h-7 w-7" /> : <XCircle className="h-7 w-7" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 block mb-2">Question {i + 1}</span>
+                    <p className="text-xl font-bold text-gray-900 mb-6 leading-tight">{r.question}</p>
+
+                    <div className="flex flex-wrap gap-4 mb-6">
+                      <div className={`flex items-center gap-3 px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider border shadow-sm ${r.isCorrect ? 'bg-white border-emerald-100 text-emerald-700' : 'bg-white border-red-100 text-red-700'}`}>
+                        <span className="opacity-40">Your Choice</span>
+                        <span className={`px-2 py-0.5 rounded-lg ${r.isCorrect ? 'bg-emerald-50' : 'bg-red-50'}`}>{r.userAnswer || 'Skipped'}</span>
+                      </div>
+                      {!r.isCorrect && (
+                        <div className="flex items-center gap-3 px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider bg-emerald-500 text-white shadow-lg shadow-emerald-200">
+                          <span>Correct Key</span>
+                          <span className="bg-white/20 px-2 py-0.5 rounded-lg">{r.correctAnswer}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {r.explanation && (
+                      <div className="relative p-8 bg-white rounded-3xl text-sm text-gray-600 leading-relaxed border border-gray-100 shadow-sm group-hover:shadow-md transition-shadow">
+                        <div className="absolute -left-1.5 top-8 w-3 h-3 bg-white border-l border-b border-gray-100 rotate-45" />
+                        <span className="font-black text-gray-900 block mb-3 text-[10px] uppercase tracking-[0.2em] opacity-30">Expert Explanation</span>
+                        {r.explanation}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+
+        <motion.button
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 2 }}
           onClick={handleRetry}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700"
+          className="w-full flex items-center justify-center gap-3 px-8 py-5 bg-primary text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-primary/90 hover:shadow-2xl hover:shadow-primary/30 transition-all active:scale-[0.98] shadow-xl shadow-primary/20"
         >
-          <RotateCcw className="h-4 w-4" /> Take Another Quiz
-        </button>
-      </div>
+          <RotateCcw className="h-5 w-5" /> Start Fresh Session
+        </motion.button>
+      </motion.div>
     );
   }
 

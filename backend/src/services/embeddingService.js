@@ -16,19 +16,29 @@ async function generateEmbedding(text, taskType = TaskType.RETRIEVAL_DOCUMENT) {
 }
 
 /**
- * Generate embeddings for multiple texts (for indexing document chunks).
- * Uses RETRIEVAL_DOCUMENT task type by default.
+ * Generate embeddings for multiple texts using Gemini's batch API.
+ * Processes up to 100 texts per API call instead of one-by-one.
  */
 async function generateEmbeddings(texts, taskType = TaskType.RETRIEVAL_DOCUMENT) {
+  if (texts.length === 0) return [];
+
+  const model = getEmbeddingModel();
   const embeddings = [];
-  // Process in batches of 5 to avoid rate limits
-  for (let i = 0; i < texts.length; i += 5) {
-    const batch = texts.slice(i, i + 5);
-    const batchResults = await Promise.all(
-      batch.map(text => generateEmbedding(text, taskType))
-    );
-    embeddings.push(...batchResults);
+
+  // Gemini batchEmbedContents supports up to 100 texts per call
+  const BATCH_SIZE = 100;
+  for (let i = 0; i < texts.length; i += BATCH_SIZE) {
+    const batch = texts.slice(i, i + BATCH_SIZE);
+    const requests = batch.map(text => ({
+      content: { parts: [{ text }] },
+      taskType,
+    }));
+
+    const result = await model.batchEmbedContents({ requests });
+    const batchEmbeddings = result.embeddings.map(e => e.values);
+    embeddings.push(...batchEmbeddings);
   }
+
   return embeddings;
 }
 

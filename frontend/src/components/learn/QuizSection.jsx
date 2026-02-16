@@ -1,6 +1,4 @@
-import { useState } from 'react';
-import { CheckCircle, XCircle, ArrowLeft, Trophy, HelpCircle } from 'lucide-react';
-import useModuleStore from '../../store/moduleStore';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function QuizSection({ module, onBack, onComplete }) {
   const { submitProgress } = useModuleStore();
@@ -64,86 +62,153 @@ export default function QuizSection({ module, onBack, onComplete }) {
   if (submitted) {
     const passed = score >= 70;
     return (
-      <div className="sleek-card overflow-hidden">
-        <div className={`p-12 text-center ${passed ? 'bg-emerald-50' : 'bg-red-50'}`}>
-          <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg ${passed ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
-            <Trophy className="h-10 w-10" />
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="sleek-card overflow-hidden"
+      >
+        <div className={`relative p-12 text-center overflow-hidden ${passed ? 'bg-gradient-to-b from-emerald-50 to-white' : 'bg-gradient-to-b from-red-50 to-white'}`}>
+          {/* Background Decorative Elements */}
+          <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
+            <div className={`absolute -top-10 -left-10 w-40 h-40 rounded-full blur-3xl ${passed ? 'bg-emerald-400' : 'bg-red-400'}`} />
+            <div className={`absolute -bottom-10 -right-10 w-40 h-40 rounded-full blur-3xl ${passed ? 'bg-emerald-400' : 'bg-red-400'}`} />
           </div>
-          <h2 className="text-3xl font-extrabold text-gray-900 mb-2">
+
+          <motion.div
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 200, damping: 20 }}
+            className={`w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl relative z-10 ${passed ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}
+          >
+            <Trophy className="h-12 w-12" />
+          </motion.div>
+
+          <motion.h2
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="text-4xl font-black text-gray-900 mb-2"
+          >
             {passed ? 'Outstanding Work!' : 'Almost There!'}
-          </h2>
-          <div className="flex flex-col items-center">
-            <span className={`text-6xl font-black mb-2 ${passed ? 'text-emerald-600' : 'text-red-600'}`}>
-              {score}%
-            </span>
-            <div className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest ${passed ? 'bg-emerald-200 text-emerald-800' : 'bg-red-200 text-red-800'}`}>
-              {passed ? 'Passed' : 'Needs Review'}
-            </div>
+          </motion.h2>
+
+          <div className="flex flex-col items-center mb-8">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              className="relative"
+            >
+              <span className={`text-8xl font-black ${passed ? 'text-emerald-600' : 'text-red-600'} drop-shadow-sm`}>
+                {score}<span className="text-4xl opacity-50">%</span>
+              </span>
+            </motion.div>
+
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.6 }}
+              className={`mt-4 px-6 py-2 rounded-2xl text-xs font-black uppercase tracking-[0.2em] shadow-sm ${passed ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-red-100 text-red-800 border border-red-200'}`}
+            >
+              {passed ? 'Mastery Achieved' : 'Learning Opportunity'}
+            </motion.div>
           </div>
-          <p className="text-gray-600 mt-6 max-w-md mx-auto leading-relaxed">
+
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8 }}
+            className="text-gray-500 text-base max-w-md mx-auto leading-relaxed font-medium"
+          >
             {passed
               ? 'You have successfully mastered the material in this module. Ready for the next challenge?'
               : 'You need at least 70% to pass this module. We recommend reviewing the lesson material before trying again.'}
-          </p>
+          </motion.p>
         </div>
 
-        <div className="p-8">
-          <h3 className="text-lg font-bold text-gray-900 mb-6 px-2">Question Review</h3>
-          <div className="space-y-4">
+        <div className="p-10 bg-white">
+          <div className="flex items-center justify-between mb-8 px-2">
+            <div>
+              <h3 className="text-xl font-black text-gray-900">Question Review</h3>
+              <p className="text-sm text-gray-500 font-medium mt-1">Check where you excelled and what to revisit.</p>
+            </div>
+            <div className="flex gap-2">
+              <div className="px-3 py-1 bg-gray-100 rounded-lg text-xs font-bold text-gray-600 flex items-center gap-1.5 border border-gray-200">
+                <div className="w-2 h-2 rounded-full bg-emerald-500" /> {questions.filter(q => answers[q.id]?.toLowerCase() === q.correct?.toLowerCase()).length} Correct
+              </div>
+              <div className="px-3 py-1 bg-gray-100 rounded-lg text-xs font-bold text-gray-600 flex items-center gap-1.5 border border-gray-200">
+                <div className="w-2 h-2 rounded-full bg-red-500" /> {questions.length - questions.filter(q => answers[q.id]?.toLowerCase() === q.correct?.toLowerCase()).length} Wrong
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
             {questions.map((q, idx) => {
               const userAnswer = answers[q.id];
               const isCorrect = userAnswer?.toLowerCase() === q.correct?.toLowerCase();
               return (
-                <div key={q.id} className={`p-6 rounded-2xl border transition-all ${isCorrect ? 'bg-emerald-50/30 border-emerald-100' : 'bg-red-50/30 border-red-100'}`}>
+                <motion.div
+                  key={q.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 1 + (idx * 0.1) }}
+                  className={`group relative p-6 rounded-3xl border-2 transition-all duration-300 ${isCorrect ? 'bg-emerald-50/20 border-emerald-100/50 hover:border-emerald-200' : 'bg-red-50/20 border-red-100/50 hover:border-red-200'}`}
+                >
                   <div className="flex items-start gap-4">
-                    <div className={`mt-1 w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${isCorrect ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
-                      {isCorrect ? <CheckCircle className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
+                    <div className={`mt-0.5 w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm ${isCorrect ? 'bg-emerald-100 text-emerald-600 border border-emerald-200' : 'bg-red-100 text-red-600 border border-red-200'}`}>
+                      {isCorrect ? <CheckCircle className="h-6 w-6" /> : <XCircle className="h-6 w-6" />}
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-bold text-gray-900 mb-3">{idx + 1}. {q.question}</p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Question {idx + 1}</span>
+                      </div>
+                      <p className="text-lg font-bold text-gray-900 mb-4 leading-tight">{q.question}</p>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                        <div className={`px-4 py-2 rounded-lg text-xs font-medium ${isCorrect ? 'bg-emerald-100/50 text-emerald-800' : 'bg-red-100/50 text-red-800'}`}>
-                          Your answer: <span className="font-bold">{userAnswer || 'Skipped'}</span>
+                      <div className="flex flex-wrap gap-3 mb-4">
+                        <div className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border ${isCorrect ? 'bg-white border-emerald-100 text-emerald-700' : 'bg-white border-red-100 text-red-700'}`}>
+                          <span className="opacity-50">Your Answer:</span>
+                          <span className="bg-gray-50 px-2 py-0.5 rounded-lg">{userAnswer || 'Skipped'}</span>
                         </div>
                         {!isCorrect && (
-                          <div className="px-4 py-2 rounded-lg text-xs font-medium bg-emerald-100/50 text-emerald-800">
-                            Correct: <span className="font-bold">{q.correct}</span>
+                          <div className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-white shadow-md shadow-emerald-200">
+                            <span>Correct Answer:</span>
+                            <span className="bg-white/20 px-2 py-0.5 rounded-lg">{q.correct}</span>
                           </div>
                         )}
                       </div>
 
                       {q.explanation && (
-                        <div className="p-4 bg-white/50 rounded-xl text-xs text-gray-600 leading-relaxed border border-gray-100">
-                          <span className="font-bold text-gray-800 block mb-1">Explanation:</span>
+                        <div className="relative p-6 bg-white rounded-2xl text-sm text-gray-600 leading-relaxed border border-gray-100 shadow-sm group-hover:shadow-md transition-shadow">
+                          <div className="absolute -left-1.5 top-6 w-3 h-3 bg-white border-l border-b border-gray-100 rotate-45" />
+                          <span className="font-black text-gray-900 block mb-2 text-xs uppercase tracking-widest opacity-40">Explanation</span>
                           {q.explanation}
                         </div>
                       )}
                     </div>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
         </div>
 
-        <div className="p-8 bg-gray-50 flex items-center justify-center gap-4">
+        <div className="p-10 bg-gray-50/80 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-center gap-4">
           <button
             onClick={onBack}
-            className="px-8 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all shadow-sm active:scale-95"
+            className="w-full sm:w-auto px-10 py-4 bg-white border-2 border-gray-200 text-gray-700 rounded-2xl text-sm font-black hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2"
           >
-            Review Lesson
+            <ArrowLeft className="h-4 w-4" /> Review Lesson
           </button>
           {passed && onComplete && (
             <button
               onClick={onComplete}
-              className="px-8 py-3 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 active:scale-95"
+              className="w-full sm:w-auto px-10 py-4 bg-primary text-white rounded-2xl text-sm font-black hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/20 transition-all shadow-lg shadow-primary/20 active:scale-95 flex items-center justify-center gap-2"
             >
-              Continue Journey
+              <Trophy className="h-4 w-4" /> Continue Journey
             </button>
           )}
         </div>
-      </div>
+      </motion.div>
     );
   }
 

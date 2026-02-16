@@ -80,10 +80,7 @@ async function uploadDocument(req, res, next) {
 
     processDocumentFromBuffer(docId, file.buffer, ext).catch(async (err) => {
       console.error(`Error processing document ${docId}:`, err);
-      const doc = await vectorStore.getDocument(docId);
-      if (doc) {
-        await vectorStore.addDocument(docId, { ...doc, id: undefined, status: 'failed', error: err.message });
-      }
+      await vectorStore.updateDocumentStatus(docId, { status: 'failed', error: err.message });
     });
   } catch (error) {
     next(error);
@@ -121,40 +118,54 @@ async function processDocumentFromStorage(docId, storagePath, ext) {
 }
 
 async function runProcessingPipeline(docId, text, metadata) {
-  // Chunk text
+  // Chunk text (CPU-only, fast)
   const chunks = chunkText(text);
-
-  // Generate embeddings
   const texts = chunks.map(c => c.text);
-  const embeddings = await generateEmbeddings(texts);
 
-  // Store in vector store
-  const chunksWithEmbeddings = chunks.map((chunk, i) => ({
-    id: uuidv4(),
-    text: chunk.text,
-    heading: chunk.heading,
-    embedding: embeddings[i],
-  }));
+  // Three-way parallelization: embedding+store, module generation, and web research
+  // are all independent — none depend on the others' output
+  const [embeddingResult, modulesResult, researchResult] = await Promise.allSettled([
+    // Pipeline A: Generate embeddings → store in vector DB
+    (async () => {
+      const embeddings = await generateEmbeddings(texts);
+      const chunksWithEmbeddings = chunks.map((chunk, i) => ({
+        id: uuidv4(),
+        text: chunk.text,
+        heading: chunk.heading,
+        embedding: embeddings[i],
+      }));
+      await vectorStore.addChunks(docId, chunksWithEmbeddings);
+      return chunksWithEmbeddings.length;
+    })(),
+    // Pipeline B: Generate learning modules (LLM call — slowest step)
+    generateModules(docId, text),
+    // Pipeline C: Extract topics + search for supplementary resources
+    researchDocument(docId, text),
+  ]);
 
-  await vectorStore.addChunks(docId, chunksWithEmbeddings);
-
-  // Generate learning modules
-  await generateModules(docId, text);
-
-  // Web research enrichment: find related books, articles, and textbooks
-  try {
-    await researchDocument(docId, text);
-    await enrichModulesWithResources(docId);
-  } catch (researchErr) {
-    console.error(`Web research/enrichment failed for document ${docId}:`, researchErr.message);
-    // Non-blocking — research is supplementary, document processing continues
+  // Embedding failures are critical (needed for search/RAG)
+  if (embeddingResult.status === 'rejected') {
+    throw embeddingResult.reason;
   }
 
-  // Update document status
-  const doc = await vectorStore.getDocument(docId);
-  await vectorStore.addDocument(docId, {
-    ...doc,
-    id: undefined,
+  // Module generation is critical
+  if (modulesResult.status === 'rejected') {
+    throw modulesResult.reason;
+  }
+
+  // Enrich modules with research results (only if research succeeded)
+  if (researchResult.status === 'fulfilled') {
+    try {
+      await enrichModulesWithResources(docId);
+    } catch (enrichErr) {
+      console.error(`Module enrichment failed for document ${docId}:`, enrichErr.message);
+    }
+  } else {
+    console.error(`Web research failed for document ${docId}:`, researchResult.reason?.message);
+  }
+
+  // Update document status — targeted update instead of full read+upsert
+  await vectorStore.updateDocumentStatus(docId, {
     status: 'ready',
     processedDate: new Date().toISOString(),
     chunkCount: chunks.length,
@@ -240,7 +251,7 @@ async function reprocessDocument(req, res, next) {
     // Download from Supabase Storage and reprocess
     processDocumentFromStorage(id, doc.storagePath, doc.fileType).catch(async (err) => {
       console.error(`Error reprocessing document ${id}:`, err);
-      await vectorStore.addDocument(id, { ...doc, id: undefined, status: 'failed', error: err.message });
+      await vectorStore.updateDocumentStatus(id, { status: 'failed', error: err.message });
     });
   } catch (error) {
     next(error);
@@ -331,10 +342,7 @@ async function registerDocument(req, res, next) {
 
     processDocumentFromStorage(docId, storagePath, ext).catch(async (err) => {
       console.error(`Error processing document ${docId}:`, err);
-      const doc = await vectorStore.getDocument(docId);
-      if (doc) {
-        await vectorStore.addDocument(docId, { ...doc, id: undefined, status: 'failed', error: err.message });
-      }
+      await vectorStore.updateDocumentStatus(docId, { status: 'failed', error: err.message });
     });
   } catch (error) {
     next(error);

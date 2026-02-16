@@ -74,18 +74,19 @@ async function researchDocument(docId, documentText) {
   const topics = await extractTopics(documentText);
   if (topics.length === 0) return [];
 
-  const allResources = [];
+  // Research all topics in parallel (typically 3-5 topics)
+  const results = await Promise.allSettled(
+    topics.map(topicObj => researchTopic(topicObj.topic, topicObj.search_query))
+  );
 
-  // Process topics sequentially to avoid rate limits
-  for (const topicObj of topics) {
-    try {
-      const resources = await researchTopic(topicObj.topic, topicObj.search_query);
-      allResources.push(...resources);
-    } catch (err) {
-      console.error(`Web research failed for topic "${topicObj.topic}":`, err.message);
-      // Continue with other topics
+  const allResources = [];
+  results.forEach((result, i) => {
+    if (result.status === 'fulfilled') {
+      allResources.push(...result.value);
+    } else {
+      console.error(`Web research failed for topic "${topics[i].topic}":`, result.reason?.message);
     }
-  }
+  });
 
   if (allResources.length === 0) return [];
 

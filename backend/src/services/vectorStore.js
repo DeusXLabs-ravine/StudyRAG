@@ -39,9 +39,14 @@ async function addChunks(docId, chunks) {
     embedding: JSON.stringify(chunk.embedding),
   }));
 
-  // Supabase supports batch insert with an array
-  const { error } = await supabase.from('chunks').insert(rows);
-  if (error) throw error;
+  // Batch inserts in groups of 50 to keep payloads under PostgREST limits
+  // (each embedding is ~12KB serialized, 50 * 12KB ≈ 600KB per batch)
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const batch = rows.slice(i, i + BATCH_SIZE);
+    const { error } = await supabase.from('chunks').insert(batch);
+    if (error) throw error;
+  }
 }
 
 async function search(query, topK = 5, docId = null) {
@@ -146,6 +151,21 @@ function formatDoc(row) {
   };
 }
 
+async function updateDocumentStatus(docId, fields) {
+  const update = {};
+  if (fields.status !== undefined) update.status = fields.status;
+  if (fields.processedDate !== undefined) update.processed_date = fields.processedDate;
+  if (fields.chunkCount !== undefined) update.chunk_count = fields.chunkCount;
+  if (fields.extractedMetadata !== undefined) update.extracted_metadata = fields.extractedMetadata;
+  if (fields.error !== undefined) update.error_message = fields.error;
+
+  const { error } = await supabase
+    .from('documents')
+    .update(update)
+    .eq('id', docId);
+  if (error) throw error;
+}
+
 module.exports = {
   addDocument,
   removeDocument,
@@ -156,4 +176,5 @@ module.exports = {
   getAllDocuments,
   getDocument,
   getStats,
+  updateDocumentStatus,
 };
