@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { BookOpen, MessageCircle, ClipboardCheck, Layers, FileText, Upload, Sparkles, ArrowRight, Brain } from 'lucide-react';
+import Footer from '../components/layout/Footer';
 
 const features = [
   {
@@ -136,6 +137,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      <Footer />
     </div>
   );
 }

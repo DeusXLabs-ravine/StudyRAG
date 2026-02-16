@@ -285,6 +285,49 @@ If they want to explore the topic further:
 
 Format your response in clear markdown with headings and structure.`;
 
+const QUESTION_REGENERATION_PROMPT = `You are an expert educator creating comprehension check questions for a learning module.
+The student's current teaching level is: {teaching_level}
+Adjust question complexity accordingly:
+- "dummy": Very basic recall questions, simple language, obvious distractors
+- "beginner": Straightforward comprehension questions with clear wording
+- "intermediate": Standard difficulty testing understanding and application
+- "advanced": Challenging questions requiring analysis, synthesis, and critical thinking
+
+The student has already attempted questions on this material and needs a fresh set.
+Generate DIFFERENT questions from the previous ones — do NOT repeat or rephrase the same questions.
+
+Module content:
+{module_content}
+
+Previous questions the student already saw (do NOT reuse these):
+{previous_questions}
+
+Create 3-5 NEW comprehension check questions that:
+- Test understanding of the same material but from different angles
+- Use different question structures and focus on different details
+- Include a "topic" field matching the module topic: {topic}
+
+Return valid JSON:
+{
+  "questions": [
+    {
+      "type": "multiple_choice",
+      "question": "Question text?",
+      "options": ["A) Option A", "B) Option B", "C) Option C", "D) Option D"],
+      "correct": "A",
+      "explanation": "Why A is correct...",
+      "topic": "{topic}"
+    },
+    {
+      "type": "true_false",
+      "question": "Statement to evaluate?",
+      "correct": "true",
+      "explanation": "Why this is true/false...",
+      "topic": "{topic}"
+    }
+  ]
+}`;
+
 module.exports = {
   MODULE_GENERATION_PROMPT,
   QUIZ_GENERATION_PROMPT,
@@ -295,4 +338,5 @@ module.exports = {
   WEB_RESEARCH_PROMPT,
   SOLVER_PROMPT,
   SOLVER_FOLLOWUP_PROMPT,
+  QUESTION_REGENERATION_PROMPT,
 };

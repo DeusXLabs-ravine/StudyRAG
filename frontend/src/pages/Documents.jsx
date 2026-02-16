@@ -1,4 +1,5 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FileText, Trash2, AlertCircle, CheckCircle, Clock, X, Brain, Sparkles } from 'lucide-react';
 import useDocumentStore from '../store/documentStore';
 import Spinner from '../components/common/Spinner';
@@ -38,26 +39,48 @@ const processingMessages = [
 ];
 
 export default function Documents() {
+  const navigate = useNavigate();
   const {
     documents, loading, error, uploads,
     fetchDocuments, uploadDocument, deleteDocument, refreshDocument, clearUploadError,
   } = useDocumentStore();
 
+  // Track which doc IDs were processing so we can detect the transition to ready
+  const processingIdsRef = useRef(new Set());
+
   useEffect(() => {
     fetchDocuments();
   }, [fetchDocuments]);
 
-  // Poll processing documents
+  // Poll processing documents and auto-redirect when one becomes ready
   useEffect(() => {
-    const processing = documents.filter(d => d.status === 'processing');
-    if (processing.length === 0) return;
+    const currentProcessing = documents.filter(d => d.status === 'processing');
+    const currentProcessingIds = new Set(currentProcessing.map(d => d.id));
+
+    // Check if any previously-processing doc is now ready
+    for (const id of processingIdsRef.current) {
+      if (!currentProcessingIds.has(id)) {
+        const doc = documents.find(d => d.id === id);
+        if (doc && doc.status === 'ready') {
+          // This doc just finished — redirect to Learn
+          navigate(`/learn/${doc.id}`);
+          processingIdsRef.current.clear();
+          return;
+        }
+      }
+    }
+
+    // Update tracking set
+    processingIdsRef.current = currentProcessingIds;
+
+    if (currentProcessing.length === 0) return;
 
     const interval = setInterval(() => {
-      processing.forEach(doc => refreshDocument(doc.id));
+      currentProcessing.forEach(doc => refreshDocument(doc.id));
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [documents, refreshDocument]);
+  }, [documents, refreshDocument, navigate]);
 
   const handleFilesSelected = useCallback((newFiles) => {
     newFiles.forEach(file => uploadDocument(file).catch(() => { }));

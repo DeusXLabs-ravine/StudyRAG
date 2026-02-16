@@ -20,7 +20,7 @@ StudyRAG is a cutting-edge educational platform that transforms your static stud
 
 ### Backend
 - **Node.js & Express**: Robust and scalable API architecture.
-- **Google Gemini 1.5 & 2.0**: State-of-the-art LLMs for generation, embeddings, and reasoning.
+- **Google Gemini 3.0**: State-of-the-art LLMs for generation, embeddings, and reasoning.
 - **Supabase (PostgreSQL)**: Secure database and **pgvector** for high-performance semantic search.
 - **Cloudinary**: Reliable cloud storage for study documents.
 

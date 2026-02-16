@@ -16,6 +16,11 @@ export async function updateProgress(moduleId, score) {
   return data;
 }
 
+export async function regenerateQuestions(moduleId) {
+  const { data } = await api.post(`/modules/${moduleId}/regenerate-questions`);
+  return data;
+}
+
 export async function explainSimply(moduleId, question = '') {
   const { data } = await api.post(`/modules/${moduleId}/explain`, { question });
   return data.explanation;

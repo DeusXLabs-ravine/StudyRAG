@@ -46,7 +46,38 @@ const useModuleStore = create((set) => ({
     }
   },
 
+  regenerateQuestions: async (moduleId) => {
+    try {
+      const updatedModule = await moduleService.regenerateQuestions(moduleId);
+      set(state => ({
+        modules: state.modules.map(m =>
+          m.id === moduleId ? updatedModule : m
+        ),
+        currentModule: state.currentModule?.id === moduleId
+          ? updatedModule
+          : state.currentModule,
+      }));
+      return updatedModule;
+    } catch (error) {
+      set({ error: error.message });
+      throw error;
+    }
+  },
+
   setCurrentModule: (module) => set({ currentModule: module }),
+
+  // Force-mark a module as completed in the local store (belt-and-suspenders
+  // for when submitProgress may not have fully propagated)
+  markModuleCompleted: (moduleId) => set(state => ({
+    modules: state.modules.map(m =>
+      m.id === moduleId
+        ? { ...m, progress: { ...m.progress, completed: true } }
+        : m
+    ),
+    currentModule: state.currentModule?.id === moduleId
+      ? { ...state.currentModule, progress: { ...state.currentModule.progress, completed: true } }
+      : state.currentModule,
+  })),
 }));
 
 export default useModuleStore;

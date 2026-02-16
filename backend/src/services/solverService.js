@@ -6,7 +6,7 @@ const { getUserTeachingLevel } = require('./userProfileService');
 const { v4: uuidv4 } = require('uuid');
 
 /**
- * Solve a STEM problem step-by-step using Gemini 2.5 Pro.
+ * Solve a STEM problem step-by-step using Gemini 3 Pro.
  */
 async function solveProblem(problem, subject, docId, useWebSearch) {
   const teachingLevel = await getUserTeachingLevel();

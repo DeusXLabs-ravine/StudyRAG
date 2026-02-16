@@ -1,5 +1,5 @@
 const supabase = require('../config/database');
-const { getAllModules, getModuleById, getModulesByDocument } = require('../services/moduleGenerator');
+const { getAllModules, getModuleById, getModulesByDocument, regenerateQuestions: regenerateModuleQuestions } = require('../services/moduleGenerator');
 
 async function getProgressForModule(moduleId) {
   const { data: row, error } = await supabase
@@ -103,4 +103,15 @@ async function updateProgress(req, res, next) {
   }
 }
 
-module.exports = { listModules, getModule, updateProgress };
+async function regenerateQuestions(req, res, next) {
+  try {
+    const { id } = req.params;
+    const updatedModule = await regenerateModuleQuestions(id);
+    const progress = await getProgressForModule(id);
+    res.json({ ...updatedModule, progress });
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = { listModules, getModule, updateProgress, regenerateQuestions };

@@ -41,7 +41,7 @@ We don't just feed the whole document to the LLM. We break it into chunks of **8
 
 ### 3.3. Embeddings & Vector Storage
 Located in `backend/src/services/embeddingService.js` and `vectorStore.js`.
-- **Embeddings**: We use Google Gemini's `text-embedding-004` model. This turns text into a vector (a list of ~768 numbers). Vectors represent the *meaning* of the text.
+- **Embeddings**: We use Google Gemini's `gemini-embedding-001` model. This turns text into a vector (a list of ~768 numbers). Vectors represent the *meaning* of the text.
 - **Vector DB**: We use **Supabase** with the `pgvector` extension.
 - **Search**: When a query comes in, we turn the query into a vector and use **Cosine Similarity** (in the `match_chunks` SQL function) to find chunks that are "closest" in meaning to the query.
 
@@ -62,7 +62,7 @@ The system doesn't just show cards randomly. It uses a **Spaced Repetition** alg
 
 ### 4.2. STEM Solver
 Located in `solverService.js`.
-For complex math or coding, we use **Gemini 2.0 Pro** with optional **Web Search Grounding**. This allows the system to solve problems step-by-step while cross-referencing your study materials to ensure the notation matches what you're learning.
+For complex math or coding, we use **Gemini 3 Pro** with optional **Web Search Grounding**. This allows the system to solve problems step-by-step while cross-referencing your study materials to ensure the notation matches what you're learning.
 
 ### 4.3. Automated Modules
 Located in `moduleGenerator.js`.
@@ -74,8 +74,8 @@ The system analyzes your entire document and breaks it into pedagogical modules 
 
 | Component | Technology | Purpose |
 | :--- | :--- | :--- |
-| **LLM** | Google Gemini 1.5/2.0 | Reasoning and Text Generation |
-| **Embeddings** | Gemini text-embedding-004 | Semantic representation of text |
+| **LLM** | Gemini 3 Flash / 3 Pro | Reasoning and Text Generation |
+| **Embeddings** | Gemini gemini-embedding-001 | Semantic representation of text |
 | **Vector DB** | Supabase (PostgreSQL + pgvector) | Efficient semantic search |
 | **Backend** | Node.js / Express | Logic and API layer |
 | **Storage** | Cloudinary | Persistent document storage |

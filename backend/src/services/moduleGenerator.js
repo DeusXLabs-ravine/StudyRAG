@@ -1,6 +1,6 @@
 const supabase = require('../config/database');
 const { getGenerativeModel } = require('../config/gemini');
-const { MODULE_GENERATION_PROMPT } = require('../utils/prompts');
+const { MODULE_GENERATION_PROMPT, QUESTION_REGENERATION_PROMPT } = require('../utils/prompts');
 const { getUserTeachingLevel } = require('./userProfileService');
 const { v4: uuidv4 } = require('uuid');
 
@@ -196,6 +196,65 @@ async function enrichModulesWithResources(docId) {
   }
 }
 
+async function regenerateQuestions(moduleId) {
+  const mod = await getModuleById(moduleId);
+  if (!mod) throw new Error('Module not found');
+
+  const teachingLevel = await getUserTeachingLevel();
+
+  // Format previous questions for the prompt
+  const prevQuestionsText = mod.questions
+    .map(q => `- [${q.type}] ${q.question}`)
+    .join('\n');
+
+  const prompt = QUESTION_REGENERATION_PROMPT
+    .replace('{teaching_level}', teachingLevel)
+    .replace('{module_content}', mod.content)
+    .replace('{previous_questions}', prevQuestionsText)
+    .replace(/\{topic\}/g, mod.topic || mod.title);
+
+  const { selectModelTier } = require('../config/gemini');
+  const tier = selectModelTier({});
+  const model = getGenerativeModel(tier);
+  const result = await model.generateContent(prompt);
+  const responseText = result.response.text();
+
+  let parsed;
+  try {
+    const jsonStr = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    parsed = JSON.parse(jsonStr);
+  } catch (e) {
+    throw new Error('Failed to parse question regeneration response as JSON');
+  }
+
+  // Delete old questions
+  const { error: delErr } = await supabase
+    .from('questions')
+    .delete()
+    .eq('module_id', moduleId);
+  if (delErr) throw delErr;
+
+  // Insert new questions
+  const newQuestions = (parsed.questions || []).map(q => ({
+    id: uuidv4(),
+    module_id: moduleId,
+    type: q.type,
+    question: q.question,
+    options: q.options || null,
+    correct: q.correct,
+    explanation: q.explanation || null,
+    topic: q.topic || mod.topic,
+  }));
+
+  if (newQuestions.length > 0) {
+    const { error: insErr } = await supabase.from('questions').insert(newQuestions);
+    if (insErr) throw insErr;
+  }
+
+  // Return updated module
+  return await getModuleById(moduleId);
+}
+
 module.exports = {
   generateModules,
   getModulesByDocument,
@@ -203,4 +262,5 @@ module.exports = {
   getAllModules,
   deleteModulesByDocument,
   enrichModulesWithResources,
+  regenerateQuestions,
 };

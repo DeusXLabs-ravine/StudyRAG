@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle, XCircle, ArrowLeft, Trophy } from 'lucide-react';
+import { CheckCircle, XCircle, ArrowLeft, Trophy, HelpCircle } from 'lucide-react';
 import useModuleStore from '../../store/moduleStore';
 
 export default function QuizSection({ module, onBack, onComplete }) {
@@ -27,7 +27,11 @@ export default function QuizSection({ module, onBack, onComplete }) {
     });
 
     const score = Math.round((correct / questions.length) * 100);
-    await submitProgress(module.id, score);
+    try {
+      await submitProgress(module.id, score);
+    } catch (err) {
+      console.error('Failed to save progress:', err.message);
+    }
   };
 
   const score = (() => {
@@ -183,8 +187,8 @@ export default function QuizSection({ module, onBack, onComplete }) {
                   key={i}
                   onClick={() => handleAnswer(q.id, letter)}
                   className={`w-full text-left p-5 rounded-2xl border-2 transition-all duration-200 group relative ${isSelected
-                      ? 'border-primary bg-primary/5 ring-4 ring-primary/10'
-                      : 'border-gray-100 hover:border-primary/30 hover:bg-gray-50'
+                    ? 'border-primary bg-primary/5 ring-4 ring-primary/10'
+                    : 'border-gray-100 hover:border-primary/30 hover:bg-gray-50'
                     }`}
                 >
                   <div className="flex items-center gap-4">
@@ -216,8 +220,8 @@ export default function QuizSection({ module, onBack, onComplete }) {
                   key={val}
                   onClick={() => handleAnswer(q.id, val)}
                   className={`flex-1 p-8 rounded-3xl border-2 transition-all duration-200 group relative ${isSelected
-                      ? 'border-primary bg-primary/5 ring-4 ring-primary/10 scale-[1.02]'
-                      : 'border-gray-100 hover:border-primary/30 hover:bg-gray-50'
+                    ? 'border-primary bg-primary/5 ring-4 ring-primary/10 scale-[1.02]'
+                    : 'border-gray-100 hover:border-primary/30 hover:bg-gray-50'
                     }`}
                 >
                   <div className="flex flex-col items-center gap-4">

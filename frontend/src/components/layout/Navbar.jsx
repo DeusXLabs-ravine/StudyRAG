@@ -1,8 +1,9 @@
 import { Link, useLocation } from 'react-router-dom';
-import { BookOpen, FileText, MessageCircle, ClipboardCheck, Layers, Home, Menu, X, BarChart3, Timer } from 'lucide-react';
+import { BookOpen, FileText, MessageCircle, ClipboardCheck, Layers, Home, Menu, X, BarChart3, Timer, Settings } from 'lucide-react';
 import { useState } from 'react';
+import Logo from '../common/Logo';
 
-const icons = { Home, FileText, BookOpen, MessageCircle, ClipboardCheck, Layers, BarChart3, Timer };
+const icons = { Home, FileText, BookOpen, MessageCircle, ClipboardCheck, Layers, BarChart3, Timer, Settings };
 
 const navItems = [
   { path: '/', label: 'Home', icon: 'Home' },
@@ -13,6 +14,7 @@ const navItems = [
   { path: '/flashcards', label: 'Flashcards', icon: 'Layers' },
   { path: '/exam', label: 'Exam', icon: 'Timer' },
   { path: '/analytics', label: 'Analytics', icon: 'BarChart3' },
+  { path: '/settings', label: 'Settings', icon: 'Settings' },
 ];
 
 export default function Navbar() {
@@ -24,9 +26,8 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
-            <Link to="/" className="flex items-center gap-2">
-              <BookOpen className="h-8 w-8 text-primary-600" />
-              <span className="text-xl font-bold text-gray-900">StudyRAG</span>
+            <Link to="/">
+              <Logo className="h-9 w-9" />
             </Link>
           </div>
 
@@ -39,11 +40,10 @@ export default function Navbar() {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'bg-primary-50 text-primary-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive
+                    ? 'bg-primary-50 text-primary-700'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
                 >
                   <Icon className="h-4 w-4" />
                   {item.label}
@@ -76,11 +76,10 @@ export default function Navbar() {
                   key={item.path}
                   to={item.path}
                   onClick={() => setMobileOpen(false)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
-                    isActive
-                      ? 'bg-primary-50 text-primary-700'
-                      : 'text-gray-600 hover:bg-gray-50'
-                  }`}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${isActive
+                    ? 'bg-primary-50 text-primary-700'
+                    : 'text-gray-600 hover:bg-gray-50'
+                    }`}
                 >
                   <Icon className="h-4 w-4" />
                   {item.label}

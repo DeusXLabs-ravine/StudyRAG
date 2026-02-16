@@ -13,6 +13,7 @@ const analyticsRoutes = require('./routes/analyticsRoutes');
 const aptitudeRoutes = require('./routes/aptitudeRoutes');
 const examRoutes = require('./routes/examRoutes');
 const solverRoutes = require('./routes/solverRoutes');
+const ttsRoutes = require('./routes/ttsRoutes');
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/aptitude', aptitudeRoutes);
 app.use('/api/exam', examRoutes);
 app.use('/api/solver', solverRoutes);
+app.use('/api/tts', ttsRoutes);
 
 app.use(errorHandler);
 

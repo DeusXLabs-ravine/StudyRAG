@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { listModules, getModule, updateProgress } = require('../controllers/moduleController');
+const { listModules, getModule, updateProgress, regenerateQuestions } = require('../controllers/moduleController');
 const { explainSimply } = require('../services/ragService');
 
 router.get('/', listModules);
 router.get('/:id', getModule);
 router.put('/:id/progress', updateProgress);
+router.post('/:id/regenerate-questions', regenerateQuestions);
 
 // "I don't understand" - get simplified explanation
 router.post('/:id/explain', async (req, res, next) => {

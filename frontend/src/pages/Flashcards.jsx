@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import * as flashcardService from '../services/flashcardService';
 import useDocumentStore from '../store/documentStore';
 import Spinner from '../components/common/Spinner';
+import TTSButton from '../components/common/TTSButton';
 
 const QUALITY_BUTTONS = [
   { quality: 1, label: 'Again', color: 'bg-red-50 text-red-600 hover:bg-red-100', desc: 'Forgot completely' },
@@ -316,7 +317,9 @@ export default function Flashcards() {
               </motion.div>
             </AnimatePresence>
           </div>
-          <p className="text-center text-xs text-gray-400 mt-2">Click card to flip</p>
+          <div className="flex justify-center mt-3">
+            <TTSButton text={flipped ? currentCard.back : currentCard.front} />
+          </div>
         </div>
       )}
 

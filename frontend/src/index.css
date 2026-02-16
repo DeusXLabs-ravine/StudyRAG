@@ -1,3 +1,6 @@
+@import url('https://fonts.googleapis.com/css2?family=Kalam:wght@300;400;700&family=Outfit:wght@100..900&display=swap');
+@import url('https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -48,14 +51,105 @@
   .subtle-raise {
     @apply shadow-sm transition-transform duration-200 active:scale-[0.98] hover:shadow-md hover:-translate-y-0.5;
   }
+
+  /* Chalkboard Styles */
+  .chalkboard {
+    @apply relative bg-[#1c352d] rounded-sm p-4 md:p-12 border-[12px] border-[#4a3423] min-h-[500px];
+    box-shadow:
+      inset 0 0 100px rgba(0, 0, 0, 0.5),
+      0 0 0 2px #3a281a,
+      0 10px 30px rgba(0, 0, 0, 0.4),
+      0 20px 50px rgba(0, 0, 0, 0.3);
+    background-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.05) 0%, transparent 100%);
+  }
+
+  .chalkboard::after {
+    content: '';
+    @apply absolute bottom-[-18px] left-[-12px] right-[-12px] h-6 bg-[#5a4433] rounded-b-md shadow-md;
+  }
+
+  .chalk-drawing {
+    @apply text-[#f8f8f8] leading-relaxed opacity-90;
+    font-family: 'Kalam', cursive;
+    text-shadow: 0 0 1px rgba(255, 255, 255, 0.3), 0 0 3px rgba(255, 255, 255, 0.1);
+  }
+
+  .chalk-writing p,
+  .chalk-writing li {
+    @apply mb-4 text-xl md:text-2xl tracking-wide;
+  }
+
+  .chalk-writing h1,
+  .chalk-writing h2,
+  .chalk-writing h3 {
+    @apply text-white mb-6 font-bold tracking-widest uppercase;
+    text-decoration: underline decoration-dotted decoration-white/30 underline-offset-8;
+  }
+
+  .chalk-writing code {
+    @apply bg-white/10 text-white px-2 py-0.5 rounded font-mono text-lg border border-white/20;
+  }
+
+  .chalk-dust {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    mask-image: radial-gradient(circle at center, black 0%, transparent 80%);
+    @apply absolute inset-0 opacity-[0.03] pointer-events-none;
+  }
+
+  .chalk-tray-items {
+    @apply absolute bottom-[-12px] right-8 flex gap-4 h-4 items-center z-10;
+  }
+
+  .chalk-stick {
+    @apply w-12 h-3 bg-white/90 rounded-full shadow-sm;
+    transform: rotate(-15deg);
+  }
+
+  .chalk-eraser {
+    @apply w-16 h-6 bg-[#333] border border-gray-600 rounded shadow-sm flex items-center justify-center;
+  }
+
+  /* Easy Board / Assistant Sidebar Styles */
+  .easy-board {
+    @apply bg-white rounded-xl border-2 border-dashed border-amber-200 p-6 shadow-sm overflow-hidden relative;
+    background-image: linear-gradient(#f8f8f8 1.1rem, #ccc 1.2rem);
+    background-size: 100% 1.2rem;
+    line-height: 1.2rem;
+  }
+
+  .easy-board::before {
+    content: '';
+    @apply absolute left-8 top-0 bottom-0 w-[1px] bg-red-200 opacity-50;
+  }
+
+  .easy-board-content {
+    @apply pl-6 pt-1 font-medium text-amber-900/80 text-sm leading-[1.2rem];
+  }
+
+  .sticky-sidebar {
+    @apply sticky top-8 space-y-6 max-h-[calc(100vh-4rem)] overflow-y-auto pr-2;
+  }
+
+  /* Custom scrollbar for sticky sidebar */
+  .sticky-sidebar::-webkit-scrollbar {
+    @apply w-1;
+  }
+
+  .sticky-sidebar::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  .sticky-sidebar::-webkit-scrollbar-thumb {
+    @apply bg-gray-200 rounded-full;
+  }
 }
 
 body {
   margin: 0;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  @apply bg-background text-foreground leading-relaxed;
+  @apply bg-background text-foreground leading-relaxed font-light;
 }
 
 #root {
