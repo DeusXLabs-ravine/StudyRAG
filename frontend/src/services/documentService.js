@@ -8,6 +8,15 @@ import api from './api';
  * 3. Register the uploaded file with backend (tiny JSON)
  */
 export async function uploadDocument(file, onProgress) {
+  // Client-side validation
+  const MAX_SIZE = 50 * 1024 * 1024; // 50MB — Supabase Storage standard upload limit
+  if (file.size > MAX_SIZE) {
+    throw new Error(
+      `File is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum upload size is 50MB. ` +
+      'Try compressing the PDF or splitting it into smaller files.'
+    );
+  }
+
   // Phase 1: Get signed upload URL
   onProgress?.(0);
   const { data: signData } = await api.post('/documents/sign-upload', {
@@ -26,7 +35,14 @@ export async function uploadDocument(file, onProgress) {
       timeout: 600000,
     });
   } catch (err) {
-    const msg = err.response?.data?.error || err.response?.data?.message;
+    const status = err.response?.status;
+    const msg = err.response?.data?.error || err.response?.data?.message || err.response?.data?.statusCode;
+    if (status === 413 || (msg && String(msg).includes('size'))) {
+      throw new Error('File is too large for storage. Try a smaller file (under 50MB).');
+    }
+    if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+      throw new Error('Upload timed out. Check your internet connection and try again.');
+    }
     throw new Error(msg || 'File upload failed. Please try again.');
   }
 

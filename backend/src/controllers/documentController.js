@@ -88,7 +88,9 @@ async function uploadDocument(req, res, next) {
 }
 
 async function processDocumentFromBuffer(docId, buffer, ext) {
+  const t = Date.now();
   const { text, metadata } = await extractTextFromBuffer(buffer, ext);
+  console.log(`[Pipeline ${docId.slice(0, 8)}] Text extraction: ${((Date.now() - t) / 1000).toFixed(1)}s (${text.length} chars)`);
   await runProcessingPipeline(docId, text, metadata);
 }
 
@@ -99,6 +101,7 @@ async function processDocumentFromStorage(docId, storagePath, ext) {
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
+      const t0 = Date.now();
       const { data, error } = await supabase.storage
         .from(STORAGE_BUCKET)
         .download(storagePath);
@@ -106,7 +109,10 @@ async function processDocumentFromStorage(docId, storagePath, ext) {
 
       const arrayBuffer = await data.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
+      console.log(`[Pipeline ${docId.slice(0, 8)}] Storage download: ${((Date.now() - t0) / 1000).toFixed(1)}s (${(buffer.length / 1024 / 1024).toFixed(1)}MB)`);
+      const t1 = Date.now();
       const { text, metadata } = await extractTextFromBuffer(buffer, ext);
+      console.log(`[Pipeline ${docId.slice(0, 8)}] Text extraction: ${((Date.now() - t1) / 1000).toFixed(1)}s (${text.length} chars)`);
       return await runProcessingPipeline(docId, text, metadata);
     } catch (err) {
       lastErr = err;
@@ -118,15 +124,21 @@ async function processDocumentFromStorage(docId, storagePath, ext) {
 }
 
 async function runProcessingPipeline(docId, text, metadata) {
+  const pipelineStart = Date.now();
+  const log = (step, startTime) =>
+    console.log(`[Pipeline ${docId.slice(0, 8)}] ${step}: ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+
   // Chunk text (CPU-only, fast)
   const chunks = chunkText(text);
   const texts = chunks.map(c => c.text);
+  console.log(`[Pipeline ${docId.slice(0, 8)}] Document: ${text.length} chars → ${chunks.length} chunks`);
 
   // Three-way parallelization: embedding+store, module generation, and web research
   // are all independent — none depend on the others' output
   const [embeddingResult, modulesResult, researchResult] = await Promise.allSettled([
     // Pipeline A: Generate embeddings → store in vector DB
     (async () => {
+      const t = Date.now();
       const embeddings = await generateEmbeddings(texts);
       const chunksWithEmbeddings = chunks.map((chunk, i) => ({
         id: uuidv4(),
@@ -135,12 +147,23 @@ async function runProcessingPipeline(docId, text, metadata) {
         embedding: embeddings[i],
       }));
       await vectorStore.addChunks(docId, chunksWithEmbeddings);
+      log('Embeddings + store', t);
       return chunksWithEmbeddings.length;
     })(),
     // Pipeline B: Generate learning modules (LLM call — slowest step)
-    generateModules(docId, text),
+    (async () => {
+      const t = Date.now();
+      const result = await generateModules(docId, text);
+      log('Module generation', t);
+      return result;
+    })(),
     // Pipeline C: Extract topics + search for supplementary resources
-    researchDocument(docId, text),
+    (async () => {
+      const t = Date.now();
+      const result = await researchDocument(docId, text);
+      log('Web research', t);
+      return result;
+    })(),
   ]);
 
   // Embedding failures are critical (needed for search/RAG)
@@ -156,7 +179,9 @@ async function runProcessingPipeline(docId, text, metadata) {
   // Enrich modules with research results (only if research succeeded)
   if (researchResult.status === 'fulfilled') {
     try {
+      const t = Date.now();
       await enrichModulesWithResources(docId);
+      log('Enrichment', t);
     } catch (enrichErr) {
       console.error(`Module enrichment failed for document ${docId}:`, enrichErr.message);
     }
@@ -171,6 +196,8 @@ async function runProcessingPipeline(docId, text, metadata) {
     chunkCount: chunks.length,
     extractedMetadata: metadata,
   });
+
+  log('TOTAL PIPELINE', pipelineStart);
 }
 
 async function listDocuments(req, res, next) {

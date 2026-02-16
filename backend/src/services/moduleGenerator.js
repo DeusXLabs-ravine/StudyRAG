@@ -2,17 +2,18 @@ const supabase = require('../config/database');
 const { getGenerativeModel } = require('../config/gemini');
 const { MODULE_GENERATION_PROMPT, QUESTION_REGENERATION_PROMPT } = require('../utils/prompts');
 const { getUserTeachingLevel } = require('./userProfileService');
+const { prepareTextForLLM } = require('./chunkingService');
 const { v4: uuidv4 } = require('uuid');
 
 async function generateModules(docId, documentText) {
   const teachingLevel = await getUserTeachingLevel();
+  // Truncate large documents to ~50K chars to keep Gemini response time reasonable
+  const llmText = prepareTextForLLM(documentText, 50000);
   const prompt = MODULE_GENERATION_PROMPT
-    .replace('{document_text}', documentText)
+    .replace('{document_text}', llmText)
     .replace('{teaching_level}', teachingLevel);
 
-  const { selectModelTier } = require('../config/gemini');
-  const tier = selectModelTier({});
-  const model = getGenerativeModel(tier);
+  const model = getGenerativeModel('fast');
   const result = await model.generateContent(prompt);
   const responseText = result.response.text();
 

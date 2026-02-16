@@ -80,4 +80,61 @@ function splitByParagraphs(text, maxSize, overlap) {
   return chunks;
 }
 
-module.exports = { chunkText };
+/**
+ * Prepare document text for LLM processing by intelligently truncating large documents.
+ * Preserves document structure (headings, intro, conclusion) while staying under token limits.
+ * @param {string} text - Full document text
+ * @param {number} maxChars - Maximum characters to send to the LLM (default 50000 ≈ 16K tokens)
+ */
+function prepareTextForLLM(text, maxChars = 50000) {
+  if (text.length <= maxChars) return text;
+
+  const sections = splitBySections(text);
+
+  // Always keep the first section (intro) and last section (conclusion) in full
+  const first = sections[0];
+  const last = sections.length > 1 ? sections[sections.length - 1] : null;
+
+  // Build a table of contents from all headings
+  const toc = sections
+    .filter(s => s.heading)
+    .map(s => `- ${s.heading}`)
+    .join('\n');
+
+  // Reserve space for structure
+  const tocSection = toc ? `\n\n[Document Structure]\n${toc}\n\n` : '';
+  const reservedChars = first.text.length + (last ? last.text.length : 0) + tocSection.length + 200;
+  const remainingBudget = maxChars - reservedChars;
+
+  // Distribute remaining budget evenly across middle sections
+  const middleSections = sections.slice(1, last ? -1 : undefined);
+  let result = '';
+
+  if (middleSections.length > 0 && remainingBudget > 0) {
+    const perSection = Math.floor(remainingBudget / middleSections.length);
+    const sampledMiddle = middleSections.map(s => {
+      const heading = s.heading ? `\n\n### ${s.heading}\n\n` : '\n\n';
+      const content = s.text.length <= perSection
+        ? s.text
+        : s.text.slice(0, perSection) + '\n[...section truncated...]';
+      return heading + content;
+    }).join('');
+
+    result = first.text + tocSection + sampledMiddle;
+  } else {
+    result = first.text + tocSection;
+  }
+
+  if (last) {
+    result += '\n\n' + (last.heading ? `### ${last.heading}\n\n` : '') + last.text;
+  }
+
+  // Final safety trim
+  if (result.length > maxChars) {
+    result = result.slice(0, maxChars) + '\n[...document truncated for processing...]';
+  }
+
+  return result;
+}
+
+module.exports = { chunkText, prepareTextForLLM };

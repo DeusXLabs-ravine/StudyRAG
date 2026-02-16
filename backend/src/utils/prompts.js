@@ -20,13 +20,12 @@ For each module, provide:
 1. title: Clear, descriptive module name
 2. topic: A short topic label (1-3 words) for this module's subject area
 3. objectives: 2-3 specific learning goals
-4. content: Detailed explanation (300-800 words) with:
+4. content: Focused explanation (200-400 words) with:
    - Introduction to the concept
-   - Detailed explanation with examples
+   - Clear explanation with one or two examples
    - Key points highlighted
-   - Real-world applications/context
-5. takeaways: 3-5 bullet points summarizing main ideas
-6. questions: 3-5 comprehension check questions with:
+5. takeaways: 2-3 bullet points summarizing main ideas
+6. questions: 2-3 comprehension check questions with:
    - Mix of types: multiple_choice, true_false
    - Correct answers and explanations
    - Each question should have a "topic" field matching the module topic
