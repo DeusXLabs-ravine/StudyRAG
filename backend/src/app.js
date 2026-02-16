@@ -40,6 +40,18 @@ app.use('/api/exam', examRoutes);
 app.use('/api/solver', solverRoutes);
 app.use('/api/tts', ttsRoutes);
 
+// Static file serving and SPA fallback for production
+if (process.env.NODE_ENV === 'production') {
+  const distPath = path.join(__dirname, '../../frontend/dist');
+  app.use(express.static(distPath));
+  app.get('*', (req, res) => {
+    // Only fallback for non-API routes
+    if (!req.path.startsWith('/api')) {
+      res.sendFile(path.join(distPath, 'index.html'));
+    }
+  });
+}
+
 app.use(errorHandler);
 
 module.exports = app;
