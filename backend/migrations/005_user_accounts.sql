@@ -29,7 +29,9 @@ ALTER TABLE exam_prep_sessions ADD COLUMN IF NOT EXISTS user_id UUID;
 ALTER TABLE module_progress ADD COLUMN IF NOT EXISTS user_id UUID;
 
 -- user_settings: add user_id and change PK to composite
+-- Must delete pre-existing rows that have no user_id since PK requires NOT NULL
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS user_id UUID;
+DELETE FROM user_settings WHERE user_id IS NULL;
 ALTER TABLE user_settings DROP CONSTRAINT IF EXISTS user_settings_pkey;
 ALTER TABLE user_settings ADD CONSTRAINT user_settings_pkey PRIMARY KEY (user_id, key);
 
