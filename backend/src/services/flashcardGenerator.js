@@ -1,31 +1,40 @@
 const supabase = require('../config/database');
 const { getGenerativeModel, selectModelTier } = require('../config/gemini');
-const { FLASHCARD_GENERATION_PROMPT } = require('../utils/prompts');
+const { FLASHCARD_GENERATION_PROMPT, buildInterestsSection } = require('../utils/prompts');
 const vectorStore = require('./vectorStore');
-const { getUserTeachingLevel, getWeakTopics } = require('./userProfileService');
+const { getUserTeachingLevel, getUserInterests, getWeakTopics } = require('./userProfileService');
 const { v4: uuidv4 } = require('uuid');
 
-async function generateFlashcards({ numCards = 20, docId = null, name = null }) {
-  let contextChunks;
-  if (docId) {
-    contextChunks = await vectorStore.getDocumentChunks(docId);
-  } else {
-    contextChunks = await vectorStore.getAllChunksWithText();
-  }
+async function generateFlashcards({ numCards = 20, docId = null, name = null, userId = null }) {
+  // Try page-based content first, fall back to chunks
+  let contextItems = await getContentForGeneration(docId);
 
-  if (contextChunks.length === 0) {
+  if (contextItems.length === 0) {
     throw new Error('No study materials found. Please upload documents first.');
   }
 
-  const selected = contextChunks.slice(0, Math.min(20, contextChunks.length));
-  const context = selected.map(c => c.text).join('\n\n---\n\n');
+  // Pages are larger than chunks, so use fewer (8 pages vs 20 chunks)
+  const isPages = contextItems[0]?.pageNumber !== undefined;
+  const limit = isPages ? 8 : 20;
+  const selected = contextItems.slice(0, Math.min(limit, contextItems.length));
+  const context = selected.map(c => {
+    if (isPages) {
+      return `[Page ${c.pageNumber}${c.heading ? ` - ${c.heading}` : ''}]\n${c.text}`;
+    }
+    return c.text;
+  }).join('\n\n---\n\n');
+  const sourcePages = isPages ? selected.map(c => c.pageNumber) : [];
 
-  const teachingLevel = await getUserTeachingLevel();
+  const [teachingLevel, interests] = await Promise.all([
+    getUserTeachingLevel(userId),
+    getUserInterests(userId),
+  ]);
 
   const prompt = FLASHCARD_GENERATION_PROMPT
     .replace('{num_cards}', numCards)
     .replace('{context}', context)
-    .replace('{teaching_level}', teachingLevel);
+    .replace('{teaching_level}', teachingLevel)
+    .replace('{interests_section}', buildInterestsSection(interests));
 
   const tier = selectModelTier({});
   const model = getGenerativeModel(tier);
@@ -49,6 +58,7 @@ async function generateFlashcards({ numCards = 20, docId = null, name = null }) 
     name: name || `Flashcards - ${new Date().toLocaleDateString()}`,
     created_at: now,
   };
+  if (userId) deckRow.user_id = userId;
 
   const cardRows = parsed.flashcards.map(card => ({
     id: uuidv4(),
@@ -56,6 +66,7 @@ async function generateFlashcards({ numCards = 20, docId = null, name = null }) 
     front: card.front,
     back: card.back,
     topic: card.topic || null,
+    source_pages: card.sourcePages || sourcePages.length > 0 ? (card.sourcePages || sourcePages) : null,
     status: 'new',
     ease_factor: 2.5,
     interval_days: 0,
@@ -70,36 +81,41 @@ async function generateFlashcards({ numCards = 20, docId = null, name = null }) 
   return formatDeck(deckRow, cardRows);
 }
 
-async function generateAdaptiveFlashcards({ numCards = 20 }) {
-  const weakTopics = await getWeakTopics(10, 0.6);
-  const allChunks = await vectorStore.getAllChunksWithText();
+async function generateAdaptiveFlashcards({ numCards = 20, userId = null }) {
+  const weakTopics = await getWeakTopics(10, 0.6, userId);
+  const allItems = await vectorStore.getAllChunksWithText();
 
-  if (allChunks.length === 0) {
+  if (allItems.length === 0) {
     throw new Error('No study materials found. Please upload documents first.');
   }
 
-  let selectedChunks;
+  const maxItems = 20;
+  let selectedItems;
   if (weakTopics.length > 0) {
     const weakSet = new Set(weakTopics.map(t => t.topic.toLowerCase()));
-    const weakChunks = allChunks.filter(chunk => {
-      const heading = (chunk.heading || '').toLowerCase();
-      const text = (chunk.text || '').toLowerCase().slice(0, 200);
+    const weakItems = allItems.filter(item => {
+      const heading = (item.heading || '').toLowerCase();
+      const text = (item.text || '').toLowerCase().slice(0, 200);
       return [...weakSet].some(topic => heading.includes(topic) || text.includes(topic));
     });
-    const shuffledWeak = [...weakChunks].sort(() => Math.random() - 0.5);
-    const remaining = allChunks.filter(c => !weakChunks.includes(c)).sort(() => Math.random() - 0.5);
-    selectedChunks = [...shuffledWeak, ...remaining].slice(0, 20);
+    const shuffledWeak = [...weakItems].sort(() => Math.random() - 0.5);
+    const remaining = allItems.filter(c => !weakItems.includes(c)).sort(() => Math.random() - 0.5);
+    selectedItems = [...shuffledWeak, ...remaining].slice(0, maxItems);
   } else {
-    selectedChunks = [...allChunks].sort(() => Math.random() - 0.5).slice(0, 20);
+    selectedItems = [...allItems].sort(() => Math.random() - 0.5).slice(0, maxItems);
   }
 
-  const context = selectedChunks.map(c => c.text).join('\n\n---\n\n');
-  const teachingLevel = await getUserTeachingLevel();
+  const context = selectedItems.map(c => c.text).join('\n\n---\n\n');
+  const [teachingLevel, interests] = await Promise.all([
+    getUserTeachingLevel(userId),
+    getUserInterests(userId),
+  ]);
 
   const prompt = FLASHCARD_GENERATION_PROMPT
     .replace('{num_cards}', numCards)
     .replace('{context}', context)
-    .replace('{teaching_level}', teachingLevel);
+    .replace('{teaching_level}', teachingLevel)
+    .replace('{interests_section}', buildInterestsSection(interests));
 
   const model = getGenerativeModel('standard');
   const result = await model.generateContent(prompt);
@@ -122,6 +138,7 @@ async function generateAdaptiveFlashcards({ numCards = 20 }) {
     name: `Adaptive Review - ${new Date().toLocaleDateString()}`,
     created_at: now,
   };
+  if (userId) deckRow.user_id = userId;
 
   const cardRows = parsed.flashcards.map(card => ({
     id: uuidv4(),
@@ -143,6 +160,18 @@ async function generateAdaptiveFlashcards({ numCards = 20 }) {
   return formatDeck(deckRow, cardRows);
 }
 
+/**
+ * Get content for flashcard generation. Tries pages first, falls back to chunks.
+ */
+async function getContentForGeneration(docId) {
+  if (docId) {
+    const pages = await vectorStore.getDocumentPages(docId);
+    if (pages.length > 0) return pages;
+    return await vectorStore.getDocumentChunks(docId);
+  }
+  return await vectorStore.getAllChunksWithText();
+}
+
 async function insertDeckWithCards(deckData, cards) {
   const { error: deckErr } = await supabase.from('flashcard_decks').insert(deckData);
   if (deckErr) throw deckErr;
@@ -156,11 +185,13 @@ async function insertDeckWithCards(deckData, cards) {
   }
 }
 
-async function getAllFlashcards() {
-  const { data: decks, error } = await supabase
+async function getAllFlashcards(userId = null) {
+  const query = supabase
     .from('flashcard_decks')
     .select('*')
     .order('created_at', { ascending: false });
+  if (userId) query.eq('user_id', userId);
+  const { data: decks, error } = await query;
   if (error) throw error;
 
   const result = [];
@@ -220,7 +251,7 @@ async function getStudyQueue(deckId) {
   };
 }
 
-async function reviewCard(cardId, quality) {
+async function reviewCard(cardId, quality, userId = null) {
   const { data: card, error } = await supabase
     .from('flashcard_cards')
     .select('*')
@@ -250,24 +281,28 @@ async function reviewCard(cardId, quality) {
   // Record topic performance
   if (card.topic) {
     const normalizedScore = Math.max(0, (quality - 1) / 4);
-    const { error: tpErr } = await supabase.from('topic_performance').insert({
+    const tpRow = {
       topic: card.topic,
       source_mode: 'flashcard',
       source_id: card.id,
       score: normalizedScore,
-    });
+    };
+    if (userId) tpRow.user_id = userId;
+    const { error: tpErr } = await supabase.from('topic_performance').insert(tpRow);
     if (tpErr) throw tpErr;
   }
 
   // Record study session
-  const { error: sessErr } = await supabase.from('study_sessions').insert({
+  const sessRow = {
     mode: 'flashcard',
     details_json: {
       cardId: card.id,
       deckId: card.deck_id,
       quality,
     },
-  });
+  };
+  if (userId) sessRow.user_id = userId;
+  const { error: sessErr } = await supabase.from('study_sessions').insert(sessRow);
   if (sessErr) throw sessErr;
 
   // Re-read the updated card

@@ -1,24 +1,55 @@
 const supabase = require('../config/database');
 const { getGenerativeModel, getSearchGroundedModel } = require('../config/gemini');
-const { SOLVER_PROMPT, SOLVER_FOLLOWUP_PROMPT } = require('../utils/prompts');
+const { SOLVER_PROMPT, SOLVER_FOLLOWUP_PROMPT, buildInterestsSection } = require('../utils/prompts');
 const vectorStore = require('./vectorStore');
-const { getUserTeachingLevel } = require('./userProfileService');
+const { searchPageIndex } = require('./pageIndexService');
+const { getUserTeachingLevel, getUserInterests } = require('./userProfileService');
 const { v4: uuidv4 } = require('uuid');
 
 /**
  * Solve a STEM problem step-by-step using Gemini 3 Pro.
  */
-async function solveProblem(problem, subject, docId, useWebSearch) {
-  const teachingLevel = await getUserTeachingLevel();
+async function solveProblem(problem, subject, docId, useWebSearch, userId = null) {
+  const [teachingLevel, interests] = await Promise.all([
+    getUserTeachingLevel(userId),
+    getUserInterests(userId),
+  ]);
 
   // Build optional context from uploaded study materials (PRIMARY source)
   let contextSection = '';
   if (docId) {
     try {
-      const relevantChunks = await vectorStore.search(problem, 5, docId);
-      if (relevantChunks.length > 0) {
-        const contextText = relevantChunks.map(c => c.text).join('\n\n---\n\n');
-        contextSection = `PRIMARY REFERENCE — The student's own study materials (highest priority):\n${contextText}\n\nIMPORTANT: Use the student's study materials above as your primary reference. Your solution should align with the notation, terminology, methods, and conventions used in their materials. If web search results conflict with the student's materials, defer to the student's materials. Web search results should only supplement — never override — what the student is learning.`;
+      const pageIndex = await vectorStore.getPageIndex(docId);
+      if (pageIndex) {
+        // Parallel dual search (#9): search for core concept AND formulas/methods simultaneously
+        const formulaQuery = `formulas, equations, theorems, methods, definitions related to: ${problem.slice(0, 200)}`;
+        const [conceptResults, formulaResults] = await Promise.all([
+          searchPageIndex(problem, pageIndex.treeJson, { docId }),
+          searchPageIndex(formulaQuery, pageIndex.treeJson, { docId }),
+        ]);
+
+        // Merge and deduplicate page numbers
+        const allPageNumbers = new Set();
+        for (const r of [...conceptResults, ...formulaResults]) {
+          allPageNumbers.add(r.page);
+        }
+
+        if (allPageNumbers.size > 0) {
+          const pages = await vectorStore.getPages(docId, [...allPageNumbers]);
+          if (pages.length > 0) {
+            const contextText = pages.map(p =>
+              `[Page ${p.pageNumber}${p.heading ? ` - ${p.heading}` : ''}]\n${p.text}`
+            ).join('\n\n---\n\n');
+            contextSection = `PRIMARY REFERENCE — The student's own study materials (highest priority):\n${contextText}\n\nIMPORTANT: Use the student's study materials above as your primary reference. Your solution should align with the notation, terminology, methods, and conventions used in their materials. If web search results conflict with the student's materials, defer to the student's materials. Web search results should only supplement — never override — what the student is learning.`;
+          }
+        }
+      } else {
+        // Fallback: use old vector search for legacy documents
+        const relevantChunks = await vectorStore.search(problem, 5, docId);
+        if (relevantChunks.length > 0) {
+          const contextText = relevantChunks.map(c => c.text).join('\n\n---\n\n');
+          contextSection = `PRIMARY REFERENCE — The student's own study materials (highest priority):\n${contextText}\n\nIMPORTANT: Use the student's study materials above as your primary reference. Your solution should align with the notation, terminology, methods, and conventions used in their materials. If web search results conflict with the student's materials, defer to the student's materials. Web search results should only supplement — never override — what the student is learning.`;
+        }
       }
     } catch {
       // Continue without context
@@ -28,7 +59,8 @@ async function solveProblem(problem, subject, docId, useWebSearch) {
   const prompt = SOLVER_PROMPT
     .replace('{teaching_level}', teachingLevel)
     .replace('{problem}', problem)
-    .replace('{context_section}', contextSection);
+    .replace('{context_section}', contextSection)
+    .replace('{interests_section}', buildInterestsSection(interests));
 
   // Always use advanced model for problem solving; optionally with web search grounding
   const model = useWebSearch
@@ -61,7 +93,7 @@ async function solveProblem(problem, subject, docId, useWebSearch) {
   const sessionId = uuidv4();
 
   // Store solver session
-  const { error: sessErr } = await supabase.from('solver_sessions').insert({
+  const solverRow = {
     id: sessionId,
     problem,
     subject: parsed.subject || subject || null,
@@ -69,18 +101,22 @@ async function solveProblem(problem, subject, docId, useWebSearch) {
     steps_json: parsed.steps,
     document_id: docId || null,
     sources_json: sources,
-  });
+  };
+  if (userId) solverRow.user_id = userId;
+  const { error: sessErr } = await supabase.from('solver_sessions').insert(solverRow);
   if (sessErr) throw sessErr;
 
   // Record study session for analytics
-  const { error: studyErr } = await supabase.from('study_sessions').insert({
+  const studyRow = {
     mode: 'solver',
     details_json: {
       sessionId,
       subject: parsed.subject,
       problemType: parsed.problem_type,
     },
-  });
+  };
+  if (userId) studyRow.user_id = userId;
+  const { error: studyErr } = await supabase.from('study_sessions').insert(studyRow);
   if (studyErr) throw studyErr;
 
   return {
@@ -100,7 +136,7 @@ async function solveProblem(problem, subject, docId, useWebSearch) {
 /**
  * Handle a follow-up question about a previously solved problem.
  */
-async function solveFollowUp(sessionId, followUpQuestion) {
+async function solveFollowUp(sessionId, followUpQuestion, userId = null) {
   const { data: session, error } = await supabase
     .from('solver_sessions')
     .select('*')
@@ -112,7 +148,7 @@ async function solveFollowUp(sessionId, followUpQuestion) {
   }
   if (error) throw error;
 
-  const teachingLevel = await getUserTeachingLevel();
+  const teachingLevel = await getUserTeachingLevel(userId);
 
   // Build a readable summary of the original solution
   const stepsText = (session.steps_json || [])
@@ -138,12 +174,14 @@ async function solveFollowUp(sessionId, followUpQuestion) {
 /**
  * Get solver session history.
  */
-async function getSolverHistory(limit = 20) {
-  const { data, error } = await supabase
+async function getSolverHistory(limit = 20, userId = null) {
+  const query = supabase
     .from('solver_sessions')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(limit);
+  if (userId) query.eq('user_id', userId);
+  const { data, error } = await query;
   if (error) throw error;
 
   return (data || []).map(row => ({

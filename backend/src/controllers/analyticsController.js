@@ -2,7 +2,7 @@ const analytics = require('../services/analyticsService');
 
 async function getOverview(req, res, next) {
   try {
-    const overview = await analytics.getOverview();
+    const overview = await analytics.getOverview(req.user?.id);
     res.json(overview);
   } catch (error) {
     next(error);
@@ -11,7 +11,7 @@ async function getOverview(req, res, next) {
 
 async function getTopics(req, res, next) {
   try {
-    const topics = await analytics.getTopicMastery();
+    const topics = await analytics.getTopicMastery(req.user?.id);
     res.json({ topics });
   } catch (error) {
     next(error);
@@ -21,7 +21,7 @@ async function getTopics(req, res, next) {
 async function getQuizTrend(req, res, next) {
   try {
     const limit = parseInt(req.query.limit) || 20;
-    const trend = await analytics.getQuizScoreTrend(limit);
+    const trend = await analytics.getQuizScoreTrend(limit, req.user?.id);
     res.json({ trend });
   } catch (error) {
     next(error);
@@ -31,7 +31,7 @@ async function getQuizTrend(req, res, next) {
 async function getActivity(req, res, next) {
   try {
     const days = parseInt(req.query.days) || 30;
-    const timeline = await analytics.getActivityTimeline(days);
+    const timeline = await analytics.getActivityTimeline(days, req.user?.id);
     res.json({ timeline: Object.values(timeline) });
   } catch (error) {
     next(error);
@@ -41,7 +41,7 @@ async function getActivity(req, res, next) {
 async function getWeakAreas(req, res, next) {
   try {
     const threshold = parseFloat(req.query.threshold) || 0.6;
-    const weakAreas = await analytics.getWeakTopics(threshold);
+    const weakAreas = await analytics.getWeakTopics(threshold, req.user?.id);
     res.json({ weakAreas });
   } catch (error) {
     next(error);
@@ -50,7 +50,7 @@ async function getWeakAreas(req, res, next) {
 
 async function getSettings(req, res, next) {
   try {
-    const settings = await analytics.getUserSettings();
+    const settings = await analytics.getUserSettings(req.user?.id);
     res.json({ settings });
   } catch (error) {
     next(error);
@@ -63,7 +63,7 @@ async function updateSettings(req, res, next) {
     if (!key || value === undefined) {
       return res.status(400).json({ error: 'Key and value are required' });
     }
-    await analytics.updateUserSetting(key, value);
+    await analytics.updateUserSetting(key, value, req.user?.id);
     res.json({ key, value });
   } catch (error) {
     next(error);

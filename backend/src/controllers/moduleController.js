@@ -63,6 +63,7 @@ async function updateProgress(req, res, next) {
   try {
     const { id } = req.params;
     const { score } = req.body;
+    const userId = req.user?.id || null;
 
     const module = await getModuleById(id);
     if (!module) {
@@ -76,24 +77,29 @@ async function updateProgress(req, res, next) {
       p_completed: completed,
       p_best_score: score,
       p_last_attempt: new Date().toISOString(),
+      p_user_id: userId,
     });
 
     // Record topic performance
     if (module.topic) {
-      const { error: tpErr } = await supabase.from('topic_performance').insert({
+      const row = {
         topic: module.topic,
         source_mode: 'module',
         source_id: id,
         score: score / 100,
-      });
+      };
+      if (userId) row.user_id = userId;
+      const { error: tpErr } = await supabase.from('topic_performance').insert(row);
       if (tpErr) throw tpErr;
     }
 
-    // Record study session (details_json is JSONB — pass object directly)
-    const { error: sessErr } = await supabase.from('study_sessions').insert({
+    // Record study session
+    const sessRow = {
       mode: 'learn',
       details_json: { moduleId: id, score },
-    });
+    };
+    if (userId) sessRow.user_id = userId;
+    const { error: sessErr } = await supabase.from('study_sessions').insert(sessRow);
     if (sessErr) throw sessErr;
 
     const progress = await getProgressForModule(id);
@@ -106,7 +112,8 @@ async function updateProgress(req, res, next) {
 async function regenerateQuestions(req, res, next) {
   try {
     const { id } = req.params;
-    const updatedModule = await regenerateModuleQuestions(id);
+    const userId = req.user?.id || null;
+    const updatedModule = await regenerateModuleQuestions(id, userId);
     const progress = await getProgressForModule(id);
     res.json({ ...updatedModule, progress });
   } catch (error) {

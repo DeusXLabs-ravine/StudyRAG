@@ -34,7 +34,7 @@ async function generateAptitudeTest(subject) {
   };
 }
 
-async function submitAptitudeTest(subject, answers, questions) {
+async function submitAptitudeTest(subject, answers, questions, userId = null) {
   let correct = 0;
   const tierScores = { beginner: 0, intermediate: 0, advanced: 0, expert: 0 };
   const tierTotals = { beginner: 0, intermediate: 0, advanced: 0, expert: 0 };
@@ -62,7 +62,6 @@ async function submitAptitudeTest(subject, answers, questions) {
 
   const score = Math.round((correct / questions.length) * 100);
 
-  // Determine knowledge level from tier performance
   let knowledgeLevel;
   if (tierScores.expert > 0 && tierScores.advanced >= tierTotals.advanced * 0.5) {
     knowledgeLevel = 'advanced';
@@ -74,7 +73,6 @@ async function submitAptitudeTest(subject, answers, questions) {
     knowledgeLevel = 'dummy';
   }
 
-  // Determine learning pace from how many they got right in higher tiers vs lower
   const upperCorrect = tierScores.advanced + tierScores.expert;
   let learningPace;
   if (score >= 80 && upperCorrect > 0) {
@@ -85,26 +83,27 @@ async function submitAptitudeTest(subject, answers, questions) {
     learningPace = 'slow';
   }
 
-  // Store result (details_json is JSONB — pass object directly)
-  const { error: resErr } = await supabase.from('aptitude_results').insert({
+  const aptRow = {
     subject,
     knowledge_level: knowledgeLevel,
     learning_pace: learningPace,
     score,
     details_json: { results, tierScores, tierTotals },
-  });
+  };
+  if (userId) aptRow.user_id = userId;
+  const { error: resErr } = await supabase.from('aptitude_results').insert(aptRow);
   if (resErr) throw resErr;
 
-  // Update user settings based on aptitude
-  await supabase.rpc('upsert_user_setting', { p_key: 'teaching_level', p_value: knowledgeLevel });
-  await supabase.rpc('upsert_user_setting', { p_key: 'learning_pace', p_value: learningPace });
-  await supabase.rpc('upsert_user_setting', { p_key: 'last_aptitude_subject', p_value: subject });
+  await supabase.rpc('upsert_user_setting', { p_key: 'teaching_level', p_value: knowledgeLevel, p_user_id: userId });
+  await supabase.rpc('upsert_user_setting', { p_key: 'learning_pace', p_value: learningPace, p_user_id: userId });
+  await supabase.rpc('upsert_user_setting', { p_key: 'last_aptitude_subject', p_value: subject, p_user_id: userId });
 
-  // Record study session (details_json is JSONB — pass object directly)
-  const { error: sessErr } = await supabase.from('study_sessions').insert({
+  const sessRow = {
     mode: 'aptitude',
     details_json: { subject, score, knowledgeLevel, learningPace },
-  });
+  };
+  if (userId) sessRow.user_id = userId;
+  const { error: sessErr } = await supabase.from('study_sessions').insert(sessRow);
   if (sessErr) throw sessErr;
 
   return {
@@ -119,11 +118,13 @@ async function submitAptitudeTest(subject, answers, questions) {
   };
 }
 
-async function getAptitudeHistory() {
-  const { data, error } = await supabase
+async function getAptitudeHistory(userId = null) {
+  const query = supabase
     .from('aptitude_results')
     .select('*')
     .order('taken_at', { ascending: false });
+  if (userId) query.eq('user_id', userId);
+  const { data, error } = await query;
   if (error) throw error;
 
   return (data || []).map(row => ({
@@ -137,13 +138,14 @@ async function getAptitudeHistory() {
   }));
 }
 
-async function getLatestAptitude() {
-  const { data: row, error } = await supabase
+async function getLatestAptitude(userId = null) {
+  const query = supabase
     .from('aptitude_results')
     .select('*')
     .order('taken_at', { ascending: false })
-    .limit(1)
-    .single();
+    .limit(1);
+  if (userId) query.eq('user_id', userId);
+  const { data: row, error } = await query.single();
 
   if (error && error.code === 'PGRST116') return null;
   if (error) throw error;

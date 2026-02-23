@@ -11,7 +11,7 @@ const {
 async function createFlashcards(req, res, next) {
   try {
     const { numCards = 20, documentId, name } = req.body;
-    const deck = await generateFlashcards({ numCards, docId: documentId, name });
+    const deck = await generateFlashcards({ numCards, docId: documentId, name, userId: req.user?.id || null });
     res.json(deck);
   } catch (error) {
     next(error);
@@ -21,7 +21,7 @@ async function createFlashcards(req, res, next) {
 async function createAdaptiveFlashcards(req, res, next) {
   try {
     const { numCards = 20 } = req.body;
-    const deck = await generateAdaptiveFlashcards({ numCards });
+    const deck = await generateAdaptiveFlashcards({ numCards, userId: req.user?.id || null });
     res.json(deck);
   } catch (error) {
     next(error);
@@ -30,7 +30,7 @@ async function createAdaptiveFlashcards(req, res, next) {
 
 async function listFlashcards(req, res, next) {
   try {
-    const decks = await getAllFlashcards();
+    const decks = await getAllFlashcards(req.user?.id || null);
     res.json({ decks });
   } catch (error) {
     next(error);
@@ -66,12 +66,10 @@ async function reviewFlashcard(req, res, next) {
     const { quality, status } = req.body;
     const { id: cardId } = req.params;
 
-    // Support both new quality-based and old status-based reviews
     let qualityValue;
     if (quality !== undefined) {
       qualityValue = quality;
     } else if (status) {
-      // Backward compat: map old status to quality
       qualityValue = status === 'know' ? 4 : 2;
     } else {
       return res.status(400).json({ error: 'Either quality (1-4) or status (know/review) is required' });
@@ -81,7 +79,7 @@ async function reviewFlashcard(req, res, next) {
       return res.status(400).json({ error: 'Quality must be between 1 and 4' });
     }
 
-    const card = await reviewCard(cardId, qualityValue);
+    const card = await reviewCard(cardId, qualityValue, req.user?.id || null);
     if (!card) {
       return res.status(404).json({ error: 'Card not found' });
     }

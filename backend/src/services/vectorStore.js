@@ -2,23 +2,23 @@ const supabase = require('../config/database');
 const { generateEmbedding, TaskType } = require('./embeddingService');
 
 async function addDocument(docId, metadata) {
-  const { error } = await supabase
-    .from('documents')
-    .upsert({
-      id: docId,
-      original_name: metadata.originalName,
-      filename: metadata.filename,
-      file_path: metadata.filePath,
-      cloudinary_public_id: metadata.storagePath || metadata.cloudinaryPublicId || null,
-      file_type: metadata.fileType,
-      file_size: metadata.fileSize,
-      status: metadata.status || 'processing',
-      error_message: metadata.error || null,
-      upload_date: metadata.uploadDate || new Date().toISOString(),
-      processed_date: metadata.processedDate || null,
-      chunk_count: metadata.chunkCount || 0,
-      extracted_metadata: metadata.extractedMetadata || null,
-    });
+  const row = {
+    id: docId,
+    original_name: metadata.originalName,
+    filename: metadata.filename,
+    file_path: metadata.filePath,
+    cloudinary_public_id: metadata.storagePath || metadata.cloudinaryPublicId || null,
+    file_type: metadata.fileType,
+    file_size: metadata.fileSize,
+    status: metadata.status || 'processing',
+    error_message: metadata.error || null,
+    upload_date: metadata.uploadDate || new Date().toISOString(),
+    processed_date: metadata.processedDate || null,
+    chunk_count: metadata.chunkCount || 0,
+    extracted_metadata: metadata.extractedMetadata || null,
+  };
+  if (metadata.userId) row.user_id = metadata.userId;
+  const { error } = await supabase.from('documents').upsert(row);
   if (error) throw error;
 }
 
@@ -97,11 +97,125 @@ async function getAllChunksWithText() {
   }));
 }
 
-async function getAllDocuments() {
+// --- Page Index functions (vectorless RAG) ---
+
+async function addPages(docId, pages) {
+  const rows = pages.map(page => ({
+    id: page.id || require('uuid').v4(),
+    doc_id: docId,
+    page_number: page.pageNumber,
+    text: page.text,
+    heading: page.heading || null,
+  }));
+
+  // Batch inserts in groups of 50
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const batch = rows.slice(i, i + BATCH_SIZE);
+    const { error } = await supabase.from('pages').insert(batch);
+    if (error) throw error;
+  }
+}
+
+async function addPageIndex(docId, treeJson, pageCount) {
+  const { error } = await supabase
+    .from('page_index')
+    .upsert({
+      doc_id: docId,
+      tree_json: treeJson,
+      page_count: pageCount,
+    });
+  if (error) throw error;
+}
+
+async function getPageIndex(docId) {
   const { data, error } = await supabase
+    .from('page_index')
+    .select('*')
+    .eq('doc_id', docId)
+    .single();
+
+  if (error && error.code === 'PGRST116') return null;
+  if (error) throw error;
+  return {
+    docId: data.doc_id,
+    treeJson: data.tree_json,
+    pageCount: data.page_count,
+  };
+}
+
+async function getPages(docId, pageNumbers) {
+  const { data, error } = await supabase
+    .from('pages')
+    .select('*')
+    .eq('doc_id', docId)
+    .in('page_number', pageNumbers)
+    .order('page_number', { ascending: true });
+  if (error) throw error;
+
+  return (data || []).map(row => ({
+    id: row.id,
+    docId: row.doc_id,
+    pageNumber: row.page_number,
+    text: row.text,
+    heading: row.heading,
+  }));
+}
+
+async function getDocumentPages(docId) {
+  const { data, error } = await supabase
+    .from('pages')
+    .select('*')
+    .eq('doc_id', docId)
+    .order('page_number', { ascending: true });
+  if (error) throw error;
+
+  return (data || []).map(row => ({
+    id: row.id,
+    docId: row.doc_id,
+    pageNumber: row.page_number,
+    text: row.text,
+    heading: row.heading,
+  }));
+}
+
+async function getAllPageIndexes() {
+  const { data, error } = await supabase
+    .from('page_index')
+    .select('doc_id, tree_json, page_count');
+  if (error) throw error;
+
+  return (data || []).map(row => ({
+    docId: row.doc_id,
+    treeJson: row.tree_json,
+    pageCount: row.page_count,
+  }));
+}
+
+async function deletePages(docId) {
+  // Delete pages first, then index (pages reference documents, not page_index)
+  const { error: pagesErr } = await supabase
+    .from('pages')
+    .delete()
+    .eq('doc_id', docId);
+  if (pagesErr) throw pagesErr;
+
+  const { error: indexErr } = await supabase
+    .from('page_index')
+    .delete()
+    .eq('doc_id', docId);
+  if (indexErr) throw indexErr;
+}
+
+async function getAllDocuments(userId = null) {
+  const query = supabase
     .from('documents')
     .select('*')
     .order('upload_date', { ascending: false });
+
+  if (userId) query.eq('user_id', userId);
+
+  const { data, error } = await query;
   if (error) throw error;
 
   return (data || []).map(formatDoc);
@@ -177,4 +291,12 @@ module.exports = {
   getDocument,
   getStats,
   updateDocumentStatus,
+  // Page Index (vectorless RAG)
+  addPages,
+  addPageIndex,
+  getPageIndex,
+  getPages,
+  getDocumentPages,
+  getAllPageIndexes,
+  deletePages,
 };

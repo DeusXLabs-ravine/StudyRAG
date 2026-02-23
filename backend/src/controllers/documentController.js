@@ -1,10 +1,10 @@
 const { v4: uuidv4 } = require('uuid');
 const { extractTextFromBuffer } = require('../services/fileProcessor');
-const { chunkText } = require('../services/chunkingService');
-const { generateEmbeddings } = require('../services/embeddingService');
+const { buildPageIndex, invalidateDocCache } = require('../services/pageIndexService');
 const vectorStore = require('../services/vectorStore');
 const { generateModules, deleteModulesByDocument, enrichModulesWithResources } = require('../services/moduleGenerator');
 const { researchDocument, getResourcesByDocument, deleteResourcesByDocument } = require('../services/webResearchService');
+const { processDocumentDiagrams, deleteDiagramsByDocument } = require('../services/diagramService');
 const supabase = require('../config/database');
 const { allowedFileTypes } = require('../config/env');
 const path = require('path');
@@ -69,6 +69,7 @@ async function uploadDocument(req, res, next) {
       fileSize: file.size,
       status: 'processing',
       uploadDate: new Date().toISOString(),
+      userId: req.user?.id || null,
     });
 
     res.status(202).json({
@@ -89,9 +90,9 @@ async function uploadDocument(req, res, next) {
 
 async function processDocumentFromBuffer(docId, buffer, ext) {
   const t = Date.now();
-  const { text, metadata } = await extractTextFromBuffer(buffer, ext);
-  console.log(`[Pipeline ${docId.slice(0, 8)}] Text extraction: ${((Date.now() - t) / 1000).toFixed(1)}s (${text.length} chars)`);
-  await runProcessingPipeline(docId, text, metadata);
+  const { text, pages: rawPages, metadata } = await extractTextFromBuffer(buffer, ext);
+  console.log(`[Pipeline ${docId.slice(0, 8)}] Text extraction: ${((Date.now() - t) / 1000).toFixed(1)}s (${text.length} chars, ${rawPages ? rawPages.length + ' pages' : 'no native pages'})`);
+  await runProcessingPipeline(docId, text, metadata, rawPages, buffer, ext);
 }
 
 /**
@@ -122,7 +123,7 @@ async function downloadChunk(storagePath) {
  * @param {string|string[]} storagePaths - single path or ordered array of chunk paths
  * @param {string} ext - file extension
  */
-async function processDocumentFromStorage(docId, storagePaths, ext) {
+async function processDocumentFromStorage(docId, storagePaths, ext, oldPages = null) {
   const paths = Array.isArray(storagePaths) ? storagePaths : [storagePaths];
   const prefix = `[Pipeline ${docId.slice(0, 8)}]`;
 
@@ -134,92 +135,129 @@ async function processDocumentFromStorage(docId, storagePaths, ext) {
 
   // Extract text
   const t1 = Date.now();
-  const { text, metadata } = await extractTextFromBuffer(buffer, ext);
-  console.log(`${prefix} Text extraction: ${((Date.now() - t1) / 1000).toFixed(1)}s (${text.length} chars)`);
+  const { text, pages: rawPages, metadata } = await extractTextFromBuffer(buffer, ext);
+  console.log(`${prefix} Text extraction: ${((Date.now() - t1) / 1000).toFixed(1)}s (${text.length} chars, ${rawPages ? rawPages.length + ' pages' : 'no native pages'})`);
 
-  return await runProcessingPipeline(docId, text, metadata);
+  // Incremental reprocessing (#7): log diff stats if old pages available
+  if (oldPages && oldPages.length > 0) {
+    const newPageTexts = rawPages ? rawPages.map(p => p.text.slice(0, 200)) : [];
+    const oldPageTexts = oldPages.map(p => p.text.slice(0, 200));
+    const changedCount = newPageTexts.filter((t, i) => t !== oldPageTexts[i]).length;
+    const addedCount = Math.max(0, newPageTexts.length - oldPageTexts.length);
+    const removedCount = Math.max(0, oldPageTexts.length - newPageTexts.length);
+    console.log(`${prefix} Incremental diff: ${changedCount} changed, ${addedCount} added, ${removedCount} removed pages`);
+  }
+
+  return await runProcessingPipeline(docId, text, metadata, rawPages, buffer, ext);
 }
 
-async function runProcessingPipeline(docId, text, metadata) {
+async function runProcessingPipeline(docId, text, metadata, rawPages = null, buffer = null, ext = null) {
   const pipelineStart = Date.now();
+  const prefix = `[Pipeline ${docId.slice(0, 8)}]`;
   const log = (step, startTime) =>
-    console.log(`[Pipeline ${docId.slice(0, 8)}] ${step}: ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+    console.log(`${prefix} ${step}: ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
 
-  // Chunk text (CPU-only, fast)
-  const chunks = chunkText(text);
-  const texts = chunks.map(c => c.text);
-  console.log(`[Pipeline ${docId.slice(0, 8)}] Document: ${text.length} chars → ${chunks.length} chunks`);
-
-  // Three-way parallelization: embedding+store, module generation, and web research
-  // are all independent — none depend on the others' output
-  const [embeddingResult, modulesResult, researchResult] = await Promise.allSettled([
-    // Pipeline A: Generate embeddings → store in vector DB
+  // Phase 1: Critical path — modules + page index run in parallel.
+  // Web research is deferred to Phase 2 (non-blocking).
+  const [pageIndexResult, modulesResult] = await Promise.allSettled([
+    // Pipeline A: Build page index → store pages + tree
     (async () => {
       const t = Date.now();
-      const embeddings = await generateEmbeddings(texts);
-      const chunksWithEmbeddings = chunks.map((chunk, i) => ({
+      const { tree, pages } = await buildPageIndex(rawPages, text, metadata);
+      console.log(`${prefix} Page index built: ${pages.length} pages`);
+
+      const pagesWithIds = pages.map(p => ({
         id: uuidv4(),
-        text: chunk.text,
-        heading: chunk.heading,
-        embedding: embeddings[i],
+        pageNumber: p.pageNumber,
+        text: p.text,
+        heading: p.heading || null,
       }));
-      await vectorStore.addChunks(docId, chunksWithEmbeddings);
-      log('Embeddings + store', t);
-      return chunksWithEmbeddings.length;
+      await vectorStore.addPages(docId, pagesWithIds);
+      await vectorStore.addPageIndex(docId, tree, pages.length);
+      log('Page index + store', t);
+      return pages.length;
     })(),
-    // Pipeline B: Generate learning modules (LLM call — slowest step)
+    // Pipeline B: Generate learning modules
     (async () => {
       const t = Date.now();
       const result = await generateModules(docId, text);
       log('Module generation', t);
       return result;
     })(),
-    // Pipeline C: Extract topics + search for supplementary resources
-    (async () => {
-      const t = Date.now();
-      const result = await researchDocument(docId, text);
-      log('Web research', t);
-      return result;
-    })(),
   ]);
 
-  // Embedding failures are critical (needed for search/RAG)
-  if (embeddingResult.status === 'rejected') {
-    throw embeddingResult.reason;
-  }
-
-  // Module generation is critical
+  // Module generation is critical — lessons can't be viewed without it
   if (modulesResult.status === 'rejected') {
     throw modulesResult.reason;
   }
 
-  // Enrich modules with research results (only if research succeeded)
-  if (researchResult.status === 'fulfilled') {
-    try {
-      const t = Date.now();
-      await enrichModulesWithResources(docId);
-      log('Enrichment', t);
-    } catch (enrichErr) {
-      console.error(`Module enrichment failed for document ${docId}:`, enrichErr.message);
-    }
-  } else {
-    console.error(`Web research failed for document ${docId}:`, researchResult.reason?.message);
+  // Page index failure is critical — search won't work
+  if (pageIndexResult.status === 'rejected') {
+    throw pageIndexResult.reason;
   }
 
-  // Update document status — targeted update instead of full read+upsert
+  const pageCount = pageIndexResult.status === 'fulfilled' ? pageIndexResult.value : 0;
+
+  // Mark document as ready immediately — lessons are viewable now
   await vectorStore.updateDocumentStatus(docId, {
     status: 'ready',
     processedDate: new Date().toISOString(),
-    chunkCount: chunks.length,
+    chunkCount: pageCount,
     extractedMetadata: metadata,
   });
 
-  log('TOTAL PIPELINE', pipelineStart);
+  log('READY (lessons available)', pipelineStart);
+
+  // Phase 2: Background enrichment — non-blocking, fire-and-forget.
+  // Web research + module enrichment + diagram processing happen after the doc is already "ready".
+  (async () => {
+    try {
+      const t = Date.now();
+      const researchResult = await researchDocument(docId, text);
+      log('Web research (background)', t);
+
+      if (researchResult) {
+        const t2 = Date.now();
+        await enrichModulesWithResources(docId);
+        log('Enrichment (background)', t2);
+      }
+    } catch (err) {
+      console.error(`${prefix} Background enrichment failed: ${err.message}`);
+    }
+    log('TOTAL PIPELINE (with enrichment)', pipelineStart);
+  })();
+
+  // Diagram detection & analysis (also background, independent from web research)
+  if (buffer && ext) {
+    (async () => {
+      try {
+        // Check if diagram detection is enabled in user settings
+        const query = supabase
+          .from('user_settings')
+          .select('value')
+          .eq('key', 'diagram_detection_enabled');
+        // Note: userId is not available in background pipeline, so we check without filter
+        const { data: setting } = await query.single();
+
+        if (!setting || setting.value !== 'true') {
+          console.log(`${prefix} Diagram detection disabled — skipping`);
+          return;
+        }
+
+        const t = Date.now();
+        const pageTexts = (rawPages || []).map(p => ({ pageNumber: p.pageNumber, text: p.text }));
+        await processDocumentDiagrams(docId, buffer, ext, pageTexts);
+        log('Diagram processing (background)', t);
+      } catch (err) {
+        console.error(`${prefix} Diagram processing failed: ${err.message}`);
+      }
+    })();
+  }
 }
 
 async function listDocuments(req, res, next) {
   try {
-    const documents = await vectorStore.getAllDocuments();
+    const documents = await vectorStore.getAllDocuments(req.user?.id || null);
     res.json({ documents });
   } catch (error) {
     next(error);
@@ -256,9 +294,12 @@ async function deleteDocument(req, res, next) {
       }
     }
 
-    // Remove from vector store and modules
+    // Remove from vector store, modules, and diagrams
     await vectorStore.removeDocument(id);
     await deleteModulesByDocument(id);
+    await deleteDiagramsByDocument(id).catch(err =>
+      console.error(`Failed to delete diagrams for ${id}: ${err.message}`)
+    );
 
     res.json({ message: 'Document deleted successfully' });
   } catch (error) {
@@ -274,26 +315,33 @@ async function reprocessDocument(req, res, next) {
       return res.status(404).json({ error: 'Document not found' });
     }
 
-    // Guard against documents without a storage path
     if (!doc.storagePath) {
       return res.status(400).json({
         error: 'This document was uploaded before the storage migration. Please delete and re-upload it.',
       });
     }
 
+    // Incremental reprocessing (#7): fetch old pages for diffing
+    const oldPages = await vectorStore.getDocumentPages(id);
+
     // Reset status
     await vectorStore.addDocument(id, { ...doc, id: undefined, status: 'processing' });
 
-    // Remove old chunks and modules
+    // Remove old data (pages, chunks, modules, resources)
+    await vectorStore.deletePages(id);
+    invalidateDocCache(id);
     await vectorStore.removeDocument(id);
     await vectorStore.addDocument(id, { ...doc, id: undefined, status: 'processing' });
     await deleteModulesByDocument(id);
     await deleteResourcesByDocument(id);
+    await deleteDiagramsByDocument(id).catch(err =>
+      console.error(`Failed to delete diagrams for ${id}: ${err.message}`)
+    );
 
     res.json({ message: 'Reprocessing started', status: 'processing' });
 
-    // Download from Supabase Storage and reprocess
-    processDocumentFromStorage(id, doc.storagePath, doc.fileType).catch(async (err) => {
+    // Download from Supabase Storage and reprocess (pass old pages for incremental diffing)
+    processDocumentFromStorage(id, doc.storagePath, doc.fileType, oldPages).catch(async (err) => {
       console.error(`Error reprocessing document ${id}:`, err);
       await vectorStore.updateDocumentStatus(id, { status: 'failed', error: err.message });
     });
@@ -380,6 +428,7 @@ async function registerDocument(req, res, next) {
       fileSize: fileSize || 0,
       status: 'processing',
       uploadDate: new Date().toISOString(),
+      userId: req.user?.id || null,
     });
 
     res.status(202).json({

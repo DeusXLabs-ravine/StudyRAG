@@ -19,7 +19,7 @@ async function submitTest(req, res, next) {
     if (!answers || !questions) {
       return res.status(400).json({ error: 'Answers and questions are required' });
     }
-    const result = await submitAptitudeTest(subject, answers, questions);
+    const result = await submitAptitudeTest(subject, answers, questions, req.user?.id || null);
     res.json(result);
   } catch (error) {
     next(error);
@@ -28,7 +28,7 @@ async function submitTest(req, res, next) {
 
 async function listHistory(req, res, next) {
   try {
-    const history = await getAptitudeHistory();
+    const history = await getAptitudeHistory(req.user?.id || null);
     res.json({ history });
   } catch (error) {
     next(error);
@@ -37,7 +37,7 @@ async function listHistory(req, res, next) {
 
 async function getLatest(req, res, next) {
   try {
-    const latest = await getLatestAptitude();
+    const latest = await getLatestAptitude(req.user?.id || null);
     res.json({ result: latest });
   } catch (error) {
     next(error);

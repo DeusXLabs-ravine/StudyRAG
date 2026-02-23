@@ -1,7 +1,7 @@
 const supabase = require('../config/database');
 
-async function getTopicMastery() {
-  const { data, error } = await supabase.rpc('get_topic_mastery');
+async function getTopicMastery(userId = null) {
+  const { data, error } = await supabase.rpc('get_topic_mastery', { p_user_id: userId });
   if (error) throw error;
 
   return (data || []).map(row => ({
@@ -15,10 +15,11 @@ async function getTopicMastery() {
   }));
 }
 
-async function getWeakTopics(threshold = 0.6) {
+async function getWeakTopics(threshold = 0.6, userId = null) {
   const { data, error } = await supabase.rpc('get_weak_topics', {
     threshold,
     result_limit: 100,
+    p_user_id: userId,
   });
   if (error) throw error;
 
@@ -29,8 +30,8 @@ async function getWeakTopics(threshold = 0.6) {
   }));
 }
 
-async function getOverallMastery() {
-  const { data, error } = await supabase.rpc('get_overall_mastery');
+async function getOverallMastery(userId = null) {
+  const { data, error } = await supabase.rpc('get_overall_mastery', { p_user_id: userId });
   if (error) throw error;
 
   const row = data && data[0];
@@ -45,15 +46,14 @@ async function getOverallMastery() {
   };
 }
 
-async function getStudyStreak() {
-  const { data: sessions, error } = await supabase.rpc('get_study_dates');
+async function getStudyStreak(userId = null) {
+  const { data: sessions, error } = await supabase.rpc('get_study_dates', { p_user_id: userId });
   if (error) throw error;
 
   if (!sessions || sessions.length === 0) {
     return { currentStreak: 0, longestStreak: 0, totalDays: 0 };
   }
 
-  const today = new Date().toISOString().split('T')[0];
   let currentStreak = 0;
   let longestStreak = 0;
   let streak = 0;
@@ -82,9 +82,10 @@ async function getStudyStreak() {
   };
 }
 
-async function getQuizScoreTrend(limit = 20) {
+async function getQuizScoreTrend(limit = 20, userId = null) {
   const { data, error } = await supabase.rpc('get_quiz_score_trend', {
     result_limit: limit,
+    p_user_id: userId,
   });
   if (error) throw error;
 
@@ -98,9 +99,10 @@ async function getQuizScoreTrend(limit = 20) {
   }));
 }
 
-async function getActivityTimeline(days = 30) {
+async function getActivityTimeline(days = 30, userId = null) {
   const { data, error } = await supabase.rpc('get_activity_timeline', {
     p_days: days,
+    p_user_id: userId,
   });
   if (error) throw error;
 
@@ -114,9 +116,8 @@ async function getActivityTimeline(days = 30) {
   }, {});
 }
 
-async function getStudyRecommendation() {
-  // Check weak topics first
-  const weakTopics = await getWeakTopics(0.6);
+async function getStudyRecommendation(userId = null) {
+  const weakTopics = await getWeakTopics(0.6, userId);
   if (weakTopics.length > 0) {
     return {
       type: 'weak_topic',
@@ -126,8 +127,7 @@ async function getStudyRecommendation() {
     };
   }
 
-  // Check for due flashcards
-  const { data: dueCount, error: dueErr } = await supabase.rpc('get_due_flashcard_count');
+  const { data: dueCount, error: dueErr } = await supabase.rpc('get_due_flashcard_count', { p_user_id: userId });
   if (dueErr) throw dueErr;
 
   if (dueCount > 0) {
@@ -138,8 +138,7 @@ async function getStudyRecommendation() {
     };
   }
 
-  // Check for incomplete modules
-  const { data: incompleteModules, error: modErr } = await supabase.rpc('get_first_incomplete_module');
+  const { data: incompleteModules, error: modErr } = await supabase.rpc('get_first_incomplete_module', { p_user_id: userId });
   if (modErr) throw modErr;
 
   if (incompleteModules && incompleteModules.length > 0) {
@@ -158,8 +157,8 @@ async function getStudyRecommendation() {
   };
 }
 
-async function getFlashcardStats() {
-  const { data, error } = await supabase.rpc('get_flashcard_stats');
+async function getFlashcardStats(userId = null) {
+  const { data, error } = await supabase.rpc('get_flashcard_stats', { p_user_id: userId });
   if (error) throw error;
 
   const stats = data && data[0];
@@ -172,19 +171,23 @@ async function getFlashcardStats() {
   };
 }
 
-async function getOverview() {
+async function getOverview(userId = null) {
   return {
-    mastery: await getOverallMastery(),
-    streak: await getStudyStreak(),
-    recommendation: await getStudyRecommendation(),
-    flashcardStats: await getFlashcardStats(),
+    mastery: await getOverallMastery(userId),
+    streak: await getStudyStreak(userId),
+    recommendation: await getStudyRecommendation(userId),
+    flashcardStats: await getFlashcardStats(userId),
   };
 }
 
-async function getUserSettings() {
-  const { data: rows, error } = await supabase
+async function getUserSettings(userId = null) {
+  const query = supabase
     .from('user_settings')
     .select('key, value');
+
+  if (userId) query.eq('user_id', userId);
+
+  const { data: rows, error } = await query;
   if (error) throw error;
 
   const settings = {};
@@ -194,10 +197,11 @@ async function getUserSettings() {
   return settings;
 }
 
-async function updateUserSetting(key, value) {
+async function updateUserSetting(key, value, userId = null) {
   await supabase.rpc('upsert_user_setting', {
     p_key: key,
     p_value: value,
+    p_user_id: userId,
   });
 }
 

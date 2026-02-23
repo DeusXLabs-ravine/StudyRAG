@@ -451,6 +451,30 @@ AS $$
 $$;
 
 -- ============================================================
+-- PAGE INDEX (vectorless, reasoning-based RAG)
+-- ============================================================
+
+-- Hierarchical tree index per document (PageIndex approach)
+CREATE TABLE IF NOT EXISTS page_index (
+  doc_id TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+  tree_json JSONB NOT NULL,
+  page_count INTEGER NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Individual page texts for retrieval
+CREATE TABLE IF NOT EXISTS pages (
+  id TEXT PRIMARY KEY,
+  doc_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  page_number INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  heading TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_pages_doc_id ON pages(doc_id);
+CREATE INDEX IF NOT EXISTS idx_pages_doc_page ON pages(doc_id, page_number);
+
+-- ============================================================
 -- ADDITIONAL TABLES: Web Research & Solver
 -- ============================================================
 
@@ -488,3 +512,90 @@ CREATE INDEX IF NOT EXISTS idx_solver_sessions_created ON solver_sessions(create
 
 -- Add Cloudinary support to documents table
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS cloudinary_public_id TEXT;
+
+-- ============================================================
+-- EXAM PREP MODE
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS exam_prep_sessions (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'configuring',  -- configuring|generating|ready|failed
+  document_ids TEXT[] NOT NULL,
+  config_json JSONB NOT NULL DEFAULT '{}',
+  analysis_json JSONB,
+  study_guide_json JSONB,
+  revision_questions_json JSONB,
+  error_message TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS exam_prep_materials (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES exam_prep_sessions(id) ON DELETE CASCADE,
+  material_type TEXT NOT NULL,    -- past_exam|current_test|assignment
+  source_type TEXT NOT NULL DEFAULT 'file',
+  original_name TEXT,
+  extracted_text TEXT,
+  file_size INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_exam_prep_materials_session ON exam_prep_materials(session_id);
+
+ALTER TABLE quiz_sessions ADD COLUMN IF NOT EXISTS exam_prep_session_id TEXT
+  REFERENCES exam_prep_sessions(id) ON DELETE SET NULL;
+
+-- ============================================================
+-- DIAGRAM DETECTION & ANALYSIS
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS document_diagrams (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  page_number INTEGER NOT NULL,
+  diagram_type TEXT NOT NULL,       -- flowchart|hierarchy|sequence|mindmap|cycle|comparison|anatomy|circuit|graph|chart|photo|other
+  title TEXT,
+  description TEXT NOT NULL,
+  labels JSONB,                     -- ["Label A", "Label B"]
+  mermaid_code JSONB NOT NULL DEFAULT '{}',              -- { "dummy": "...", "beginner": "...", ... }
+  simplified_descriptions JSONB NOT NULL DEFAULT '{}',   -- { "dummy": "...", "beginner": "...", ... }
+  original_image_path TEXT,         -- path in 'diagram-images' storage bucket
+  analysis_json JSONB,              -- full Gemini analysis for reference
+  status TEXT NOT NULL DEFAULT 'pending',  -- pending|analyzing|ready|failed
+  error_message TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_doc_diagrams_doc_id ON document_diagrams(document_id);
+CREATE INDEX IF NOT EXISTS idx_doc_diagrams_doc_page ON document_diagrams(document_id, page_number);
+
+-- ============================================================
+-- USER ACCOUNTS & PROFILES
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS profiles (
+  id UUID PRIMARY KEY,
+  email TEXT NOT NULL,
+  display_name TEXT,
+  avatar_url TEXT,
+  age INTEGER,
+  teaching_level TEXT NOT NULL DEFAULT 'intermediate',
+  interests TEXT[] DEFAULT '{}',
+  onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- user_id columns on all user-scoped tables (nullable for migration)
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE quiz_sessions ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE flashcard_decks ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE topic_performance ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE study_sessions ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE aptitude_results ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE solver_sessions ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE exam_prep_sessions ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE module_progress ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS user_id UUID;

@@ -5,20 +5,24 @@ const { v4: uuidv4 } = require('uuid');
 async function queryChat(req, res, next) {
   try {
     const { query, documentId } = req.body;
+    const userId = req.user?.id || null;
 
     if (!query || !query.trim()) {
       return res.status(400).json({ error: 'Query is required' });
     }
 
-    // Load recent conversation context
-    const { data: recentRows } = await supabase
+    // Load recent conversation context (scoped by user)
+    const histQuery = supabase
       .from('chat_messages')
       .select('query, answer')
       .order('timestamp', { ascending: false })
       .limit(5);
+    if (userId) histQuery.eq('user_id', userId);
+
+    const { data: recentRows } = await histQuery;
     const recentMessages = (recentRows || []).reverse();
 
-    const { answer, sources } = await queryWithRAG(query, documentId || null, recentMessages);
+    const { answer, sources } = await queryWithRAG(query, documentId || null, recentMessages, userId);
 
     const message = {
       id: uuidv4(),
@@ -30,21 +34,22 @@ async function queryChat(req, res, next) {
     };
 
     // Persist to Supabase
-    const { error: msgErr } = await supabase.from('chat_messages').insert({
+    const msgRow = {
       id: message.id,
       query: message.query,
       answer: message.answer,
       sources_json: message.sources,
       document_id: message.documentId,
       timestamp: message.timestamp,
-    });
+    };
+    if (userId) msgRow.user_id = userId;
+    const { error: msgErr } = await supabase.from('chat_messages').insert(msgRow);
     if (msgErr) throw msgErr;
 
     // Record study session
-    const { error: sessErr } = await supabase.from('study_sessions').insert({
-      mode: 'chat',
-      details_json: { messageId: message.id },
-    });
+    const sessRow = { mode: 'chat', details_json: { messageId: message.id } };
+    if (userId) sessRow.user_id = userId;
+    const { error: sessErr } = await supabase.from('study_sessions').insert(sessRow);
     if (sessErr) throw sessErr;
 
     res.json(message);
@@ -55,11 +60,15 @@ async function queryChat(req, res, next) {
 
 async function getChatHistory(req, res, next) {
   try {
-    const { data: rows, error } = await supabase
+    const userId = req.user?.id || null;
+    const query = supabase
       .from('chat_messages')
       .select('*')
       .order('timestamp', { ascending: false })
       .limit(50);
+    if (userId) query.eq('user_id', userId);
+
+    const { data: rows, error } = await query;
     if (error) throw error;
 
     const messages = (rows || []).reverse().map(row => ({
@@ -78,10 +87,14 @@ async function getChatHistory(req, res, next) {
 
 async function clearChatHistory(req, res, next) {
   try {
-    const { error } = await supabase
+    const userId = req.user?.id || null;
+    const query = supabase
       .from('chat_messages')
       .delete()
       .neq('id', '');
+    if (userId) query.eq('user_id', userId);
+
+    const { error } = await query;
     if (error) throw error;
     res.json({ message: 'Chat history cleared' });
   } catch (error) {

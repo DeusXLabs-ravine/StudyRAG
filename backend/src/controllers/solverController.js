@@ -8,7 +8,7 @@ async function solve(req, res, next) {
       return res.status(400).json({ error: 'Problem is required' });
     }
 
-    const result = await solveProblem(problem.trim(), subject || null, documentId || null, useWebSearch);
+    const result = await solveProblem(problem.trim(), subject || null, documentId || null, useWebSearch, req.user?.id || null);
     res.json(result);
   } catch (error) {
     next(error);
@@ -23,7 +23,7 @@ async function followUp(req, res, next) {
       return res.status(400).json({ error: 'Session ID and question are required' });
     }
 
-    const result = await solveFollowUp(sessionId, question.trim());
+    const result = await solveFollowUp(sessionId, question.trim(), req.user?.id || null);
     res.json(result);
   } catch (error) {
     next(error);
@@ -33,7 +33,7 @@ async function followUp(req, res, next) {
 async function history(req, res, next) {
   try {
     const limit = parseInt(req.query.limit) || 20;
-    const sessions = await getSolverHistory(limit);
+    const sessions = await getSolverHistory(limit, req.user?.id || null);
     res.json({ sessions });
   } catch (error) {
     next(error);

@@ -1,39 +1,51 @@
 const supabase = require('../config/database');
 const { getGenerativeModel, selectModelTier } = require('../config/gemini');
-const { QUIZ_GENERATION_PROMPT } = require('../utils/prompts');
+const { QUIZ_GENERATION_PROMPT, buildInterestsSection } = require('../utils/prompts');
 const vectorStore = require('./vectorStore');
-const { getUserTeachingLevel, getWeakTopics } = require('./userProfileService');
+const { getUserTeachingLevel, getUserInterests, getWeakTopics } = require('./userProfileService');
 const { v4: uuidv4 } = require('uuid');
 
-async function generateQuiz({ numQuestions = 10, difficulty = 'medium', docId = null, adaptive = false, isExam = false, timeLimitSeconds = null }) {
-  let contextChunks;
-  if (docId) {
-    contextChunks = await vectorStore.getDocumentChunks(docId);
-  } else {
-    contextChunks = await vectorStore.getAllChunksWithText();
-  }
+async function generateQuiz({ numQuestions = 10, difficulty = 'medium', docId = null, adaptive = false, isExam = false, timeLimitSeconds = null, userId = null }) {
+  // Try page-based content first, fall back to chunks
+  let contextItems = await getContentForGeneration(docId);
 
-  if (contextChunks.length === 0) {
+  if (contextItems.length === 0) {
     throw new Error('No study materials found. Please upload documents first.');
   }
 
   let selected;
   if (adaptive) {
-    selected = await selectAdaptiveChunks(contextChunks);
+    selected = await selectAdaptiveContent(contextItems, userId);
   } else {
-    const shuffled = [...contextChunks].sort(() => Math.random() - 0.5);
-    selected = shuffled.slice(0, Math.min(15, shuffled.length));
+    const shuffled = [...contextItems].sort(() => Math.random() - 0.5);
+    // Pages are larger than chunks, so use fewer (5 pages vs 15 chunks)
+    const limit = contextItems[0]?.pageNumber !== undefined ? 5 : 15;
+    selected = shuffled.slice(0, Math.min(limit, shuffled.length));
   }
 
-  const context = selected.map(c => c.text).join('\n\n---\n\n');
+  // Track source page numbers for each content item (#8)
+  const isPages = selected[0]?.pageNumber !== undefined;
+  const context = selected.map(c => {
+    if (isPages) {
+      return `[Page ${c.pageNumber}${c.heading ? ` - ${c.heading}` : ''}]\n${c.text}`;
+    }
+    return c.text;
+  }).join('\n\n---\n\n');
 
-  const teachingLevel = await getUserTeachingLevel();
+  // Build page number mapping for the LLM prompt
+  const sourcePages = isPages ? selected.map(c => c.pageNumber) : [];
+
+  const [teachingLevel, interests] = await Promise.all([
+    getUserTeachingLevel(userId),
+    getUserInterests(userId),
+  ]);
 
   const prompt = QUIZ_GENERATION_PROMPT
     .replace('{num_questions}', numQuestions)
     .replace('{difficulty}', difficulty)
     .replace('{context}', context)
-    .replace('{teaching_level}', teachingLevel);
+    .replace('{teaching_level}', teachingLevel)
+    .replace('{interests_section}', buildInterestsSection(interests));
 
   const tier = selectModelTier({ isComplex: difficulty === 'hard' || isExam });
   const model = getGenerativeModel(tier);
@@ -53,9 +65,10 @@ async function generateQuiz({ numQuestions = 10, difficulty = 'medium', docId = 
     ...q,
     id: uuidv4(),
     topic: q.topic || null,
+    sourcePages: q.sourcePages || sourcePages.length > 0 ? (q.sourcePages || sourcePages) : undefined,
   }));
 
-  const { error } = await supabase.from('quiz_sessions').insert({
+  const sessRow = {
     id: sessionId,
     document_id: docId || null,
     difficulty,
@@ -63,7 +76,9 @@ async function generateQuiz({ numQuestions = 10, difficulty = 'medium', docId = 
     questions_json: questions,
     is_exam: isExam,
     time_limit_seconds: timeLimitSeconds || null,
-  });
+  };
+  if (userId) sessRow.user_id = userId;
+  const { error } = await supabase.from('quiz_sessions').insert(sessRow);
   if (error) throw error;
 
   return {
@@ -77,7 +92,7 @@ async function generateQuiz({ numQuestions = 10, difficulty = 'medium', docId = 
   };
 }
 
-async function submitQuiz(quizId, answers, questions, timeSpentSeconds = null) {
+async function submitQuiz(quizId, answers, questions, timeSpentSeconds = null, userId = null) {
   let correct = 0;
   const results = questions.map((q, i) => {
     const userAnswer = answers[i];
@@ -110,19 +125,23 @@ async function submitQuiz(quizId, answers, questions, timeSpentSeconds = null) {
   // Record topic performance for each question that has a topic
   const topicPerfRows = results
     .filter(r => r.topic)
-    .map(r => ({
-      topic: r.topic,
-      source_mode: 'quiz',
-      source_id: resultId,
-      score: r.isCorrect ? 1.0 : 0.0,
-    }));
+    .map(r => {
+      const row = {
+        topic: r.topic,
+        source_mode: 'quiz',
+        source_id: resultId,
+        score: r.isCorrect ? 1.0 : 0.0,
+      };
+      if (userId) row.user_id = userId;
+      return row;
+    });
 
   if (topicPerfRows.length > 0) {
     const { error: tpErr } = await supabase.from('topic_performance').insert(topicPerfRows);
     if (tpErr) throw tpErr;
   }
 
-  const { error: sessErr } = await supabase.from('study_sessions').insert({
+  const studyRow = {
     mode: 'quiz',
     details_json: {
       quizId,
@@ -132,10 +151,12 @@ async function submitQuiz(quizId, answers, questions, timeSpentSeconds = null) {
       total: questions.length,
       timeSpentSeconds,
     },
-  });
+  };
+  if (userId) studyRow.user_id = userId;
+  const { error: sessErr } = await supabase.from('study_sessions').insert(studyRow);
   if (sessErr) throw sessErr;
 
-  await updateTeachingLevelFromQuiz(score, results);
+  await updateTeachingLevelFromQuiz(score, results, userId);
 
   return {
     id: resultId,
@@ -149,8 +170,8 @@ async function submitQuiz(quizId, answers, questions, timeSpentSeconds = null) {
   };
 }
 
-async function getQuizHistory() {
-  const { data, error } = await supabase.rpc('get_quiz_history');
+async function getQuizHistory(userId = null) {
+  const { data, error } = await supabase.rpc('get_quiz_history', { p_user_id: userId });
   if (error) throw error;
 
   return (data || []).map(row => ({
@@ -190,40 +211,61 @@ async function getQuizSession(sessionId) {
   };
 }
 
+// --- Content retrieval helpers ---
+
+/**
+ * Get content for quiz/flashcard generation. Tries pages first, falls back to chunks.
+ */
+async function getContentForGeneration(docId) {
+  if (docId) {
+    // Try page-based content first
+    const pages = await vectorStore.getDocumentPages(docId);
+    if (pages.length > 0) return pages;
+    // Fall back to chunks for legacy documents
+    return await vectorStore.getDocumentChunks(docId);
+  }
+  // No docId: use all chunks (cross-document)
+  return await vectorStore.getAllChunksWithText();
+}
+
 // --- Adaptive selection helpers ---
 
-async function selectAdaptiveChunks(allChunks) {
-  const weakTopics = await getWeakTopics(10, 0.6);
+async function selectAdaptiveContent(allItems, userId = null) {
+  const weakTopics = await getWeakTopics(10, 0.6, userId);
+  // Pages are larger, so use fewer items
+  const isPages = allItems[0]?.pageNumber !== undefined;
+  const maxItems = isPages ? 5 : 15;
+
   if (weakTopics.length === 0) {
-    const shuffled = [...allChunks].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, Math.min(15, shuffled.length));
+    const shuffled = [...allItems].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, Math.min(maxItems, shuffled.length));
   }
 
   const weakSet = new Set(weakTopics.map(t => t.topic.toLowerCase()));
-  const weakChunks = [];
-  const otherChunks = [];
+  const weakItems = [];
+  const otherItems = [];
 
-  for (const chunk of allChunks) {
-    const heading = (chunk.heading || '').toLowerCase();
-    const text = (chunk.text || '').toLowerCase().slice(0, 200);
+  for (const item of allItems) {
+    const heading = (item.heading || '').toLowerCase();
+    const text = (item.text || '').toLowerCase().slice(0, 200);
     const isWeak = [...weakSet].some(topic => heading.includes(topic) || text.includes(topic));
     if (isWeak) {
-      weakChunks.push(chunk);
+      weakItems.push(item);
     } else {
-      otherChunks.push(chunk);
+      otherItems.push(item);
     }
   }
 
-  const weakCount = Math.min(Math.ceil(15 * 0.6), weakChunks.length);
-  const otherCount = Math.min(15 - weakCount, otherChunks.length);
+  const weakCount = Math.min(Math.ceil(maxItems * 0.6), weakItems.length);
+  const otherCount = Math.min(maxItems - weakCount, otherItems.length);
 
-  const shuffledWeak = [...weakChunks].sort(() => Math.random() - 0.5).slice(0, weakCount);
-  const shuffledOther = [...otherChunks].sort(() => Math.random() - 0.5).slice(0, otherCount);
+  const shuffledWeak = [...weakItems].sort(() => Math.random() - 0.5).slice(0, weakCount);
+  const shuffledOther = [...otherItems].sort(() => Math.random() - 0.5).slice(0, otherCount);
 
   return [...shuffledWeak, ...shuffledOther];
 }
 
-async function updateTeachingLevelFromQuiz(score, results) {
+async function updateTeachingLevelFromQuiz(score, results, userId = null) {
   const total = results.length;
 
   let newLevel;
@@ -241,6 +283,7 @@ async function updateTeachingLevelFromQuiz(score, results) {
     await supabase.rpc('upsert_user_setting', {
       p_key: 'teaching_level',
       p_value: newLevel,
+      p_user_id: userId,
     });
   }
 }

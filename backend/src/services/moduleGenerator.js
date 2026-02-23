@@ -1,17 +1,21 @@
 const supabase = require('../config/database');
 const { getGenerativeModel } = require('../config/gemini');
-const { MODULE_GENERATION_PROMPT, QUESTION_REGENERATION_PROMPT } = require('../utils/prompts');
-const { getUserTeachingLevel } = require('./userProfileService');
+const { MODULE_GENERATION_PROMPT, QUESTION_REGENERATION_PROMPT, buildInterestsSection } = require('../utils/prompts');
+const { getUserTeachingLevel, getUserInterests } = require('./userProfileService');
 const { prepareTextForLLM } = require('./chunkingService');
 const { v4: uuidv4 } = require('uuid');
 
-async function generateModules(docId, documentText) {
-  const teachingLevel = await getUserTeachingLevel();
+async function generateModules(docId, documentText, userId = null) {
+  const [teachingLevel, interests] = await Promise.all([
+    getUserTeachingLevel(userId),
+    getUserInterests(userId),
+  ]);
   // Truncate large documents to ~50K chars to keep Gemini response time reasonable
   const llmText = prepareTextForLLM(documentText, 50000);
   const prompt = MODULE_GENERATION_PROMPT
     .replace('{document_text}', llmText)
-    .replace('{teaching_level}', teachingLevel);
+    .replace('{teaching_level}', teachingLevel)
+    .replace('{interests_section}', buildInterestsSection(interests));
 
   const model = getGenerativeModel('fast');
   const result = await model.generateContent(prompt);
@@ -215,11 +219,11 @@ async function enrichModulesWithResources(docId) {
   }
 }
 
-async function regenerateQuestions(moduleId) {
+async function regenerateQuestions(moduleId, userId = null) {
   const mod = await getModuleById(moduleId);
   if (!mod) throw new Error('Module not found');
 
-  const teachingLevel = await getUserTeachingLevel();
+  const teachingLevel = await getUserTeachingLevel(userId);
 
   // Format previous questions for the prompt
   const prevQuestionsText = mod.questions
