@@ -53,13 +53,7 @@ async function createProfile(req, res, next) {
 
     if (error) throw error;
 
-    // Also sync teaching_level into user_settings for backward compat
-    await supabase.rpc('upsert_user_setting', {
-      p_key: 'teaching_level',
-      p_value: teachingLevel || 'intermediate',
-      p_user_id: req.user.id,
-    });
-
+    // Respond immediately — profile is created
     res.json({
       profile: {
         id: data.id,
@@ -73,6 +67,13 @@ async function createProfile(req, res, next) {
         createdAt: data.created_at,
       },
     });
+
+    // Sync teaching_level into user_settings for backward compat (non-blocking)
+    supabase.rpc('upsert_user_setting', {
+      p_key: 'teaching_level',
+      p_value: teachingLevel || 'intermediate',
+      p_user_id: req.user.id,
+    }).catch(err => console.warn('Non-critical: failed to sync teaching_level to user_settings:', err.message));
   } catch (error) {
     next(error);
   }
@@ -99,15 +100,7 @@ async function updateProfile(req, res, next) {
 
     if (error) throw error;
 
-    // Sync teaching_level to user_settings if it changed
-    if (teachingLevel !== undefined) {
-      await supabase.rpc('upsert_user_setting', {
-        p_key: 'teaching_level',
-        p_value: teachingLevel,
-        p_user_id: req.user.id,
-      });
-    }
-
+    // Respond immediately — profile is updated
     res.json({
       profile: {
         id: data.id,
@@ -121,6 +114,15 @@ async function updateProfile(req, res, next) {
         createdAt: data.created_at,
       },
     });
+
+    // Sync teaching_level to user_settings for backward compat (non-blocking)
+    if (teachingLevel !== undefined) {
+      supabase.rpc('upsert_user_setting', {
+        p_key: 'teaching_level',
+        p_value: teachingLevel,
+        p_user_id: req.user.id,
+      }).catch(err => console.warn('Non-critical: failed to sync teaching_level to user_settings:', err.message));
+    }
   } catch (error) {
     next(error);
   }

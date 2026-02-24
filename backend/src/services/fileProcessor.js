@@ -44,9 +44,25 @@ async function extractPdfFromBuffer(buffer) {
   const pdf = new PDFParse({ data: new Uint8Array(buffer) });
   const { text, total } = await pdf.getText();
   const { info } = await pdf.getInfo();
+
+  // Extract per-page text for PageIndex
+  const pages = [];
+  for (let i = 1; i <= total; i++) {
+    try {
+      const page = await pdf.getPage(i);
+      const pageText = await page.getText();
+      if (pageText && pageText.text && pageText.text.trim()) {
+        pages.push({ pageNumber: i, text: pageText.text });
+      }
+    } catch {
+      // Some pages may fail to parse; skip them
+    }
+  }
+
   pdf.destroy();
   return {
     text,
+    pages: pages.length > 0 ? pages : null,
     metadata: {
       pages: total,
       info,
@@ -58,6 +74,7 @@ async function extractDocxFromBuffer(buffer) {
   const result = await mammoth.extractRawText({ buffer });
   return {
     text: result.value,
+    pages: null,
     metadata: {
       messages: result.messages,
     },
@@ -97,8 +114,21 @@ async function extractPptxFromBuffer(buffer) {
     }
   }
 
+  // Build per-slide pages for PageIndex
+  const pages = slideEntries.map((entry, i) => {
+    const xml = entry.getData().toString('utf-8');
+    const textParts = [];
+    const rx = /<a:t>(.*?)<\/a:t>/gs;
+    let m;
+    while ((m = rx.exec(xml)) !== null) {
+      textParts.push(m[1]);
+    }
+    return { pageNumber: i + 1, text: textParts.join(' ') };
+  }).filter(p => p.text.trim());
+
   return {
     text: slideTexts.join('\n\n'),
+    pages: pages.length > 0 ? pages : null,
     metadata: {
       slides: slideEntries.length,
       format: 'pptx',
@@ -142,6 +172,7 @@ async function extractNotebookFromBuffer(buffer) {
 
   return {
     text: parts.join('\n\n'),
+    pages: null,
     metadata: {
       cellCount: cells.length,
       language,
@@ -154,6 +185,7 @@ async function extractPlainTextFromBuffer(buffer) {
   const text = buffer.toString('utf-8');
   return {
     text,
+    pages: null,
     metadata: {},
   };
 }
@@ -179,6 +211,7 @@ async function extractCodeFromBuffer(buffer, ext) {
 
   return {
     text: `# Source Code (${lang})\n\n\`\`\`${lang}\n${text}\n\`\`\``,
+    pages: null,
     metadata: {
       language: lang,
       format: 'code',

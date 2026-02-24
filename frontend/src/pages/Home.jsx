@@ -1,6 +1,9 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, MessageCircle, ClipboardCheck, Layers, FileText, Upload, Sparkles, ArrowRight, Brain } from 'lucide-react';
+import { BookOpen, MessageCircle, ClipboardCheck, Layers, FileText, Upload, Sparkles, ArrowRight, Brain, LogIn } from 'lucide-react';
 import Footer from '../components/layout/Footer';
+import Logo from '../components/common/Logo';
+import useAuthStore from '../store/authStore';
 
 const features = [
   {
@@ -34,10 +37,43 @@ const features = [
 ];
 
 export default function Home() {
+  const { user, profile, initialize } = useAuthStore();
+  const isAuthenticated = user && profile?.onboardingCompleted;
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
   return (
-    <div className="min-h-[calc(100vh-4rem)]">
+    <div className="min-h-screen">
+      {/* Public header */}
+      <nav className="bg-white border-b border-gray-100 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-20">
+          <Link to="/" className="flex items-center">
+            <Logo className="h-16 w-16" hideText />
+          </Link>
+          {isAuthenticated ? (
+            <Link
+              to="/documents"
+              className="inline-flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-primary-700 transition-all shadow-lg shadow-primary/20"
+            >
+              Go to App
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          ) : (
+            <Link
+              to="/documents"
+              className="inline-flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-primary-700 transition-all shadow-lg shadow-primary/20"
+            >
+              <LogIn className="h-4 w-4" />
+              Sign In
+            </Link>
+          )}
+        </div>
+      </nav>
+
       {/* Hero */}
-      <section className="bg-gradient-to-br from-primary-700 via-primary-600 to-primary-800 text-white py-24 px-6 overflow-hidden relative">
+      <section className="bg-gradient-to-br from-primary-700 via-primary-600 to-primary-800 text-white pt-20 pb-24 px-6 overflow-hidden relative">
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-20">
           <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-white rounded-full blur-[120px]" />
           <div className="absolute -bottom-[10%] -right-[10%] w-[40%] h-[40%] bg-primary-400 rounded-full blur-[120px]" />

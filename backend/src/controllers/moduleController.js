@@ -1,5 +1,5 @@
 const supabase = require('../config/database');
-const { getAllModules, getModuleById, getModulesByDocument, regenerateQuestions: regenerateModuleQuestions } = require('../services/moduleGenerator');
+const { getAllModules, getModuleById, getModulesByDocument, regenerateQuestions: regenerateModuleQuestions, isGeneratingModules } = require('../services/moduleGenerator');
 
 async function getProgressForModule(moduleId) {
   const { data: row, error } = await supabase
@@ -39,7 +39,8 @@ async function listModules(req, res, next) {
       }))
     );
 
-    res.json({ modules: modulesWithProgress });
+    const generating = documentId ? isGeneratingModules(documentId) : false;
+    res.json({ modules: modulesWithProgress, generating });
   } catch (error) {
     next(error);
   }

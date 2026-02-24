@@ -1,20 +1,60 @@
 import { create } from 'zustand';
 import * as moduleService from '../services/moduleService';
 
-const useModuleStore = create((set) => ({
+const useModuleStore = create((set, get) => ({
   modules: [],
   currentModule: null,
   loading: false,
   error: null,
+  generating: false,
+  _pollTimer: null,
 
   fetchModules: async (documentId) => {
     set({ loading: true, error: null });
     try {
-      const modules = await moduleService.listModules(documentId);
-      set({ modules: Array.isArray(modules) ? modules : [], loading: false });
+      const { modules, generating } = await moduleService.listModules(documentId);
+      set({ modules: Array.isArray(modules) ? modules : [], generating, loading: false });
+
+      // Auto-poll for new modules while background generation is running
+      const prev = get()._pollTimer;
+      if (prev) clearTimeout(prev);
+
+      if (generating && documentId) {
+        const timer = setTimeout(() => {
+          // Silent refresh — don't show loading spinner
+          get()._pollRefresh(documentId);
+        }, 5000);
+        set({ _pollTimer: timer });
+      }
     } catch (error) {
       set({ error: error.message, loading: false });
     }
+  },
+
+  // Silent refresh used by polling — updates modules without loading state
+  _pollRefresh: async (documentId) => {
+    try {
+      const { modules, generating } = await moduleService.listModules(documentId);
+      set({ modules: Array.isArray(modules) ? modules : [], generating });
+
+      if (generating) {
+        const timer = setTimeout(() => {
+          get()._pollRefresh(documentId);
+        }, 5000);
+        set({ _pollTimer: timer });
+      } else {
+        set({ _pollTimer: null });
+      }
+    } catch {
+      // Silently ignore poll errors
+      set({ _pollTimer: null, generating: false });
+    }
+  },
+
+  stopPolling: () => {
+    const timer = get()._pollTimer;
+    if (timer) clearTimeout(timer);
+    set({ _pollTimer: null });
   },
 
   fetchModule: async (id) => {

@@ -42,4 +42,21 @@ function selectModelTier(contentHints = {}) {
   return 'standard';
 }
 
-module.exports = { genAI, getGenerativeModel, getSearchGroundedModel, getEmbeddingModel, selectModelTier, MODELS };
+/**
+ * Send an image + text prompt to Gemini Vision (multimodal).
+ * @param {Buffer} imageBuffer - Raw image bytes
+ * @param {string} mimeType - e.g. 'image/png', 'image/jpeg'
+ * @param {string} prompt - Text prompt
+ * @param {string} tier - Model tier ('fast'|'standard'|'advanced')
+ * @returns {Promise<string>} Model response text
+ */
+async function generateContentWithVision(imageBuffer, mimeType, prompt, tier = 'standard') {
+  const model = getGenerativeModel(tier);
+  const result = await model.generateContent([
+    prompt,
+    { inlineData: { data: imageBuffer.toString('base64'), mimeType } },
+  ]);
+  return result.response.text();
+}
+
+module.exports = { genAI, getGenerativeModel, getSearchGroundedModel, getEmbeddingModel, selectModelTier, generateContentWithVision, MODELS };

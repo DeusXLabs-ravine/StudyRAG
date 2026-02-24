@@ -3,7 +3,7 @@ import api from './api';
 export async function listModules(documentId) {
   const params = documentId ? { documentId } : {};
   const { data } = await api.get('/modules', { params });
-  return data.modules;
+  return { modules: data.modules, generating: data.generating || false };
 }
 
 export async function getModule(id) {

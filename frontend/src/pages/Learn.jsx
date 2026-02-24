@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { BookOpen, CheckCircle, Lock, ChevronRight, Calculator, FlaskConical, Cpu, Atom, Globe, Lightbulb, Sparkles, Send, Volume2 } from 'lucide-react';
+import { BookOpen, CheckCircle, Lock, ChevronRight, Calculator, FlaskConical, Cpu, Atom, Globe, Lightbulb, Sparkles, Send, Volume2, Loader2 } from 'lucide-react';
 import useModuleStore from '../store/moduleStore';
 import useDocumentStore from '../store/documentStore';
 import useSettingsStore from '../store/settingsStore';
@@ -9,13 +9,14 @@ import LessonViewer from '../components/learn/LessonViewer';
 import QuizSection from '../components/learn/QuizSection';
 import { explainSimply } from '../services/moduleService';
 import { prefetchAllChunks } from '../services/ttsService';
+import { listDiagrams } from '../services/diagramService';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
 export default function Learn() {
   const { documentId: routeDocId } = useParams();
-  const { modules, currentModule, loading: modulesLoading, fetchModules, setCurrentModule, regenerateQuestions, markModuleCompleted } = useModuleStore();
+  const { modules, currentModule, loading: modulesLoading, generating, fetchModules, stopPolling, setCurrentModule, regenerateQuestions, markModuleCompleted } = useModuleStore();
   const { documents, fetchDocuments } = useDocumentStore();
   const [selectedDocId, setSelectedDocId] = useState(routeDocId || null);
   const [showQuiz, setShowQuiz] = useState(false);
@@ -23,6 +24,9 @@ export default function Learn() {
 
   // Track IDs of modules explicitly unlocked this session so they can't re-lock
   const unlockedIdsRef = useRef(new Set());
+
+  // Diagram State
+  const [diagrams, setDiagrams] = useState([]);
 
   // Assistance State
   const [explanation, setExplanation] = useState('');
@@ -34,13 +38,20 @@ export default function Learn() {
   }, [fetchDocuments]);
 
   const getVoiceId = useSettingsStore(state => state.getVoiceId);
+  const settings = useSettingsStore(state => state.settings);
   const prefetchCancelRef = useRef(null);
 
   useEffect(() => {
     if (selectedDocId) {
       fetchModules(selectedDocId);
+      // Fetch diagrams (non-blocking, may be empty if feature is off)
+      listDiagrams(selectedDocId).then(setDiagrams).catch(() => setDiagrams([]));
+    } else {
+      setDiagrams([]);
+      stopPolling();
     }
-  }, [selectedDocId, fetchModules]);
+    return () => stopPolling();
+  }, [selectedDocId, fetchModules, stopPolling]);
 
   // Background prefetch TTS audio chunks when module changes
   useEffect(() => {
@@ -205,6 +216,13 @@ export default function Learn() {
                   </div>
                 </div>
               ))}
+
+              {generating && (
+                <div className="flex items-center gap-2 px-3 py-3 text-xs font-bold text-primary/70 animate-pulse">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Generating more modules...
+                </div>
+              )}
             </div>
           </div>
 
@@ -236,6 +254,8 @@ export default function Learn() {
               ) : (
                 <LessonViewer
                   module={currentModule}
+                  diagrams={diagrams.filter(d => d.status === 'ready')}
+                  teachingLevel={settings.teaching_level || 'intermediate'}
                   onStartQuiz={async () => {
                     // If student previously attempted but didn't pass, regenerate questions
                     const progress = currentModule.progress;

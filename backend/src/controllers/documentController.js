@@ -2,7 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const { extractTextFromBuffer } = require('../services/fileProcessor');
 const { buildPageIndex, invalidateDocCache } = require('../services/pageIndexService');
 const vectorStore = require('../services/vectorStore');
-const { generateModules, deleteModulesByDocument, enrichModulesWithResources } = require('../services/moduleGenerator');
+const { generateInitialModules, generateRemainingModules, deleteModulesByDocument, enrichModulesWithResources } = require('../services/moduleGenerator');
 const { researchDocument, getResourcesByDocument, deleteResourcesByDocument } = require('../services/webResearchService');
 const { processDocumentDiagrams, deleteDiagramsByDocument } = require('../services/diagramService');
 const supabase = require('../config/database');
@@ -157,8 +157,8 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
   const log = (step, startTime) =>
     console.log(`${prefix} ${step}: ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
 
-  // Phase 1: Critical path — modules + page index run in parallel.
-  // Web research is deferred to Phase 2 (non-blocking).
+  // Phase 1: Critical path — initial modules + page index run in parallel.
+  // Only the first segment of modules is generated here so the user can start learning fast.
   const [pageIndexResult, modulesResult] = await Promise.allSettled([
     // Pipeline A: Build page index → store pages + tree
     (async () => {
@@ -177,11 +177,11 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
       log('Page index + store', t);
       return pages.length;
     })(),
-    // Pipeline B: Generate learning modules
+    // Pipeline B: Generate initial learning modules (first segment only)
     (async () => {
       const t = Date.now();
-      const result = await generateModules(docId, text);
-      log('Module generation', t);
+      const result = await generateInitialModules(docId, text);
+      log(`Initial modules (${result.moduleCount} modules, segment 1/${result.totalSegments})`, t);
       return result;
     })(),
   ]);
@@ -208,8 +208,18 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
 
   log('READY (lessons available)', pipelineStart);
 
-  // Phase 2: Background enrichment — non-blocking, fire-and-forget.
-  // Web research + module enrichment + diagram processing happen after the doc is already "ready".
+  // Phase 2: Background — remaining modules + web research + enrichment.
+  // All fire-and-forget so the user isn't blocked.
+  (async () => {
+    try {
+      const t = Date.now();
+      await generateRemainingModules(docId, text);
+      log('Remaining modules (background)', t);
+    } catch (err) {
+      console.error(`${prefix} Background module generation failed: ${err.message}`);
+    }
+  })();
+
   (async () => {
     try {
       const t = Date.now();

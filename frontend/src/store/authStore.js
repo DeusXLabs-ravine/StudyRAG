@@ -12,11 +12,10 @@ const useAuthStore = create((set, get) => ({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        set({ user: session.user, session, loading: false });
-        get().fetchProfile();
-      } else {
-        set({ loading: false });
+        set({ user: session.user, session });
+        await get().fetchProfile();
       }
+      set({ loading: false });
 
       supabase.auth.onAuthStateChange((_event, session) => {
         set({
@@ -35,20 +34,9 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
-  sendOtp: async (email) => {
+  sendMagicLink: async (email) => {
     const { error } = await supabase.auth.signInWithOtp({ email });
     if (error) throw error;
-  },
-
-  verifyOtp: async (email, token) => {
-    const { data, error } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: 'email',
-    });
-    if (error) throw error;
-    set({ user: data.user, session: data.session });
-    return data;
   },
 
   signOut: async () => {

@@ -137,4 +137,4 @@ function prepareTextForLLM(text, maxChars = 50000) {
   return result;
 }
 
-module.exports = { chunkText, prepareTextForLLM };
+module.exports = { chunkText, prepareTextForLLM, splitBySections };

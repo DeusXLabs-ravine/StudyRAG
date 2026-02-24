@@ -1,4 +1,7 @@
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Trophy, CheckCircle, XCircle, HelpCircle, ArrowLeft } from 'lucide-react';
+import useModuleStore from '../../store/moduleStore';
 
 export default function QuizSection({ module, onBack, onComplete }) {
   const { submitProgress } = useModuleStore();

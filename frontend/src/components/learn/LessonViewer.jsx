@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Target, Lightbulb, HelpCircle, X, CheckCircle, Lock, ChevronRight } from 'lucide-react';
+import { Target, Lightbulb, HelpCircle, X, CheckCircle, Lock, ChevronRight, Shapes } from 'lucide-react';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { explainSimply } from '../../services/moduleService';
 import Spinner from '../common/Spinner';
 import TTSButton from '../common/TTSButton';
+import DiagramViewer from './DiagramViewer';
 
-export default function LessonViewer({ module, onStartQuiz, regeneratingQuestions }) {
+export default function LessonViewer({ module, onStartQuiz, regeneratingQuestions, diagrams = [], teachingLevel }) {
   if (!module) return null;
 
   return (
@@ -109,6 +110,26 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Visual Diagrams */}
+      {diagrams.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 px-1">
+            <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center">
+              <Shapes className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Visual Diagrams</h3>
+              <p className="text-xs text-gray-500">Detected diagrams from your document, simplified for your level</p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            {diagrams.map(d => (
+              <DiagramViewer key={d.id} diagram={d} teachingLevel={teachingLevel || 'intermediate'} />
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -607,6 +607,99 @@ Important:
 - For "intermediate" level: standard representation
 - For "advanced" level: add additional detail nodes and connections if appropriate`;
 
+const MODULE_OUTLINE_PROMPT = `You are an expert curriculum designer creating a comprehensive module outline from study materials.
+The student's current teaching level is: {teaching_level}
+{interests_section}
+
+Analyze the following document content and create a detailed outline of ALL topics that should be covered as individual learning modules.
+
+CRITICAL GUIDELINES:
+- This text contains approximately {word_count} words
+- You MUST create approximately {target_modules} modules (at minimum {min_modules})
+- One module per distinct topic, concept, or subject area — do NOT merge unrelated topics into one module
+- Modules should follow a natural learning progression (foundational → advanced)
+- Be thorough: every significant topic in the text MUST have its own module
+- Do NOT skip content or combine multiple distinct topics into one module just to keep the count low
+- If in doubt, create MORE modules rather than fewer — granular is better than skipping content
+
+Document content:
+{document_text}
+
+Return ONLY valid JSON in this exact format:
+{
+  "modules": [
+    {
+      "title": "Module Title",
+      "topic": "Short Topic Label (1-3 words)",
+      "description": "1-2 sentence description of what this module covers"
+    }
+  ]
+}`;
+
+const MODULE_BATCH_GENERATION_PROMPT = `You are an expert educator creating structured learning modules from study materials.
+The student's current teaching level is: {teaching_level}
+Adjust your content complexity, vocabulary, and examples accordingly:
+- "dummy": Use extremely simple language, lots of real-world analogies, step-by-step breakdowns, avoid jargon
+- "beginner": Use simple language with clear definitions for technical terms, include many examples
+- "intermediate": Standard academic language, balanced depth, some assumed background knowledge
+- "advanced": Technical and detailed, assume strong foundational knowledge, include nuances and edge cases
+{interests_section}
+
+You are generating specific learning modules from a pre-planned curriculum outline.
+
+SOURCE MATERIAL:
+{document_text}
+
+FULL CURRICULUM OUTLINE (all planned modules for this section):
+{full_outline}
+
+YOUR TASK: Generate ONLY these specific modules:
+{batch_modules}
+
+For each module listed above, provide:
+1. title: Use the title from the outline above
+2. topic: Use the topic from the outline above
+3. objectives: 2-3 specific learning goals
+4. content: Focused explanation (200-400 words) with:
+   - Introduction to the concept
+   - Clear explanation with one or two examples
+   - Key points highlighted
+5. takeaways: 2-3 bullet points summarizing main ideas
+6. questions: 2-3 comprehension check questions with:
+   - Mix of types: multiple_choice, true_false
+   - Correct answers and explanations
+   - Each question should have a "topic" field matching the module topic
+
+Return ONLY valid JSON in this exact format:
+{
+  "modules": [
+    {
+      "title": "Module Title",
+      "topic": "Topic Label",
+      "objectives": ["Objective 1", "Objective 2"],
+      "content": "Full lesson content in markdown...",
+      "takeaways": ["Takeaway 1", "Takeaway 2", "Takeaway 3"],
+      "questions": [
+        {
+          "type": "multiple_choice",
+          "question": "Question text?",
+          "options": ["A) Option A", "B) Option B", "C) Option C", "D) Option D"],
+          "correct": "A",
+          "explanation": "Why A is correct...",
+          "topic": "Topic Label"
+        },
+        {
+          "type": "true_false",
+          "question": "Statement to evaluate?",
+          "correct": "true",
+          "explanation": "Why this is true/false...",
+          "topic": "Topic Label"
+        }
+      ]
+    }
+  ]
+}`;
+
 function buildInterestsSection(interests) {
   if (!interests || interests.length === 0) return '';
   return `The student's interests and hobbies include: ${interests.join(', ')}.\nWhen explaining concepts, use analogies and examples that relate to these interests where it genuinely helps clarify the concept.`;
@@ -614,6 +707,8 @@ function buildInterestsSection(interests) {
 
 module.exports = {
   MODULE_GENERATION_PROMPT,
+  MODULE_OUTLINE_PROMPT,
+  MODULE_BATCH_GENERATION_PROMPT,
   QUIZ_GENERATION_PROMPT,
   FLASHCARD_GENERATION_PROMPT,
   EXPLAIN_SIMPLY_PROMPT,
