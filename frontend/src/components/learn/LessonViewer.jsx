@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Target, Lightbulb, HelpCircle, X, CheckCircle, Lock, ChevronRight, Shapes } from 'lucide-react';
 import remarkMath from 'remark-math';
@@ -7,40 +7,82 @@ import { explainSimply } from '../../services/moduleService';
 import Spinner from '../common/Spinner';
 import TTSButton from '../common/TTSButton';
 import DiagramViewer from './DiagramViewer';
+import useSettingsStore from '../../store/settingsStore';
+import { resolveThemeVars, getBoardType, parseThemeSetting } from '../../lib/boardThemes';
 
 export default function LessonViewer({ module, onStartQuiz, regeneratingQuestions, diagrams = [], teachingLevel }) {
   if (!module) return null;
 
+  const settings = useSettingsStore(state => state.settings);
+
+  const { themeVars, boardType } = useMemo(() => {
+    const cfg = parseThemeSetting(settings.board_theme);
+    return {
+      themeVars: resolveThemeVars(cfg),
+      boardType: getBoardType(cfg),
+    };
+  }, [settings.board_theme]);
+
+  const isNotebook = boardType === 'notebook';
+  const isWhiteboard = boardType === 'whiteboard';
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      {/* Chalkboard Section */}
-      <div className="chalkboard relative">
-        <div className="chalk-dust" />
+      {/* Learning Board */}
+      <div className="lesson-board relative" style={themeVars}>
+        <div className="board-texture" />
 
-        {/* Header inside chalkboard */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-10 border-b border-white/10 pb-6">
-          <div className="chalk-drawing">
+        {/* Notebook decorations (hidden by CSS var for non-notebook) */}
+        <div className="board-notebook-lines" />
+        <div className="board-margin-line" />
+        <div className="board-spiral">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div key={i} className="board-spiral-ring" />
+          ))}
+        </div>
+
+        {/* Header */}
+        <div
+          className="flex flex-wrap items-center justify-between gap-4 mb-10 border-b pb-6"
+          style={{ borderColor: 'var(--header-border-color)' }}
+        >
+          <div className="board-text">
             <div className="flex items-center gap-3 mb-2">
-              <span className="px-3 py-1 bg-white/10 text-white text-xs font-bold rounded-sm uppercase tracking-widest border border-white/20">
+              <span
+                className="px-3 py-1 text-xs font-bold rounded-sm uppercase tracking-widest"
+                style={{
+                  background: 'var(--label-bg)',
+                  color: 'var(--label-color)',
+                  border: 'var(--label-border)',
+                }}
+              >
                 Module {module.orderIndex + 1}
               </span>
               {module.topic && (
-                <span className="px-3 py-1 bg-white/5 text-white/70 text-xs font-semibold rounded-sm border border-white/10 text-nowrap">
+                <span
+                  className="px-3 py-1 text-xs font-semibold rounded-sm text-nowrap"
+                  style={{
+                    background: 'var(--label-bg)',
+                    color: 'var(--label-color)',
+                    border: 'var(--label-border)',
+                    opacity: 0.7,
+                  }}
+                >
                   {module.topic}
                 </span>
               )}
             </div>
             <h2 className="text-4xl font-bold tracking-tight">{module.title}</h2>
           </div>
-          <TTSButton text={module.content} variant="chalk" />
+          <TTSButton text={module.content} variant={isWhiteboard || isNotebook ? 'default' : 'chalk'} />
         </div>
 
-        <div className="chalk-drawing chalk-writing">
-          {/* Learning Objectives - Chalk Style */}
+        <div className="board-text board-writing">
+          {/* Learning Objectives */}
           {module.objectives?.length > 0 && (
             <div className="mb-12 opacity-80">
               <div className="flex items-center gap-3 mb-6">
-                <Target className="h-6 w-6 text-white" />
+                <Target className="h-6 w-6" style={{ color: 'var(--text-color)' }} />
                 <h3 className="text-xl font-bold m-0 border-none">Today's Objectives:</h3>
               </div>
               <ul className="list-none grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 p-0">
@@ -53,8 +95,8 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
             </div>
           )}
 
-          {/* Lesson Content - Chalk Style */}
-          <div className="prose-invert max-w-none mb-12">
+          {/* Lesson Content */}
+          <div className="max-w-none mb-12">
             <ReactMarkdown
               remarkPlugins={[remarkMath]}
               rehypePlugins={[rehypeKatex]}
@@ -70,11 +112,21 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
           </div>
         </div>
 
-        {/* Chalk Tray Props */}
-        <div className="chalk-tray-items">
-          <div className="chalk-stick" />
-          <div className="chalk-stick bg-blue-100/80" style={{ transform: 'rotate(5deg)' }} />
-          <div className="chalk-eraser" />
+        {/* Board Tray */}
+        <div className="board-tray">
+          {isWhiteboard ? (
+            <>
+              <div className="board-marker" style={{ background: 'var(--tray-item-1-bg)' }} />
+              <div className="board-marker" style={{ background: 'var(--tray-item-2-bg)' }} />
+              <div className="board-eraser" />
+            </>
+          ) : (
+            <>
+              <div className="board-tray-item" style={{ background: 'var(--tray-item-1-bg)' }} />
+              <div className="board-tray-item" style={{ background: 'var(--tray-item-2-bg)', transform: 'rotate(5deg)' }} />
+              <div className="board-eraser" />
+            </>
+          )}
         </div>
       </div>
 
@@ -93,7 +145,7 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
         </button>
       </div>
 
-      {/* Key Takeaways - Moved below as a simple card */}
+      {/* Key Takeaways */}
       {module.takeaways?.length > 0 && (
         <div className="sleek-card p-8 bg-emerald-50/20 border-emerald-100/30">
           <div className="flex items-center gap-3 mb-6 font-bold text-emerald-900/80">

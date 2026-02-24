@@ -296,7 +296,7 @@ export default function Learn() {
                     <Volume2 className="h-4 w-4" /> Board Controls
                   </h3>
                 </div>
-                <p className="text-[11px] text-blue-700/70 mb-4 font-medium leading-relaxed">Hear the lesson narrated. The speaker button is located at the top-right of your main chalkboard.</p>
+                <p className="text-[11px] text-blue-700/70 mb-4 font-medium leading-relaxed">Hear the lesson narrated. The speaker button is located at the top-right of your learning board.</p>
               </div>
 
               {/* Concept Assistance Input */}
