@@ -131,11 +131,11 @@ export default function Navbar() {
           </div>
 
           {/* Mobile menu button */}
-          <div className="md:hidden flex items-center gap-2">
-            <UserAvatar profile={profile || { email: user?.email }} className="h-7 w-7" />
+          <div className="md:hidden flex items-center gap-3">
+            <UserAvatar profile={profile || { email: user?.email }} className="h-8 w-8" />
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
-              className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
+              className="p-2.5 rounded-xl text-gray-600 hover:bg-gray-100 transition-all active:scale-95 border border-gray-100"
             >
               {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
@@ -144,41 +144,64 @@ export default function Navbar() {
       </div>
 
       {/* Mobile nav */}
-      {mobileOpen && (
-        <div className="md:hidden border-t border-gray-200 bg-white">
-          <div className="px-4 py-2 space-y-1">
-            {navItems.map(item => {
-              const Icon = icons[item.icon];
-              const isActive = location.pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => setMobileOpen(false)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${isActive
-                    ? 'bg-primary-50 text-primary-700'
-                    : 'text-gray-600 hover:bg-gray-50'
-                    }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-            <div className="border-t border-gray-100 pt-2 mt-2">
-              <div className="px-3 py-1">
-                <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="md:hidden border-t border-gray-100 bg-white overflow-hidden"
+          >
+            <div className="px-5 py-4 space-y-2">
+              <div className="grid grid-cols-2 gap-2 pb-4">
+                {navItems.map(item => {
+                  const Icon = icons[item.icon];
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setMobileOpen(false)}
+                      className={`flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-bold transition-all ${isActive
+                        ? 'bg-primary text-white shadow-md shadow-primary/20'
+                        : 'text-gray-600 bg-gray-50 hover:bg-gray-100'
+                        }`}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {item.label}
+                    </Link>
+                  );
+                })}
               </div>
-              <button
-                onClick={() => { setMobileOpen(false); handleSignOut(); }}
-                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50"
-              >
-                <LogOut className="h-4 w-4" /> Sign Out
-              </button>
+
+              <div className="border-t border-gray-100 pt-4 mt-2">
+                <div className="flex items-center gap-3 px-2 mb-4">
+                  <UserAvatar profile={profile || { email: user?.email }} className="h-10 w-10" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900 truncate">{profile?.displayName || 'User'}</p>
+                    <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Link
+                    to="/settings"
+                    onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-bold text-gray-700 bg-gray-50 hover:bg-gray-100"
+                  >
+                    <Settings className="h-4 w-4" /> Account Settings
+                  </Link>
+                  <button
+                    onClick={() => { setMobileOpen(false); handleSignOut(); }}
+                    className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
+                  >
+                    <LogOut className="h-4 w-4" /> Sign Out
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </nav>
   );
 }

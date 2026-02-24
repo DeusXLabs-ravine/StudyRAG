@@ -70,7 +70,7 @@ export default function QuizSection({ module, onBack, onComplete }) {
         animate={{ opacity: 1, y: 0 }}
         className="sleek-card overflow-hidden"
       >
-        <div className={`relative p-12 text-center overflow-hidden ${passed ? 'bg-gradient-to-b from-emerald-50 to-white' : 'bg-gradient-to-b from-red-50 to-white'}`}>
+        <div className={`relative p-6 md:p-12 text-center overflow-hidden ${passed ? 'bg-gradient-to-b from-emerald-50 to-white' : 'bg-gradient-to-b from-red-50 to-white'}`}>
           {/* Background Decorative Elements */}
           <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
             <div className={`absolute -top-10 -left-10 w-40 h-40 rounded-full blur-3xl ${passed ? 'bg-emerald-400' : 'bg-red-400'}`} />
@@ -102,8 +102,8 @@ export default function QuizSection({ module, onBack, onComplete }) {
               transition={{ delay: 0.4 }}
               className="relative"
             >
-              <span className={`text-8xl font-black ${passed ? 'text-emerald-600' : 'text-red-600'} drop-shadow-sm`}>
-                {score}<span className="text-4xl opacity-50">%</span>
+              <span className={`text-6xl md:text-8xl font-black ${passed ? 'text-emerald-600' : 'text-red-600'} drop-shadow-sm`}>
+                {score}<span className="text-2xl md:text-4xl opacity-50">%</span>
               </span>
             </motion.div>
 
@@ -129,17 +129,17 @@ export default function QuizSection({ module, onBack, onComplete }) {
           </motion.p>
         </div>
 
-        <div className="p-10 bg-white">
-          <div className="flex items-center justify-between mb-8 px-2">
+        <div className="p-5 md:p-10 bg-white">
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 px-2 gap-4">
             <div>
               <h3 className="text-xl font-black text-gray-900">Question Review</h3>
               <p className="text-sm text-gray-500 font-medium mt-1">Check where you excelled and what to revisit.</p>
             </div>
             <div className="flex gap-2">
-              <div className="px-3 py-1 bg-gray-100 rounded-lg text-xs font-bold text-gray-600 flex items-center gap-1.5 border border-gray-200">
+              <div className="px-3 py-1 bg-gray-100 rounded-lg text-[10px] md:text-xs font-bold text-gray-600 flex items-center gap-1.5 border border-gray-200">
                 <div className="w-2 h-2 rounded-full bg-emerald-500" /> {questions.filter(q => answers[q.id]?.toLowerCase() === q.correct?.toLowerCase()).length} Correct
               </div>
-              <div className="px-3 py-1 bg-gray-100 rounded-lg text-xs font-bold text-gray-600 flex items-center gap-1.5 border border-gray-200">
+              <div className="px-3 py-1 bg-gray-100 rounded-lg text-[10px] md:text-xs font-bold text-gray-600 flex items-center gap-1.5 border border-gray-200">
                 <div className="w-2 h-2 rounded-full bg-red-500" /> {questions.length - questions.filter(q => answers[q.id]?.toLowerCase() === q.correct?.toLowerCase()).length} Wrong
               </div>
             </div>
@@ -195,17 +195,17 @@ export default function QuizSection({ module, onBack, onComplete }) {
           </div>
         </div>
 
-        <div className="p-10 bg-gray-50/80 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-center gap-4">
+        <div className="p-6 md:p-10 bg-gray-50/80 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-center gap-4">
           <button
             onClick={onBack}
-            className="w-full sm:w-auto px-10 py-4 bg-white border-2 border-gray-200 text-gray-700 rounded-2xl text-sm font-black hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2"
+            className="w-full sm:w-auto px-10 py-4 bg-white border-2 border-gray-200 text-gray-700 rounded-2xl text-sm font-black hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm active:scale-95 flex items-center justify-center gap-3"
           >
             <ArrowLeft className="h-4 w-4" /> Review Lesson
           </button>
           {passed && onComplete && (
             <button
               onClick={onComplete}
-              className="w-full sm:w-auto px-10 py-4 bg-primary text-white rounded-2xl text-sm font-black hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/20 transition-all shadow-lg shadow-primary/20 active:scale-95 flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-10 py-4 bg-primary text-white rounded-2xl text-sm font-black hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/20 transition-all shadow-lg shadow-primary/20 active:scale-95 flex items-center justify-center gap-3"
             >
               <Trophy className="h-4 w-4" /> Continue Journey
             </button>
@@ -237,12 +237,12 @@ export default function QuizSection({ module, onBack, onComplete }) {
         </div>
       </div>
 
-      <div className="p-10">
-        <div className="mb-10 text-center">
+      <div className="p-6 md:p-10">
+        <div className="mb-8 md:mb-10 text-center">
           <span className="inline-block px-3 py-1 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-[0.2em] rounded-full mb-4">
             Question {currentQ + 1} of {questions.length}
           </span>
-          <h3 className="text-2xl font-extrabold text-gray-900 leading-tight md:px-10">{q.question}</h3>
+          <h3 className="text-xl md:text-2xl font-extrabold text-gray-900 leading-tight md:px-10">{q.question}</h3>
         </div>
 
         {q.type === 'multiple_choice' && q.options && (
@@ -307,11 +307,11 @@ export default function QuizSection({ module, onBack, onComplete }) {
           </div>
         )}
 
-        <div className="flex items-center justify-between mt-12 pt-8 border-t border-gray-100 max-w-2xl mx-auto">
+        <div className="flex flex-col md:flex-row items-center justify-between mt-12 pt-8 border-t border-gray-100 max-w-2xl mx-auto gap-4">
           <button
             onClick={() => setCurrentQ(Math.max(0, currentQ - 1))}
             disabled={currentQ === 0}
-            className="px-6 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-900 transition-all disabled:opacity-0"
+            className="w-full md:w-auto px-6 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-900 transition-all disabled:opacity-0 order-2 md:order-1"
           >
             ← Previous
           </button>
@@ -319,7 +319,7 @@ export default function QuizSection({ module, onBack, onComplete }) {
             <button
               onClick={() => setCurrentQ(currentQ + 1)}
               disabled={!answers[q.id]}
-              className="px-8 py-3 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 disabled:opacity-50 active:scale-95"
+              className="w-full md:w-auto px-8 py-3.5 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 disabled:opacity-50 active:scale-95 order-1 md:order-2"
             >
               Next Question →
             </button>
@@ -327,7 +327,7 @@ export default function QuizSection({ module, onBack, onComplete }) {
             <button
               onClick={handleSubmit}
               disabled={Object.keys(answers).length < questions.length}
-              className="px-10 py-3 bg-emerald-600 text-white rounded-xl text-sm font-extrabold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-700/25 disabled:opacity-50 active:scale-95 uppercase tracking-wider"
+              className="w-full md:w-auto px-10 py-3.5 bg-emerald-600 text-white rounded-xl text-sm font-extrabold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-700/25 disabled:opacity-50 active:scale-95 uppercase tracking-wider order-1 md:order-2"
             >
               Submit Results
             </button>

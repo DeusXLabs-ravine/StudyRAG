@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { BookOpen, CheckCircle, Lock, ChevronRight, Calculator, FlaskConical, Cpu, Atom, Globe, Lightbulb, Sparkles, Send, Volume2, Loader2 } from 'lucide-react';
+import { BookOpen, CheckCircle, Lock, ChevronRight, Calculator, FlaskConical, Cpu, Atom, Globe, Lightbulb, Sparkles, Send, Volume2, Loader2, MessageSquareText, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import useModuleStore from '../store/moduleStore';
 import useDocumentStore from '../store/documentStore';
 import useSettingsStore from '../store/settingsStore';
@@ -21,6 +22,7 @@ export default function Learn() {
   const [selectedDocId, setSelectedDocId] = useState(routeDocId || null);
   const [showQuiz, setShowQuiz] = useState(false);
   const [regeneratingQuestions, setRegeneratingQuestions] = useState(false);
+  const [mobileAssistantOpen, setMobileAssistantOpen] = useState(false);
 
   // Track IDs of modules explicitly unlocked this session so they can't re-lock
   const unlockedIdsRef = useRef(new Set());
@@ -115,20 +117,20 @@ export default function Learn() {
   const readyDocs = (documents || []).filter(d => d.status === 'ready');
 
   return (
-    <div className="max-w-[1600px] mx-auto px-6 py-10">
+    <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-6 md:py-10">
       {/* Header Area */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 md:mb-10">
         <div>
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Learning Journey</h1>
-          <p className="text-gray-500 text-sm mt-1 font-medium">Master your documents through AI-generated modules.</p>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">Learning Journey</h1>
+          <p className="text-gray-500 text-xs md:text-sm mt-1 font-medium">Master your documents through AI-generated modules.</p>
         </div>
 
         {readyDocs.length > 0 && (
-          <div className="relative group min-w-[280px]">
+          <div className="relative group w-full md:min-w-[280px] md:w-auto">
             <select
               value={selectedDocId || ''}
               onChange={e => setSelectedDocId(e.target.value || null)}
-              className="appearance-none w-full px-5 py-3 bg-white border border-gray-200 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all shadow-sm hover:shadow-md cursor-pointer outline-none"
+              className="appearance-none w-full px-5 py-3.5 md:py-3 bg-white border border-gray-200 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all shadow-sm hover:shadow-md cursor-pointer outline-none"
             >
               <option value="">Select a Document...</option>
               {readyDocs.map(doc => (
@@ -143,15 +145,15 @@ export default function Learn() {
       </div>
 
       {!selectedDocId ? (
-        <div className="sleek-card p-24 text-center bg-gray-50/50 border-dashed border-2">
-          <BookOpen className="h-16 w-16 text-gray-300 mx-auto mb-6" />
-          <h3 className="text-xl font-bold text-gray-900 mb-2">Ready to start?</h3>
-          <p className="text-gray-500 max-w-sm mx-auto">Select a document from the menu above to generate your personalized learning path.</p>
+        <div className="sleek-card p-12 md:p-24 text-center bg-gray-50/50 border-dashed border-2">
+          <BookOpen className="h-12 md:h-16 w-12 md:w-16 text-gray-300 mx-auto mb-6" />
+          <h3 className="text-lg md:text-xl font-bold text-gray-900 mb-2">Ready to start?</h3>
+          <p className="text-gray-500 text-sm max-w-sm mx-auto">Select a document from the menu above to generate your personalized learning path.</p>
         </div>
       ) : modulesLoading ? (
-        <div className="flex flex-col items-center justify-center py-32 gap-4">
+        <div className="flex flex-col items-center justify-center py-20 md:py-32 gap-4">
           <Spinner size="lg" />
-          <p className="text-sm font-bold text-gray-400 uppercase tracking-widest animate-pulse">Building your classroom...</p>
+          <p className="text-xs md:text-sm font-bold text-gray-400 uppercase tracking-widest animate-pulse">Building your classroom...</p>
         </div>
       ) : (modules || []).length === 0 ? (
         <div className="sleek-card p-20 text-center">
@@ -163,59 +165,61 @@ export default function Learn() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
           {/* Column 1: Module Picker (Left) */}
-          <div className="lg:col-span-3 xl:col-span-2">
-            <div className="sticky top-8 space-y-6">
-              {Object.entries(
-                (modules || []).reduce((acc, mod) => {
-                  const topic = mod.topic || 'General';
-                  if (!acc[topic]) acc[topic] = [];
-                  acc[topic].push(mod);
-                  return acc;
-                }, {})
-              ).map(([topic, topicModules]) => (
-                <div key={topic} className="space-y-2">
-                  <h3 className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.2em] px-3 mb-3 flex items-center gap-2">
-                    <div className="text-primary/60">
-                      {getTopicIcon(topic)}
-                    </div>
-                    {topic}
-                  </h3>
-                  <div className="space-y-1">
-                    {topicModules.map((mod) => {
-                      const globalIndex = (modules || []).findIndex(m => m.id === mod.id);
-                      const accessible = isModuleAccessible(mod, globalIndex);
-                      const isActive = currentModule?.id === mod.id;
-                      const isCompleted = mod.progress?.completed;
+          <div className="lg:col-span-3 xl:col-span-2 order-2 lg:order-1">
+            <div className="lg:sticky lg:top-8 space-y-6">
+              <div className="flex flex-col gap-2">
+                {Object.entries(
+                  (modules || []).reduce((acc, mod) => {
+                    const topic = mod.topic || 'General';
+                    if (!acc[topic]) acc[topic] = [];
+                    acc[topic].push(mod);
+                    return acc;
+                  }, {})
+                ).map(([topic, topicModules]) => (
+                  <div key={topic} className="space-y-2">
+                    <h3 className="text-[10px] font-extrabold text-gray-400 uppercase tracking-[0.2em] px-3 mb-3 flex items-center gap-2">
+                      <div className="text-primary/60">
+                        {getTopicIcon(topic)}
+                      </div>
+                      {topic}
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-1">
+                      {topicModules.map((mod) => {
+                        const globalIndex = (modules || []).findIndex(m => m.id === mod.id);
+                        const accessible = isModuleAccessible(mod, globalIndex);
+                        const isActive = currentModule?.id === mod.id;
+                        const isCompleted = mod.progress?.completed;
 
-                      return (
-                        <button
-                          key={mod.id}
-                          onClick={() => accessible && handleModuleSelect(mod)}
-                          disabled={!accessible}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm transition-all ${isActive
-                            ? 'bg-primary text-white font-semibold shadow-lg shadow-primary/20 scale-[1.02]'
-                            : accessible
-                              ? 'text-gray-700 hover:bg-gray-50 hover:translate-x-1'
-                              : 'text-gray-400 cursor-not-allowed grayscale opacity-60'
-                            }`}
-                        >
-                          <div className={`flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center ${isActive ? 'bg-white/20' : isCompleted ? 'bg-green-100' : accessible ? 'bg-gray-100' : 'bg-gray-50'
-                            }`}>
-                            {isCompleted ? (
-                              <CheckCircle className={`h-3.5 w-3.5 ${isActive ? 'text-white' : 'text-green-600'}`} />
-                            ) : !accessible ? (
-                              <Lock className="h-3 w-3" />
-                            ) : (
-                              <span className={`text-[10px] font-bold ${isActive ? 'text-white' : 'text-gray-500'}`}>{globalIndex + 1}</span>
-                            )}
-                          </div>
-                          <span className="truncate flex-1 font-medium">{mod.title}</span>
-                        </button>
-                      );
-                    })}
+                        return (
+                          <button
+                            key={mod.id}
+                            onClick={() => accessible && handleModuleSelect(mod)}
+                            disabled={!accessible}
+                            className={`w-full flex items-center gap-3 px-3 py-3 md:py-2.5 rounded-xl text-left text-sm transition-all ${isActive
+                              ? 'bg-primary text-white font-semibold shadow-lg shadow-primary/20 scale-[1.02]'
+                              : accessible
+                                ? 'text-gray-700 bg-white lg:bg-transparent border border-gray-100 lg:border-none hover:bg-gray-50 hover:translate-x-1'
+                                : 'text-gray-400 cursor-not-allowed grayscale opacity-60'
+                              }`}
+                          >
+                            <div className={`flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center ${isActive ? 'bg-white/20' : isCompleted ? 'bg-green-100' : accessible ? 'bg-gray-100' : 'bg-gray-50'
+                              }`}>
+                              {isCompleted ? (
+                                <CheckCircle className={`h-3.5 w-3.5 ${isActive ? 'text-white' : 'text-green-600'}`} />
+                              ) : !accessible ? (
+                                <Lock className="h-3 w-3" />
+                              ) : (
+                                <span className={`text-[10px] font-bold ${isActive ? 'text-white' : 'text-gray-500'}`}>{globalIndex + 1}</span>
+                              )}
+                            </div>
+                            <span className="truncate flex-1 font-medium">{mod.title}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
 
               {generating && (
                 <div className="flex items-center gap-2 px-3 py-3 text-xs font-bold text-primary/70 animate-pulse">
@@ -227,7 +231,7 @@ export default function Learn() {
           </div>
 
           {/* Column 2: Main Chalkboard (Center) */}
-          <div className="lg:col-span-6 xl:col-span-7">
+          <div className="lg:col-span-6 xl:col-span-7 order-1 lg:order-2">
             {currentModule ? (
               showQuiz ? (
                 <QuizSection
@@ -286,89 +290,156 @@ export default function Learn() {
           </div>
 
           {/* Column 3: Assistant Sidebar (Right) */}
-          <div className="hidden lg:block lg:col-span-3">
-            <div className="sticky-sidebar">
-
-              {/* Voice / TTS Notification */}
-              <div className="sleek-card p-6 bg-blue-50/50 border-blue-100">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-bold text-blue-900 flex items-center gap-2">
-                    <Volume2 className="h-4 w-4" /> Board Controls
-                  </h3>
-                </div>
-                <p className="text-[11px] text-blue-700/70 mb-4 font-medium leading-relaxed">Hear the lesson narrated. The speaker button is located at the top-right of your learning board.</p>
-              </div>
-
-              {/* Concept Assistance Input */}
-              <div className="sleek-card p-6 bg-purple-50/50 border-purple-100">
-                <h3 className="text-sm font-bold text-purple-900 flex items-center gap-2 mb-3">
-                  <Sparkles className="h-4 w-4" /> Concept Help
-                </h3>
-                <div className="relative mb-3">
-                  <input
-                    type="text"
-                    value={customQuestion}
-                    onChange={e => setCustomQuestion(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && customQuestion.trim() && handleExplainSimply(customQuestion)}
-                    placeholder="E.g. Explain that math formula..."
-                    className="w-full pl-4 pr-10 py-3 bg-white border border-purple-100 rounded-xl text-xs focus:ring-4 focus:ring-purple-200/50 outline-none transition-all font-medium"
-                  />
-                  <button
-                    onClick={() => customQuestion.trim() && handleExplainSimply(customQuestion)}
-                    className="absolute right-2 top-2 p-1.5 text-purple-400 hover:text-purple-600 transition-colors"
-                  >
-                    <Send className="h-4 w-4" />
-                  </button>
-                </div>
-                <button
-                  onClick={() => handleExplainSimply()}
-                  disabled={explainLoading}
-                  className="w-full py-2.5 text-xs font-bold text-purple-600 bg-white border border-purple-100 hover:bg-purple-50 rounded-xl transition-all shadow-sm"
-                >
-                  {explainLoading ? <Spinner size="xs" /> : "I'm confused, help!"}
-                </button>
-              </div>
-
-              {/* THE EASY BOARD (Dumb Board) */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between px-1">
-                  <h3 className="text-[10px] font-extrabold text-gray-500 uppercase tracking-widest">The Easy Board</h3>
-                  {explanation && (
-                    <button onClick={() => setExplanation('')} className="text-[10px] text-gray-400 hover:text-gray-600 font-bold uppercase tracking-tighter">Clear</button>
-                  )}
-                </div>
-
-                <div className="easy-board min-h-[350px]">
-                  {explainLoading ? (
-                    <div className="flex flex-col items-center justify-center h-full gap-4 pt-20">
-                      <Spinner size="sm" />
-                      <span className="text-[10px] font-extrabold text-amber-600 uppercase tracking-widest animate-pulse">Dumbing it down...</span>
-                    </div>
-                  ) : explanation ? (
-                    <div className="easy-board-content prose prose-sm prose-amber max-w-none">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkMath]}
-                        rehypePlugins={[rehypeKatex]}
-                      >
-                        {explanation}
-                      </ReactMarkdown>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center pt-24 px-8 text-center opacity-30">
-                      <Lightbulb className="h-10 w-10 text-amber-500 mb-3" />
-                      <p className="text-[10px] font-bold text-amber-900 uppercase tracking-widest leading-loose">
-                        Type a phrase or click help above to see it simplified here.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-            </div>
+          <div className="hidden lg:block lg:col-span-3 lg:order-3">
+            <SidebarContent
+              customQuestion={customQuestion}
+              setCustomQuestion={setCustomQuestion}
+              handleExplainSimply={handleExplainSimply}
+              explainLoading={explainLoading}
+              explanation={explanation}
+              setExplanation={setExplanation}
+            />
           </div>
 
         </div>
       )}
+
+      {/* Mobile Assistant Toggle & Drawer */}
+      <div className="lg:hidden">
+        <button
+          onClick={() => setMobileAssistantOpen(true)}
+          className="fixed bottom-6 right-6 w-14 h-14 bg-purple-600 text-white rounded-full shadow-2xl flex items-center justify-center z-40 active:scale-95 transition-transform"
+        >
+          <MessageSquareText className="h-6 w-6" />
+          {explanation && (
+            <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 rounded-full border-2 border-white" />
+          )}
+        </button>
+
+        <AnimatePresence>
+          {mobileAssistantOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setMobileAssistantOpen(false)}
+                className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50"
+              />
+              <motion.div
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className="fixed inset-x-0 bottom-0 max-h-[85vh] bg-white rounded-t-[2.5rem] shadow-2xl z-50 overflow-y-auto"
+              >
+                <div className="sticky top-0 bg-white px-8 py-4 flex items-center justify-between border-b border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center">
+                      <Sparkles className="h-4 w-4" />
+                    </div>
+                    <h3 className="font-bold text-gray-900">Study Assistant</h3>
+                  </div>
+                  <button onClick={() => setMobileAssistantOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                    <X className="h-6 w-6 text-gray-400" />
+                  </button>
+                </div>
+                <div className="p-6">
+                  <SidebarContent
+                    customQuestion={customQuestion}
+                    setCustomQuestion={setCustomQuestion}
+                    handleExplainSimply={handleExplainSimply}
+                    explainLoading={explainLoading}
+                    explanation={explanation}
+                    setExplanation={setExplanation}
+                  />
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+function SidebarContent({ customQuestion, setCustomQuestion, handleExplainSimply, explainLoading, explanation, setExplanation }) {
+  return (
+    <div className="sticky-sidebar space-y-6">
+      {/* Voice / TTS Notification */}
+      <div className="sleek-card p-6 bg-blue-50/50 border-blue-100">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-bold text-blue-900 flex items-center gap-2">
+            <Volume2 className="h-4 w-4" /> Board Controls
+          </h3>
+        </div>
+        <p className="text-[11px] text-blue-700/70 mb-4 font-medium leading-relaxed">Hear the lesson narrated. The speaker button is located at the top-right of your learning board.</p>
+      </div>
+
+      {/* Concept Assistance Input */}
+      <div className="sleek-card p-6 bg-purple-50/50 border-purple-100">
+        <h3 className="text-sm font-bold text-purple-900 flex items-center gap-2 mb-3">
+          <Sparkles className="h-4 w-4" /> Concept Help
+        </h3>
+        <div className="relative mb-3">
+          <input
+            type="text"
+            value={customQuestion}
+            onChange={e => setCustomQuestion(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && customQuestion.trim() && handleExplainSimply(customQuestion)}
+            placeholder="E.g. Explain that math formula..."
+            className="w-full pl-4 pr-10 py-3 bg-white border border-purple-100 rounded-xl text-xs focus:ring-4 focus:ring-purple-200/50 outline-none transition-all font-medium"
+          />
+          <button
+            onClick={() => customQuestion.trim() && handleExplainSimply(customQuestion)}
+            className="absolute right-2 top-2 p-1.5 text-purple-400 hover:text-purple-600 transition-colors"
+          >
+            <Send className="h-4 w-4" />
+          </button>
+        </div>
+        <button
+          onClick={() => handleExplainSimply()}
+          disabled={explainLoading}
+          className="w-full py-2.5 text-xs font-bold text-purple-600 bg-white border border-purple-100 hover:bg-purple-50 rounded-xl transition-all shadow-sm"
+        >
+          {explainLoading ? <Spinner size="xs" /> : "I'm confused, help!"}
+        </button>
+      </div>
+
+      {/* THE EASY BOARD (Dumb Board) */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="text-[10px] font-extrabold text-gray-500 uppercase tracking-widest">The Easy Board</h3>
+          {explanation && (
+            <button onClick={() => setExplanation('')} className="text-[10px] text-gray-400 hover:text-gray-600 font-bold uppercase tracking-tighter">Clear</button>
+          )}
+        </div>
+
+        <div className="easy-board min-h-[300px] md:min-h-[350px]">
+          {explainLoading ? (
+            <div className="flex flex-col items-center justify-center h-full gap-4 pt-20">
+              <Spinner size="sm" />
+              <span className="text-[10px] font-extrabold text-amber-600 uppercase tracking-widest animate-pulse">Dumbing it down...</span>
+            </div>
+          ) : explanation ? (
+            <div className="easy-board-content prose prose-sm prose-amber max-w-none">
+              <ReactMarkdown
+                remarkPlugins={[remarkMath]}
+                rehypePlugins={[rehypeKatex]}
+              >
+                {explanation}
+              </ReactMarkdown>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center pt-24 px-8 text-center opacity-30">
+              <Lightbulb className="h-10 w-10 text-amber-500 mb-3" />
+              <p className="text-[10px] font-bold text-amber-900 uppercase tracking-widest leading-loose">
+                Type a phrase or click help above to see it simplified here.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

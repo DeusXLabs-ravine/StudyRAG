@@ -35,7 +35,7 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
         {/* Notebook decorations (hidden by CSS var for non-notebook) */}
         <div className="board-notebook-lines" />
         <div className="board-margin-line" />
-        <div className="board-spiral">
+        <div className="board-spiral hidden sm:block">
           {Array.from({ length: 12 }).map((_, i) => (
             <div key={i} className="board-spiral-ring" />
           ))}
@@ -46,10 +46,10 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
           className="flex flex-wrap items-center justify-between gap-4 mb-10 border-b pb-6"
           style={{ borderColor: 'var(--header-border-color)' }}
         >
-          <div className="board-text">
-            <div className="flex items-center gap-3 mb-2">
+          <div className="board-text flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-2">
               <span
-                className="px-3 py-1 text-xs font-bold rounded-sm uppercase tracking-widest"
+                className="px-3 py-1 text-[10px] md:text-xs font-bold rounded-sm uppercase tracking-widest"
                 style={{
                   background: 'var(--label-bg)',
                   color: 'var(--label-color)',
@@ -60,7 +60,7 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
               </span>
               {module.topic && (
                 <span
-                  className="px-3 py-1 text-xs font-semibold rounded-sm text-nowrap"
+                  className="px-3 py-1 text-[10px] md:text-xs font-semibold rounded-sm text-nowrap"
                   style={{
                     background: 'var(--label-bg)',
                     color: 'var(--label-color)',
@@ -72,22 +72,24 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
                 </span>
               )}
             </div>
-            <h2 className="text-4xl font-bold tracking-tight">{module.title}</h2>
+            <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight leading-tight">{module.title}</h2>
           </div>
-          <TTSButton text={module.content} variant={isWhiteboard || isNotebook ? 'default' : 'chalk'} />
+          <div className="w-full md:w-auto flex justify-end">
+            <TTSButton text={module.content} variant={isWhiteboard || isNotebook ? 'default' : 'chalk'} />
+          </div>
         </div>
 
         <div className="board-text board-writing">
           {/* Learning Objectives */}
           {module.objectives?.length > 0 && (
-            <div className="mb-12 opacity-80">
-              <div className="flex items-center gap-3 mb-6">
-                <Target className="h-6 w-6" style={{ color: 'var(--text-color)' }} />
-                <h3 className="text-xl font-bold m-0 border-none">Today's Objectives:</h3>
+            <div className="mb-8 md:mb-12 opacity-80">
+              <div className="flex items-center gap-3 mb-4 md:mb-6">
+                <Target className="h-5 w-5 md:h-6 md:w-6" style={{ color: 'var(--text-color)' }} />
+                <h3 className="text-lg md:text-xl font-bold m-0 border-none">Today's Objectives:</h3>
               </div>
               <ul className="list-none grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 p-0">
                 {module.objectives.map((obj, i) => (
-                  <li key={i} className="flex items-start gap-3 text-lg leading-snug">
+                  <li key={i} className="flex items-start gap-3 text-base md:text-lg leading-snug">
                     <span className="opacity-50">#</span> {obj}
                   </li>
                 ))}
@@ -102,9 +104,9 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
               rehypePlugins={[rehypeKatex]}
               components={{
                 p: ({ children }) => <p className="mb-6">{children}</p>,
-                h2: ({ children }) => <h2 className="text-2xl mt-12 mb-6">{children}</h2>,
-                h3: ({ children }) => <h3 className="text-xl mt-8 mb-4">{children}</h3>,
-                li: ({ children }) => <li className="mb-2 list-['-'] ml-4 pl-2">{children}</li>,
+                h2: ({ children }) => <h2 className="text-xl md:text-2xl mt-12 mb-6">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-lg md:text-xl mt-8 mb-4">{children}</h3>,
+                li: ({ children }) => <li className="mb-2 list-['-'] ml-4 pl-2 text-base md:text-lg">{children}</li>,
               }}
             >
               {module.content}
@@ -131,11 +133,11 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
       </div>
 
       {/* Navigation / Quiz trigger */}
-      <div className="flex justify-end">
+      <div className="flex justify-center md:justify-end">
         <button
           onClick={onStartQuiz}
           disabled={regeneratingQuestions}
-          className="px-10 py-4 bg-primary text-white rounded-2xl text-sm font-extrabold hover:bg-primary/90 transition-all shadow-xl shadow-primary/20 active:scale-95 flex items-center gap-3 disabled:opacity-70"
+          className="w-full md:w-auto px-10 py-4 bg-primary text-white rounded-2xl text-sm font-extrabold hover:bg-primary/90 transition-all shadow-xl shadow-primary/20 active:scale-95 flex items-center justify-center gap-3 disabled:opacity-70"
         >
           {regeneratingQuestions ? (
             <><Spinner size="xs" /> Preparing New Questions...</>
@@ -147,7 +149,7 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
 
       {/* Key Takeaways */}
       {module.takeaways?.length > 0 && (
-        <div className="sleek-card p-8 bg-emerald-50/20 border-emerald-100/30">
+        <div className="sleek-card p-6 md:p-8 bg-emerald-50/20 border-emerald-100/30">
           <div className="flex items-center gap-3 mb-6 font-bold text-emerald-900/80">
             <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
               <Lightbulb className="h-5 w-5" />
