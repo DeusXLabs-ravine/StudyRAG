@@ -6,6 +6,11 @@ export async function listModules(documentId) {
   return { modules: data.modules, generating: data.generating || false };
 }
 
+export async function listCourseModules(courseId) {
+  const { data } = await api.get('/modules', { params: { courseId } });
+  return { modules: data.modules, generating: data.generating || false };
+}
+
 export async function getModule(id) {
   const { data } = await api.get(`/modules/${id}`);
   return data;
@@ -24,4 +29,14 @@ export async function regenerateQuestions(moduleId) {
 export async function explainSimply(moduleId, question = '') {
   const { data } = await api.post(`/modules/${moduleId}/explain`, { question });
   return data.explanation;
+}
+
+export async function getTutorGreeting(moduleId) {
+  const { data } = await api.post(`/modules/${moduleId}/tutor/greeting`);
+  return data.greeting;
+}
+
+export async function sendTutorMessage(moduleId, message, conversationHistory) {
+  const { data } = await api.post(`/modules/${moduleId}/tutor/chat`, { message, conversationHistory });
+  return { reply: data.reply, webSources: data.webSources || [] };
 }

@@ -10,6 +10,9 @@ import Flashcards from './pages/Flashcards';
 import Analytics from './pages/Analytics';
 import Exam from './pages/Exam';
 import Settings from './pages/Settings';
+import About from './pages/About';
+import Features from './pages/Features';
+import Pricing from './pages/Pricing';
 import { Toaster } from 'sonner';
 
 function ProtectedLayout() {
@@ -28,6 +31,9 @@ export default function App() {
     <Router>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/features" element={<Features />} />
+        <Route path="/pricing" element={<Pricing />} />
         <Route element={<ProtectedLayout />}>
           <Route path="/documents" element={<Documents />} />
           <Route path="/learn" element={<Learn />} />

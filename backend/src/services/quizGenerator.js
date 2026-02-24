@@ -1,8 +1,8 @@
 const supabase = require('../config/database');
 const { getGenerativeModel, selectModelTier } = require('../config/gemini');
-const { QUIZ_GENERATION_PROMPT, buildInterestsSection } = require('../utils/prompts');
+const { QUIZ_GENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection } = require('../utils/prompts');
 const vectorStore = require('./vectorStore');
-const { getUserTeachingLevel, getUserInterests, getWeakTopics } = require('./userProfileService');
+const { getUserTeachingLevel, getUserInterests, getWeakTopics, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
 const { v4: uuidv4 } = require('uuid');
 
 async function generateQuiz({ numQuestions = 10, difficulty = 'medium', docId = null, adaptive = false, isExam = false, timeLimitSeconds = null, userId = null }) {
@@ -35,9 +35,11 @@ async function generateQuiz({ numQuestions = 10, difficulty = 'medium', docId = 
   // Build page number mapping for the LLM prompt
   const sourcePages = isPages ? selected.map(c => c.pageNumber) : [];
 
-  const [teachingLevel, interests] = await Promise.all([
+  const [teachingLevel, interests, learningStyle, learningPace] = await Promise.all([
     getUserTeachingLevel(userId),
     getUserInterests(userId),
+    getEffectiveLearningStyle(userId),
+    getEffectiveLearningPace(userId),
   ]);
 
   const prompt = QUIZ_GENERATION_PROMPT
@@ -45,7 +47,9 @@ async function generateQuiz({ numQuestions = 10, difficulty = 'medium', docId = 
     .replace('{difficulty}', difficulty)
     .replace('{context}', context)
     .replace('{teaching_level}', teachingLevel)
-    .replace('{interests_section}', buildInterestsSection(interests));
+    .replace('{interests_section}', buildInterestsSection(interests))
+    .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
+    .replace('{pace_section}', buildPaceSection(learningPace));
 
   const tier = selectModelTier({ isComplex: difficulty === 'hard' || isExam });
   const model = getGenerativeModel(tier);

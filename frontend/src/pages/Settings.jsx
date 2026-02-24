@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Volume2, Check, Shapes, User, GraduationCap, Heart, Save, Palette } from 'lucide-react';
+import { Volume2, Check, Shapes, User, GraduationCap, Heart, Save, Palette, Brain, Gauge, ChevronDown, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import useSettingsStore from '../store/settingsStore';
 import useAuthStore from '../store/authStore';
@@ -19,9 +19,62 @@ const TEACHING_LEVELS = [
 ];
 
 const SUGGESTED_INTERESTS = [
+  // General
   'Sports', 'Music', 'Gaming', 'Cooking', 'Movies', 'Anime',
   'Cars', 'Technology', 'Art', 'Fashion', 'Nature', 'Science',
   'History', 'Travel', 'Fitness',
+
+  // Broad Medical / Health
+  'Medicine & Health Sciences', 'Pharmacy & Drug Sciences',
+  'Nursing & Allied Health', 'Biomedical Sciences',
+  'Dentistry', 'Veterinary Medicine',
+];
+
+const ACADEMIC_FIELDS = {
+  'Medicine': [
+    'Anatomy & Physiology', 'Biochemistry', 'Pathology', 'Pharmacology',
+    'Microbiology & Immunology', 'Histology', 'Embryology', 'Medical Genetics',
+    'Neuroscience', 'Cardiology', 'Pulmonology', 'Gastroenterology',
+    'Nephrology & Urology', 'Endocrinology', 'Hematology & Oncology',
+    'Dermatology', 'Ophthalmology', 'Otolaryngology (ENT)',
+    'Orthopedics & Rheumatology', 'Pediatrics', 'Obstetrics & Gynecology',
+    'Psychiatry & Behavioral Science', 'Emergency Medicine', 'Surgery (General)',
+    'Radiology & Imaging', 'Internal Medicine', 'Family Medicine',
+    'Preventive Medicine & Public Health', 'Medical Ethics & Law',
+    'Clinical Skills & Diagnosis', 'Evidence-Based Medicine',
+  ],
+  'Pharmacy': [
+    'Pharmaceutical Chemistry', 'Pharmacokinetics & Pharmacodynamics',
+    'Medicinal Chemistry', 'Pharmaceutics & Drug Delivery', 'Clinical Pharmacy',
+    'Pharmacy Practice', 'Pharmacotherapy', 'Toxicology',
+    'Pharmacognosy (Natural Products)', 'Pharmaceutical Biotechnology',
+    'Drug Interactions & Safety', 'Pharmacy Law & Ethics',
+    'Hospital & Community Pharmacy', 'Compounding Pharmacy',
+  ],
+  'Biomedical & Allied Health': [
+    'Biomedical Sciences', 'Nursing Fundamentals', 'Physical Therapy',
+    'Clinical Laboratory Science', 'Public Health & Epidemiology',
+    'Nutrition & Dietetics', 'Medical Terminology',
+  ],
+  'Exam Preparation': [
+    'USMLE Step 1', 'USMLE Step 2 CK', 'USMLE Step 3', 'COMLEX',
+    'PLAB', 'NAPLEX (Pharmacy)', 'NCLEX (Nursing)', 'MCAT Prep',
+  ],
+};
+
+const LEARNING_STYLES = [
+  { id: 'auto', label: 'Auto-Detect', description: 'Let AI detect your style from your interactions', icon: '🔍' },
+  { id: 'visual', label: 'Visual', description: 'Diagrams, charts, visual aids', icon: '👁️' },
+  { id: 'auditory', label: 'Auditory', description: 'Stories, analogies, discussions', icon: '👂' },
+  { id: 'reading_writing', label: 'Read/Write', description: 'Detailed text, notes, lists', icon: '📝' },
+  { id: 'kinesthetic', label: 'Hands-On', description: 'Step-by-step practice, exercises', icon: '🤲' },
+];
+
+const LEARNING_PACES = [
+  { id: 'auto', label: 'Auto-Detect', description: 'Adapts based on your quiz scores and progress', icon: '🔍' },
+  { id: 'slow', label: 'Thorough', description: 'More examples, extra scaffolding, patient explanations', icon: '🐢' },
+  { id: 'moderate', label: 'Balanced', description: 'Standard pacing with good coverage', icon: '⚖️' },
+  { id: 'fast', label: 'Accelerated', description: 'Concise, skip basics, challenge questions', icon: '🚀' },
 ];
 
 // ─── Mini Preview Component ────────────────────────────────────────
@@ -128,7 +181,7 @@ function ColorSwatch({ color, selected, onClick, size = 'md' }) {
 // ─── Main Settings Component ───────────────────────────────────────
 
 export default function Settings() {
-  const { settings, fetchSettings, setSetting, loaded, voices, setVoices } = useSettingsStore();
+  const { settings, fetchSettings, setSetting, loaded, voices, setVoices, learningProfile, learningProfileLoaded, fetchLearningProfile, setLearningStyle, setLearningPace } = useSettingsStore();
   const { profile, updateProfile } = useAuthStore();
   const [previewingId, setPreviewingId] = useState(null);
 
@@ -138,6 +191,9 @@ export default function Settings() {
   const [teachingLevel, setTeachingLevel] = useState('intermediate');
   const [interests, setInterests] = useState([]);
   const [customInterest, setCustomInterest] = useState('');
+  const [academicFields, setAcademicFields] = useState([]);
+  const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState({});
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileDirty, setProfileDirty] = useState(false);
 
@@ -146,8 +202,9 @@ export default function Settings() {
 
   useEffect(() => {
     if (!loaded) fetchSettings();
+    if (!learningProfileLoaded) fetchLearningProfile();
     fetchVoices().then(setVoices).catch(() => {});
-  }, [loaded, fetchSettings, setVoices]);
+  }, [loaded, fetchSettings, setVoices, learningProfileLoaded, fetchLearningProfile]);
 
   // Sync board theme from settings
   useEffect(() => {
@@ -163,6 +220,7 @@ export default function Settings() {
       setAge(profile.age ? String(profile.age) : '');
       setTeachingLevel(profile.teachingLevel || 'intermediate');
       setInterests(profile.interests || []);
+      setAcademicFields(profile.academicFields || []);
       setProfileDirty(false);
     }
   }, [profile]);
@@ -232,6 +290,22 @@ export default function Settings() {
     markDirty();
   };
 
+  const handleAddField = (field) => {
+    if (!academicFields.includes(field)) {
+      setAcademicFields([...academicFields, field]);
+      markDirty();
+    }
+  };
+
+  const handleRemoveField = (field) => {
+    setAcademicFields(academicFields.filter(f => f !== field));
+    markDirty();
+  };
+
+  const toggleCategory = (category) => {
+    setExpandedCategories(prev => ({ ...prev, [category]: !prev[category] }));
+  };
+
   const handleSaveProfile = async () => {
     setSavingProfile(true);
     try {
@@ -240,6 +314,7 @@ export default function Settings() {
         age: age ? parseInt(age) : null,
         teachingLevel,
         interests,
+        academicFields,
       });
       setProfileDirty(false);
       toast.success('Profile updated');
@@ -379,6 +454,72 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* Field of Study */}
+        <div className="mb-6">
+          <button
+            onClick={() => setFieldsOpen(!fieldsOpen)}
+            className="flex items-center gap-2 mb-3 w-full"
+          >
+            <BookOpen className="h-4 w-4 text-gray-500" />
+            <label className="text-sm font-medium text-gray-700 cursor-pointer">Field of Study</label>
+            <span className="text-xs text-gray-400 ml-1">({academicFields.length} selected)</span>
+            <ChevronDown className={`h-4 w-4 text-gray-400 ml-auto transition-transform ${fieldsOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {/* Selected fields chips */}
+          {academicFields.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {academicFields.map(field => (
+                <span
+                  key={field}
+                  className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-sm font-medium cursor-pointer hover:bg-emerald-100 transition-colors"
+                  onClick={() => handleRemoveField(field)}
+                >
+                  {field} <span className="text-emerald-400">&times;</span>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {fieldsOpen && (
+            <div className="border border-gray-200 rounded-xl p-4 space-y-3 max-h-80 overflow-y-auto">
+              {Object.entries(ACADEMIC_FIELDS).map(([category, fields]) => (
+                <div key={category}>
+                  <button
+                    onClick={() => toggleCategory(category)}
+                    className="flex items-center gap-2 w-full text-left py-1.5 px-2 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform ${expandedCategories[category] ? 'rotate-180' : ''}`} />
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">{category}</span>
+                    <span className="text-[10px] text-gray-400">({fields.filter(f => academicFields.includes(f)).length}/{fields.length})</span>
+                  </button>
+
+                  {expandedCategories[category] && (
+                    <div className="flex flex-wrap gap-1.5 mt-2 ml-6">
+                      {fields.map(field => {
+                        const isSelected = academicFields.includes(field);
+                        return (
+                          <button
+                            key={field}
+                            onClick={() => isSelected ? handleRemoveField(field) : handleAddField(field)}
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                              isSelected
+                                ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                          >
+                            {isSelected ? '✓ ' : '+ '}{field}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Save button */}
         <button
           onClick={handleSaveProfile}
@@ -388,6 +529,107 @@ export default function Settings() {
           {savingProfile ? <Spinner size="sm" /> : <Save className="h-4 w-4" />}
           {savingProfile ? 'Saving...' : 'Save Profile'}
         </button>
+      </div>
+
+      {/* ─── Learning Style & Pace ─────────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-violet-100 text-violet-600 rounded-xl flex items-center justify-center">
+            <Brain className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Learning Adaptation</h2>
+            <p className="text-sm text-gray-500">How AI adapts content to your learning style and pace</p>
+          </div>
+        </div>
+
+        {/* Detected profile info */}
+        {learningProfile && (
+          <div className="bg-violet-50 border border-violet-100 rounded-xl p-4 mb-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <span className="text-[10px] font-bold text-violet-500 uppercase tracking-wider">Active Style</span>
+                <p className="text-sm font-bold text-violet-900 mt-0.5 capitalize">{learningProfile.learningStyle?.replace('_', '/') || 'Reading/Writing'}</p>
+                {learningProfile.detected?.style && learningProfile.preferences?.style === 'auto' && (
+                  <span className="text-[10px] text-violet-500 font-medium">Auto-detected from your activity</span>
+                )}
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-violet-500 uppercase tracking-wider">Active Pace</span>
+                <p className="text-sm font-bold text-violet-900 mt-0.5 capitalize">{learningProfile.learningPace || 'Moderate'}</p>
+                {learningProfile.detected?.pace && learningProfile.preferences?.pace === 'auto' && (
+                  <span className="text-[10px] text-violet-500 font-medium">Auto-detected from your scores</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Learning Style Picker */}
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Brain className="h-4 w-4 text-gray-500" />
+            <label className="text-sm font-medium text-gray-700">Learning Style (VARK)</label>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {LEARNING_STYLES.map((style) => {
+              const isSelected = (settings.learning_style || 'auto') === style.id;
+              return (
+                <button
+                  key={style.id}
+                  onClick={() => {
+                    setLearningStyle(style.id);
+                    toast.success(`Learning style set to ${style.label}`);
+                  }}
+                  className={`text-left p-3 rounded-xl border-2 transition-all ${
+                    isSelected
+                      ? 'border-violet-500 bg-violet-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{style.icon}</span>
+                    <span className="text-sm font-bold text-gray-900">{style.label}</span>
+                  </div>
+                  <span className="text-[10px] text-gray-500 leading-tight block mt-1">{style.description}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Learning Pace Picker */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Gauge className="h-4 w-4 text-gray-500" />
+            <label className="text-sm font-medium text-gray-700">Learning Pace</label>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {LEARNING_PACES.map((pace) => {
+              const isSelected = (settings.learning_pace || 'auto') === pace.id;
+              return (
+                <button
+                  key={pace.id}
+                  onClick={() => {
+                    setLearningPace(pace.id);
+                    toast.success(`Learning pace set to ${pace.label}`);
+                  }}
+                  className={`text-left p-3 rounded-xl border-2 transition-all ${
+                    isSelected
+                      ? 'border-violet-500 bg-violet-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{pace.icon}</span>
+                    <span className="text-sm font-bold text-gray-900">{pace.label}</span>
+                  </div>
+                  <span className="text-[10px] text-gray-500 leading-tight block mt-1">{pace.description}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* ─── Learning Board Theme ─────────────────────────────────── */}

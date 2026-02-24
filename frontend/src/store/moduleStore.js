@@ -31,6 +31,16 @@ const useModuleStore = create((set, get) => ({
     }
   },
 
+  fetchCourseModules: async (courseId) => {
+    set({ loading: true, error: null });
+    try {
+      const { modules, generating } = await moduleService.listCourseModules(courseId);
+      set({ modules: Array.isArray(modules) ? modules : [], generating, loading: false });
+    } catch (error) {
+      set({ error: error.message, loading: false });
+    }
+  },
+
   // Silent refresh used by polling — updates modules without loading state
   _pollRefresh: async (documentId) => {
     try {

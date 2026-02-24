@@ -4,6 +4,12 @@ const {
   getDiagramImageUrl,
   regenerateDiagramLevel,
 } = require('../services/diagramService');
+const {
+  generateDiagramForTopic,
+  getDiagramsForModule,
+  getGeneratedDiagramImageUrl,
+} = require('../services/diagramGenerationService');
+const { getUserTeachingLevel, getUserInterests } = require('../services/userProfileService');
 
 async function listDiagrams(req, res, next) {
   try {
@@ -52,4 +58,74 @@ async function regenerateLevel(req, res, next) {
   }
 }
 
-module.exports = { listDiagrams, getDiagram, getImageUrl, regenerateLevel };
+// ─── New: On-Demand Generation Endpoints ──────────────────────
+
+async function generateForTopic(req, res, next) {
+  try {
+    const { topic, moduleId, documentId, diagramType, teachingLevel } = req.body;
+    if (!topic) {
+      return res.status(400).json({ error: 'topic is required' });
+    }
+
+    const userId = req.userId || null;
+    const [level, interests] = await Promise.all([
+      teachingLevel ? Promise.resolve(teachingLevel) : getUserTeachingLevel(userId),
+      getUserInterests(userId),
+    ]);
+
+    // Get module content for context if moduleId provided
+    let moduleContent = '';
+    if (moduleId) {
+      const supabase = require('../config/database');
+      const { data } = await supabase.from('modules').select('content').eq('id', moduleId).single();
+      if (data) moduleContent = data.content;
+    }
+
+    const diagram = await generateDiagramForTopic({
+      topic,
+      moduleContent,
+      moduleId,
+      documentId,
+      diagramType: diagramType || 'auto',
+      teachingLevel: level,
+      interests,
+      userId,
+    });
+
+    res.json(diagram);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getModuleDiagrams(req, res, next) {
+  try {
+    const { moduleId } = req.params;
+    const diagrams = await getDiagramsForModule(moduleId);
+    res.json({ diagrams });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getGeneratedDiagramImage(req, res, next) {
+  try {
+    const url = await getGeneratedDiagramImageUrl(req.params.id);
+    if (!url) {
+      return res.status(404).json({ error: 'Generated diagram or image not found' });
+    }
+    res.json({ url });
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = {
+  listDiagrams,
+  getDiagram,
+  getImageUrl,
+  regenerateLevel,
+  generateForTopic,
+  getModuleDiagrams,
+  getGeneratedDiagramImage,
+};

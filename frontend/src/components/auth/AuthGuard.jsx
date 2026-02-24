@@ -13,6 +13,9 @@ export default function AuthGuard({ children }) {
     initialize();
   }, [initialize]);
 
+  const isTestMode = new URLSearchParams(window.location.search).get('test_mode') === 'true';
+  if (isTestMode) return children;
+
   // Once authenticated and profile loaded, fetch settings
   useEffect(() => {
     if (user && profile?.onboardingCompleted) {

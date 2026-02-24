@@ -1,8 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, MessageCircle, ClipboardCheck, Layers, FileText, Upload, Sparkles, ArrowRight, Brain, LogIn } from 'lucide-react';
+import {
+  BookOpen, MessageCircle, ClipboardCheck, Layers, FileText, Upload,
+  ArrowRight, Brain, LogIn
+} from 'lucide-react';
+import { motion } from 'framer-motion';
 import Footer from '../components/layout/Footer';
+import PublicNavbar from '../components/layout/PublicNavbar';
 import Logo from '../components/common/Logo';
+import { LampContainer } from '../components/ui/lamp';
 import useAuthStore from '../store/authStore';
 
 const features = [
@@ -25,7 +31,7 @@ const features = [
     title: 'Quiz Mode',
     description: 'Test your knowledge with auto-generated quizzes from your documents.',
     path: '/quiz',
-    color: 'bg-purple-50 text-purple-600',
+    color: 'bg-cyan-50 text-cyan-600',
   },
   {
     icon: Layers,
@@ -39,106 +45,117 @@ const features = [
 export default function Home() {
   const { user, profile, initialize } = useAuthStore();
   const isAuthenticated = user && profile?.onboardingCompleted;
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     initialize();
+
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 50);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
   }, [initialize]);
 
   return (
-    <div className="min-h-screen">
-      {/* Public header */}
-      <nav className="bg-white border-b border-gray-100 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-20">
-          <Link to="/" className="flex items-center">
-            <Logo className="h-16 w-16" hideText />
-          </Link>
-          {isAuthenticated ? (
-            <Link
-              to="/documents"
-              className="inline-flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-primary-700 transition-all shadow-lg shadow-primary/20"
-            >
-              Go to App
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          ) : (
-            <Link
-              to="/documents"
-              className="inline-flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-primary-700 transition-all shadow-lg shadow-primary/20"
-            >
-              <LogIn className="h-4 w-4" />
-              Sign In
-            </Link>
-          )}
-        </div>
-      </nav>
+    <div className="min-h-screen bg-slate-950">
+      {/* Public header - Dynamic based on scroll */}
+      <PublicNavbar transparent={!scrolled} />
 
-      {/* Hero */}
-      <section className="bg-gradient-to-br from-primary-700 via-primary-600 to-primary-800 text-white pt-20 pb-24 px-6 overflow-hidden relative">
-        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-20">
-          <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-white rounded-full blur-[120px]" />
-          <div className="absolute -bottom-[10%] -right-[10%] w-[40%] h-[40%] bg-primary-400 rounded-full blur-[120px]" />
-        </div>
-
-        <div className="max-w-5xl mx-auto text-center relative z-10">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-md rounded-full border border-white/20 text-sm font-bold mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
-            <Sparkles className="h-4 w-4 text-primary-200" />
-            <span className="text-primary-50">Revolutionize your study routine with AI</span>
+      {/* Hero Overhaul with Lamp */}
+      <LampContainer>
+        <motion.div
+          initial={{ opacity: 0, y: 100 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{
+            delay: 0.3,
+            duration: 0.8,
+            ease: "easeInOut",
+          }}
+          className="relative z-50 flex flex-col items-center justify-center px-4"
+        >
+          <div className="inline-flex items-center px-4 py-1.5 bg-white/5 backdrop-blur-md rounded-full border border-white/10 text-[10px] sm:text-xs font-bold mb-8 text-blue-200 uppercase tracking-widest">
+            <span>AI-Powered Learning Context Retrieval</span>
           </div>
-          <h1 className="text-5xl sm:text-7xl font-black mb-6 tracking-tight leading-tight">
+
+          <h1 className="bg-gradient-to-br from-slate-100 to-slate-400 py-4 bg-clip-text text-center text-4xl font-black tracking-tight text-transparent sm:text-6xl md:text-8xl leading-tight">
             Master Any Subject <br />
-            <span className="text-primary-200">With AI Study RAG</span>
+            <span className="text-white drop-shadow-2xl">the right way</span>
           </h1>
-          <p className="text-xl sm:text-2xl text-primary-100/90 mb-12 max-w-3xl mx-auto font-medium leading-relaxed">
-            Upload your materials and watch them transform into immersive learning journeys,
-            interactive assessments, and intelligent study aids.
+
+          <p className="mt-6 text-slate-400 text-center max-w-xl mx-auto text-base sm:text-lg font-medium leading-relaxed">
+            Upload your materials and watch them transform into immersive learning journeys and intelligent study aids.
           </p>
-          <div className="flex flex-col sm:flex-row gap-6 justify-center">
+
+          <div className="mt-10 flex flex-row gap-4 justify-center w-full max-w-md mx-auto">
             <Link
               to="/documents"
-              className="inline-flex items-center justify-center gap-3 bg-white text-primary-700 px-8 py-4 rounded-2xl font-black text-lg hover:bg-primary-50 transition-all shadow-xl shadow-black/10 active:scale-95"
+              className="inline-flex items-center justify-center gap-2.5 bg-white text-slate-950 px-5 sm:px-8 py-3 rounded-xl font-black text-sm sm:text-base hover:bg-slate-200 transition-all shadow-2xl shadow-cyan-500/20 active:scale-95 whitespace-nowrap"
             >
-              <Upload className="h-6 w-6" />
-              Get Started Free
+              <Upload className="h-4 w-4 sm:h-5 sm:h-5" />
+              Get Started
             </Link>
             <Link
               to="/learn"
-              className="inline-flex items-center justify-center gap-3 bg-primary-800/50 backdrop-blur-md border-2 border-white/30 text-white px-8 py-4 rounded-2xl font-black text-lg hover:bg-white/10 transition-all active:scale-95"
+              className="inline-flex items-center justify-center gap-2.5 bg-slate-900 border border-white/10 text-white px-5 sm:px-8 py-3 rounded-xl font-black text-sm sm:text-base hover:bg-slate-800 transition-all active:scale-95 whitespace-nowrap"
             >
-              <BookOpen className="h-6 w-6" />
+              <BookOpen className="h-4 w-4 sm:h-5 sm:h-5" />
               View Demo
             </Link>
           </div>
-        </div>
-      </section>
+        </motion.div>
+      </LampContainer>
 
       {/* Features */}
-      <section className="py-24 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-sm font-black text-primary uppercase tracking-[0.3em] mb-4">Core Features</h2>
-            <h3 className="text-3xl sm:text-4xl font-black text-gray-900">Four Ways to Master Your Materials</h3>
+      <section className="py-24 px-6 bg-white">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-[10px] font-black text-primary uppercase tracking-[0.3em] mb-4">Core Features</h2>
+            <h3 className="text-3xl sm:text-4xl font-black text-gray-900 tracking-tight">Four Ways to Master Your Materials</h3>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {features.map((feature, idx) => {
               const Icon = feature.icon;
+
+              // Define specific layout spans and heights to create a true bento box feel
+              const isLarge = idx === 0; // Learn Mode gets a large feature slot
+              const isWide = idx === 3; // Flashcards gets a wide slot
+
               return (
                 <Link
                   key={feature.path}
                   to={feature.path}
-                  className="sleek-card sleek-card-hover p-8 group relative overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-700"
+                  className={`group relative overflow-hidden rounded-[2rem] bg-gray-50 flex flex-col justify-end p-6 transition-all hover:shadow-2xl hover:-translate-y-1 ${isLarge ? 'md:col-span-2 md:row-span-2 min-h-[320px] md:min-h-[380px]' :
+                    isWide ? 'lg:col-span-2 min-h-[240px]' :
+                      'min-h-[240px]'
+                    }`}
                   style={{ animationDelay: `${idx * 150}ms` }}
                 >
-                  <div className={`inline-flex p-4 rounded-2xl ${feature.color} mb-6 transition-transform group-hover:scale-110 duration-500 shadow-sm`}>
-                    <Icon className="h-8 w-8" />
+                  {/* Premium Background Image */}
+                  <div className="absolute inset-0 z-0">
+                    <img
+                      src={`/images/${['learn_mode_bg.png', 'chat_mode_bg.png', 'quiz_mode_bg.png', 'flashcards_mode_bg.png'][idx]}`}
+                      alt={feature.title}
+                      className="w-full h-full object-cover opacity-60 group-hover:opacity-80 group-hover:scale-105 transition-all duration-700"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/40 to-gray-900/60"></div>
                   </div>
-                  <h3 className="text-xl font-black text-gray-900 mb-3 group-hover:text-primary transition-colors">
-                    {feature.title}
-                  </h3>
-                  <p className="text-gray-600 leading-relaxed font-medium">
-                    {feature.description}
-                  </p>
-                  <div className="mt-8 flex items-center text-primary font-black text-sm group-hover:gap-2 transition-all opacity-0 group-hover:opacity-100">
-                    Explore Now <ArrowRight className="h-4 w-4" />
+
+                  <div className="relative z-10">
+                    <div className={`inline-flex p-3 rounded-xl bg-white/10 backdrop-blur-md text-white mb-4 border border-white/20 transition-transform group-hover:scale-110 duration-500 shadow-xl`}>
+                      <Icon className="h-8 w-8" />
+                    </div>
+                    <h3 className="text-xl font-black text-white mb-2">
+                      {feature.title}
+                    </h3>
+                    <p className="text-gray-300 text-sm leading-relaxed font-medium">
+                      {feature.description}
+                    </p>
+                    <div className="mt-6 flex items-center text-white font-black text-xs group-hover:gap-2 group-hover:text-blue-200 transition-all">
+                      Explore {feature.title.split(' ')[0]} <ArrowRight className="h-4 w-4 text-blue-300" />
+                    </div>
                   </div>
                 </Link>
               );
@@ -157,9 +174,9 @@ export default function Home() {
           <div className="grid sm:grid-cols-3 gap-12 relative">
             <div className="hidden sm:block absolute top-10 left-[15%] right-[15%] h-0.5 border-t-2 border-dashed border-gray-100" />
             {[
-              { step: '1', icon: FileText, title: 'Upload', desc: 'Securely upload your PDFs, Word documents, or plain text files to our study vault.' },
-              { step: '2', icon: Brain, title: 'Analyze', desc: 'Our advanced AI reads and cross-references your material to build a knowledge graph.' },
-              { step: '3', icon: ClipboardCheck, title: 'Master', desc: 'Interact with your docs through modules, quizzes, and AI-powered flashcards.' },
+              { step: '1', icon: FileText, title: 'Upload & Index', desc: 'Securely upload your PDFs or research links. Our system instantly parses and indexes the text for retrieval.' },
+              { step: '2', icon: Brain, title: 'Contextual Analysis', desc: 'When you ask a question, our RAG engine finds the exact paragraph in your data to ground the AI\'s reasoning.' },
+              { step: '3', icon: ClipboardCheck, title: 'Mastery & Recall', desc: 'Interact with your materials through verified chat, adaptive quizzes, and active-recall flashcards.' },
             ].map((item, idx) => (
               <div key={item.step} className="text-center relative animate-in fade-in zoom-in duration-700" style={{ animationDelay: `${idx * 200}ms` }}>
                 <div className="w-20 h-20 bg-primary text-white rounded-3xl flex items-center justify-center mx-auto mb-8 text-2xl font-black shadow-xl shadow-primary/30 relative z-10 transition-transform hover:rotate-6 duration-300">

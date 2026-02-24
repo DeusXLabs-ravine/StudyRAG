@@ -6,10 +6,12 @@ const {
   REVISION_QUESTIONS_PROMPT,
   PRACTICE_EXAM_PROMPT,
   buildInterestsSection,
+  buildLearningStyleSection,
+  buildPaceSection,
 } = require('../utils/prompts');
 const vectorStore = require('./vectorStore');
 const { prepareTextForLLM } = require('./chunkingService');
-const { getUserTeachingLevel, getUserInterests, getWeakTopics } = require('./userProfileService');
+const { getUserTeachingLevel, getUserInterests, getWeakTopics, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
 const { extractTextFromBuffer } = require('./fileProcessor');
 const { generateQuiz } = require('./quizGenerator');
 const { v4: uuidv4 } = require('uuid');
@@ -221,10 +223,12 @@ async function generatePrepContent(sessionId, userId = null) {
     }
 
     // 4. Get user context
-    const [teachingLevel, interests, weakTopics] = await Promise.all([
+    const [teachingLevel, interests, weakTopics, learningStyle, learningPace] = await Promise.all([
       getUserTeachingLevel(userId),
       getUserInterests(userId),
       getWeakTopics(10, 0.6, userId),
+      getEffectiveLearningStyle(userId),
+      getEffectiveLearningPace(userId),
     ]);
     const weakTopicsSection = weakTopics.length > 0
       ? `Student's weak topics (focus extra attention here):\n${weakTopics.map(t => `- ${t.topic} (avg score: ${Math.round(t.avg_score * 100)}%)`).join('\n')}`
@@ -257,13 +261,17 @@ async function generatePrepContent(sessionId, userId = null) {
     const tier = selectModelTier({ isComplex: true });
 
     const interestsSection = buildInterestsSection(interests);
+    const learningStyleSection = buildLearningStyleSection(learningStyle);
+    const paceSection = buildPaceSection(learningPace);
 
     const studyGuidePrompt = STUDY_GUIDE_GENERATION_PROMPT
       .replace('{teaching_level}', teachingLevel)
       .replace('{study_content}', studyContent)
       .replace('{analysis_section}', analysisSection)
       .replace('{weak_topics_section}', weakTopicsSection)
-      .replace('{interests_section}', interestsSection);
+      .replace('{interests_section}', interestsSection)
+      .replace('{learning_style_section}', learningStyleSection)
+      .replace('{pace_section}', paceSection);
 
     const revisionPrompt = REVISION_QUESTIONS_PROMPT
       .replace('{teaching_level}', teachingLevel)

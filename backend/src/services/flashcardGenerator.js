@@ -1,8 +1,8 @@
 const supabase = require('../config/database');
 const { getGenerativeModel, selectModelTier } = require('../config/gemini');
-const { FLASHCARD_GENERATION_PROMPT, buildInterestsSection } = require('../utils/prompts');
+const { FLASHCARD_GENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection } = require('../utils/prompts');
 const vectorStore = require('./vectorStore');
-const { getUserTeachingLevel, getUserInterests, getWeakTopics } = require('./userProfileService');
+const { getUserTeachingLevel, getUserInterests, getWeakTopics, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
 const { v4: uuidv4 } = require('uuid');
 
 async function generateFlashcards({ numCards = 20, docId = null, name = null, userId = null }) {
@@ -25,16 +25,20 @@ async function generateFlashcards({ numCards = 20, docId = null, name = null, us
   }).join('\n\n---\n\n');
   const sourcePages = isPages ? selected.map(c => c.pageNumber) : [];
 
-  const [teachingLevel, interests] = await Promise.all([
+  const [teachingLevel, interests, learningStyle, learningPace] = await Promise.all([
     getUserTeachingLevel(userId),
     getUserInterests(userId),
+    getEffectiveLearningStyle(userId),
+    getEffectiveLearningPace(userId),
   ]);
 
   const prompt = FLASHCARD_GENERATION_PROMPT
     .replace('{num_cards}', numCards)
     .replace('{context}', context)
     .replace('{teaching_level}', teachingLevel)
-    .replace('{interests_section}', buildInterestsSection(interests));
+    .replace('{interests_section}', buildInterestsSection(interests))
+    .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
+    .replace('{pace_section}', buildPaceSection(learningPace));
 
   const tier = selectModelTier({});
   const model = getGenerativeModel(tier);
@@ -106,16 +110,20 @@ async function generateAdaptiveFlashcards({ numCards = 20, userId = null }) {
   }
 
   const context = selectedItems.map(c => c.text).join('\n\n---\n\n');
-  const [teachingLevel, interests] = await Promise.all([
+  const [teachingLevel, interests, learningStyle, learningPace] = await Promise.all([
     getUserTeachingLevel(userId),
     getUserInterests(userId),
+    getEffectiveLearningStyle(userId),
+    getEffectiveLearningPace(userId),
   ]);
 
   const prompt = FLASHCARD_GENERATION_PROMPT
     .replace('{num_cards}', numCards)
     .replace('{context}', context)
     .replace('{teaching_level}', teachingLevel)
-    .replace('{interests_section}', buildInterestsSection(interests));
+    .replace('{interests_section}', buildInterestsSection(interests))
+    .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
+    .replace('{pace_section}', buildPaceSection(learningPace));
 
   const model = getGenerativeModel('standard');
   const result = await model.generateContent(prompt);

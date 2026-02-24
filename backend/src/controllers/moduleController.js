@@ -1,5 +1,5 @@
 const supabase = require('../config/database');
-const { getAllModules, getModuleById, getModulesByDocument, regenerateQuestions: regenerateModuleQuestions, isGeneratingModules } = require('../services/moduleGenerator');
+const { getAllModules, getModuleById, getModulesByDocument, getModulesByCourse, regenerateQuestions: regenerateModuleQuestions, isGeneratingModules } = require('../services/moduleGenerator');
 
 async function getProgressForModule(moduleId) {
   const { data: row, error } = await supabase
@@ -23,10 +23,12 @@ async function getProgressForModule(moduleId) {
 
 async function listModules(req, res, next) {
   try {
-    const { documentId } = req.query;
+    const { documentId, courseId } = req.query;
     let modules;
 
-    if (documentId) {
+    if (courseId) {
+      modules = await getModulesByCourse(courseId);
+    } else if (documentId) {
       modules = await getModulesByDocument(documentId);
     } else {
       modules = await getAllModules();

@@ -10,7 +10,7 @@ const TEACHING_LEVELS = [
     id: 'dummy',
     label: 'Simple',
     description: 'Like explaining to a friend over coffee',
-    example: 'Plants eat sunlight like we eat food — they turn it into energy using their green leaves, kind of like a solar panel!',
+    example: 'Plants eat sunlight like we eat food: they turn it into energy using their green leaves, kind of like a solar panel!',
   },
   {
     id: 'beginner',
@@ -33,9 +33,15 @@ const TEACHING_LEVELS = [
 ];
 
 const SUGGESTED_INTERESTS = [
+  // General
   'Sports', 'Music', 'Gaming', 'Cooking', 'Movies', 'Anime',
   'Cars', 'Technology', 'Art', 'Fashion', 'Nature', 'Science',
   'History', 'Travel', 'Fitness',
+
+  // Broad Medical / Health
+  'Medicine & Health Sciences', 'Pharmacy & Drug Sciences',
+  'Nursing & Allied Health', 'Biomedical Sciences',
+  'Dentistry', 'Veterinary Medicine',
 ];
 
 export default function Onboarding() {
@@ -108,10 +114,14 @@ export default function Onboarding() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-2xl">
         {/* Header */}
-        <div className="text-center mb-8 animate-in fade-in duration-500">
-          <Logo className="h-10 w-10 mx-auto mb-4" />
-          <h1 className="text-2xl font-black text-gray-900">Set Up Your Profile</h1>
-          <p className="text-sm text-gray-500 mt-1">
+        <div className="text-center mb-10 animate-in fade-in duration-700">
+          <div className="flex justify-center mb-6">
+            <Logo className="h-24 w-24" textClassName="text-3xl font-black text-gray-900" />
+          </div>
+          <p className="text-sm font-bold text-blue-500 uppercase tracking-[0.2em] mb-1">
+            Welcome to StudyRAG
+          </p>
+          <p className="text-xs text-gray-400 font-medium">
             {user?.email}
           </p>
         </div>
@@ -121,9 +131,8 @@ export default function Onboarding() {
           {Array.from({ length: totalSteps }).map((_, i) => (
             <div
               key={i}
-              className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${
-                i <= step ? 'bg-primary' : 'bg-gray-200'
-              }`}
+              className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${i <= step ? 'bg-primary' : 'bg-gray-200'
+                }`}
             />
           ))}
         </div>
@@ -194,11 +203,10 @@ export default function Onboarding() {
                     <button
                       key={level.id}
                       onClick={() => setTeachingLevel(level.id)}
-                      className={`text-left p-4 rounded-xl border-2 transition-all ${
-                        isSelected
-                          ? 'border-primary bg-primary-50 shadow-md'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      }`}
+                      className={`text-left p-4 rounded-xl border-2 transition-all ${isSelected
+                        ? 'border-primary bg-primary-50 shadow-md'
+                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-bold text-gray-900">{level.label}</span>

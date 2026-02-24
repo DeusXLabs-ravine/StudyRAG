@@ -34,3 +34,15 @@ export async function updateSetting(key, value) {
   const { data } = await api.put('/analytics/settings', { key, value });
   return data;
 }
+
+// ─── Learning Style & Pace ────────────────────────────────
+
+export async function recordLearningInteraction(contentType, engagement = 'view') {
+  const { data } = await api.post('/analytics/learning-interaction', { contentType, engagement });
+  return data;
+}
+
+export async function getLearningProfile() {
+  const { data } = await api.get('/analytics/learning-profile');
+  return data;
+}

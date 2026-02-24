@@ -1,7 +1,7 @@
 const supabase = require('../config/database');
 const { getGenerativeModel } = require('../config/gemini');
-const { MODULE_GENERATION_PROMPT, MODULE_OUTLINE_PROMPT, MODULE_BATCH_GENERATION_PROMPT, QUESTION_REGENERATION_PROMPT, buildInterestsSection } = require('../utils/prompts');
-const { getUserTeachingLevel, getUserInterests } = require('./userProfileService');
+const { MODULE_GENERATION_PROMPT, MODULE_OUTLINE_PROMPT, MODULE_BATCH_GENERATION_PROMPT, QUESTION_REGENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection } = require('../utils/prompts');
+const { getUserTeachingLevel, getUserInterests, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
 const { prepareTextForLLM } = require('./chunkingService');
 const { v4: uuidv4 } = require('uuid');
 
@@ -87,7 +87,7 @@ async function withRetry(fn, retries = 1, label = '') {
  * Phase 1: Generate a curriculum outline for a text segment.
  * Returns an array of { title, topic, description } — small output, fast.
  */
-async function generateOutlineForSegment(segmentText, segmentIndex, totalSegments, teachingLevel, interests) {
+async function generateOutlineForSegment(segmentText, segmentIndex, totalSegments, teachingLevel, interests, learningStyle, learningPace) {
   const wordCount = segmentText.split(/\s+/).length;
   const targetModules = Math.max(5, Math.round(wordCount / 2000));
   const minModules = Math.max(3, Math.round(wordCount / 4000));
@@ -100,6 +100,8 @@ async function generateOutlineForSegment(segmentText, segmentIndex, totalSegment
     .replace('{document_text}', segmentText + segmentNote)
     .replace('{teaching_level}', teachingLevel)
     .replace('{interests_section}', buildInterestsSection(interests, teachingLevel))
+    .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
+    .replace('{pace_section}', buildPaceSection(learningPace))
     .replace('{word_count}', String(wordCount))
     .replace('{target_modules}', String(targetModules))
     .replace('{min_modules}', String(minModules));
@@ -116,7 +118,7 @@ async function generateOutlineForSegment(segmentText, segmentIndex, totalSegment
  * Phase 2: Generate full module content for a batch of outlined modules.
  * Each batch is typically 3 modules — keeps output manageable per LLM call.
  */
-async function generateModuleBatch(segmentText, fullOutline, batchModules, batchStart, teachingLevel, interests) {
+async function generateModuleBatch(segmentText, fullOutline, batchModules, batchStart, teachingLevel, interests, learningStyle, learningPace) {
   const outlineText = fullOutline
     .map((m, i) => `${i + 1}. "${m.title}" [${m.topic}]: ${m.description}`)
     .join('\n');
@@ -129,6 +131,8 @@ async function generateModuleBatch(segmentText, fullOutline, batchModules, batch
     .replace('{document_text}', segmentText)
     .replace('{teaching_level}', teachingLevel)
     .replace('{interests_section}', buildInterestsSection(interests, teachingLevel))
+    .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
+    .replace('{pace_section}', buildPaceSection(learningPace))
     .replace('{full_outline}', outlineText)
     .replace('{batch_modules}', batchText);
 
@@ -142,7 +146,7 @@ async function generateModuleBatch(segmentText, fullOutline, batchModules, batch
 /**
  * Legacy single-call generation — used as fallback when two-phase fails.
  */
-async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalSegments, teachingLevel, interests) {
+async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalSegments, teachingLevel, interests, learningStyle, learningPace) {
   const segmentNote = totalSegments > 1
     ? `\n\nNote: This is section ${segmentIndex + 1} of ${totalSegments} from the document. Create modules only for the topics in THIS section.\n`
     : '';
@@ -150,7 +154,9 @@ async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalS
   const prompt = MODULE_GENERATION_PROMPT
     .replace('{document_text}', segmentText + segmentNote)
     .replace('{teaching_level}', teachingLevel)
-    .replace('{interests_section}', buildInterestsSection(interests, teachingLevel));
+    .replace('{interests_section}', buildInterestsSection(interests, teachingLevel))
+    .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
+    .replace('{pace_section}', buildPaceSection(learningPace));
 
   const model = getGenerativeModel('fast');
   const result = await model.generateContent(prompt);
@@ -171,33 +177,33 @@ async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalS
  * Phase 2: Generate full modules in parallel batches of BATCH_SIZE.
  * Falls back to legacy single-call on outline failure.
  */
-async function generateModulesForSegment(segmentText, segmentIndex, totalSegments, teachingLevel, interests) {
+async function generateModulesForSegment(segmentText, segmentIndex, totalSegments, teachingLevel, interests, learningStyle, learningPace) {
   const wordCount = segmentText.split(/\s+/).length;
 
   // Phase 1: Generate curriculum outline
   let outline;
   try {
     outline = await withRetry(
-      () => generateOutlineForSegment(segmentText, segmentIndex, totalSegments, teachingLevel, interests),
+      () => generateOutlineForSegment(segmentText, segmentIndex, totalSegments, teachingLevel, interests, learningStyle, learningPace),
       1,
       `Outline seg-${segmentIndex + 1}`
     );
     console.log(`[moduleGenerator] Segment ${segmentIndex + 1}/${totalSegments}: outline → ${outline.length} modules (${wordCount} words)`);
   } catch (err) {
     console.error(`[moduleGenerator] Outline failed for segment ${segmentIndex + 1}, falling back to single-call:`, err.message);
-    return generateModulesForSegmentLegacy(segmentText, segmentIndex, totalSegments, teachingLevel, interests);
+    return generateModulesForSegmentLegacy(segmentText, segmentIndex, totalSegments, teachingLevel, interests, learningStyle, learningPace);
   }
 
   if (!outline || outline.length === 0) {
     console.warn(`[moduleGenerator] Empty outline for segment ${segmentIndex + 1}, falling back`);
-    return generateModulesForSegmentLegacy(segmentText, segmentIndex, totalSegments, teachingLevel, interests);
+    return generateModulesForSegmentLegacy(segmentText, segmentIndex, totalSegments, teachingLevel, interests, learningStyle, learningPace);
   }
 
   // For very small outlines (≤ BATCH_SIZE), generate all in one call
   if (outline.length <= BATCH_SIZE) {
     try {
       const result = await withRetry(
-        () => generateModuleBatch(segmentText, outline, outline, 0, teachingLevel, interests),
+        () => generateModuleBatch(segmentText, outline, outline, 0, teachingLevel, interests, learningStyle, learningPace),
         1,
         `Single-batch seg-${segmentIndex + 1}`
       );
@@ -205,7 +211,7 @@ async function generateModulesForSegment(segmentText, segmentIndex, totalSegment
       return result;
     } catch (err) {
       console.error(`[moduleGenerator] Single-batch failed for segment ${segmentIndex + 1}, falling back:`, err.message);
-      return generateModulesForSegmentLegacy(segmentText, segmentIndex, totalSegments, teachingLevel, interests);
+      return generateModulesForSegmentLegacy(segmentText, segmentIndex, totalSegments, teachingLevel, interests, learningStyle, learningPace);
     }
   }
 
@@ -218,7 +224,7 @@ async function generateModulesForSegment(segmentText, segmentIndex, totalSegment
   const batchTasks = batches.map(({ start, items }) => async () => {
     try {
       return await withRetry(
-        () => generateModuleBatch(segmentText, outline, items, start, teachingLevel, interests),
+        () => generateModuleBatch(segmentText, outline, items, start, teachingLevel, interests, learningStyle, learningPace),
         1,
         `Batch ${start + 1}-${start + items.length} seg-${segmentIndex + 1}`
       );
@@ -245,8 +251,12 @@ async function generateModulesForSegment(segmentText, segmentIndex, totalSegment
 /**
  * Insert parsed module results into the DB, starting at the given orderIndex.
  * Returns the next orderIndex to use.
+ * @param {string} docId - Document ID
+ * @param {Array} segmentResults - Array of { modules: [...] } objects
+ * @param {number} startOrderIndex - Starting order index
+ * @param {Object} [opts] - Optional: { courseId, sourceDocuments, userId }
  */
-async function insertModuleResults(docId, segmentResults, startOrderIndex) {
+async function insertModuleResults(docId, segmentResults, startOrderIndex, opts = {}) {
   const allModuleRows = [];
   const allQuestionRows = [];
   let orderIndex = startOrderIndex;
@@ -256,7 +266,7 @@ async function insertModuleResults(docId, segmentResults, startOrderIndex) {
       const id = uuidv4();
       const topic = mod.topic || mod.title;
 
-      allModuleRows.push({
+      const row = {
         id,
         document_id: docId,
         order_index: orderIndex++,
@@ -265,7 +275,12 @@ async function insertModuleResults(docId, segmentResults, startOrderIndex) {
         objectives: mod.objectives,
         content: mod.content,
         takeaways: mod.takeaways,
-      });
+      };
+
+      if (opts.courseId) row.course_id = opts.courseId;
+      if (opts.sourceDocuments) row.source_documents = opts.sourceDocuments;
+
+      allModuleRows.push(row);
 
       for (const q of (mod.questions || [])) {
         allQuestionRows.push({
@@ -296,6 +311,69 @@ async function insertModuleResults(docId, segmentResults, startOrderIndex) {
     }
   }
 
+  // Background enrichment for each inserted module (diagrams + medical resources)
+  if (allModuleRows.length > 0) {
+    const userId = opts.userId || null;
+
+    // Background diagrams
+    setImmediate(async () => {
+      try {
+        const { generateModuleDiagrams } = require('./diagramGenerationService');
+        const { getUserTeachingLevel, getUserInterests } = require('./userProfileService');
+        const [teachingLevel, interests] = await Promise.all([
+          getUserTeachingLevel(userId),
+          getUserInterests(userId),
+        ]);
+
+        for (const row of allModuleRows) {
+          try {
+            await generateModuleDiagrams(
+              row.id, docId, row.topic || row.title,
+              row.content, teachingLevel, interests, userId
+            );
+          } catch (err) {
+            console.warn(`[moduleGenerator] Background diagram gen failed for module ${row.id.slice(0, 8)}: ${err.message}`);
+          }
+        }
+        console.log(`[moduleGenerator] Background diagram generation complete for ${allModuleRows.length} modules`);
+      } catch (err) {
+        console.error(`[moduleGenerator] Background diagram generation error: ${err.message}`);
+      }
+    });
+
+    // Background medical resource enrichment
+    setImmediate(async () => {
+      try {
+        const { enrichModuleWithMedicalResources, quickMedicalCheck } = require('./medicalResourceService');
+
+        // Quick check on the first module's content to see if this is medical material
+        const sampleContent = allModuleRows.slice(0, 3).map(r => r.content).join(' ');
+        const confidence = quickMedicalCheck(sampleContent);
+        if (confidence < 0.2) {
+          console.log(`[moduleGenerator] Skipping medical enrichment — content not medical (confidence: ${confidence.toFixed(2)})`);
+          return;
+        }
+
+        for (const row of allModuleRows) {
+          try {
+            await enrichModuleWithMedicalResources({
+              moduleId: row.id,
+              documentId: docId,
+              topic: row.topic || row.title,
+              content: row.content,
+              userId,
+            });
+          } catch (err) {
+            console.warn(`[moduleGenerator] Medical enrichment failed for module ${row.id.slice(0, 8)}: ${err.message}`);
+          }
+        }
+        console.log(`[moduleGenerator] Medical resource enrichment complete for ${allModuleRows.length} modules`);
+      } catch (err) {
+        console.error(`[moduleGenerator] Medical enrichment error: ${err.message}`);
+      }
+    });
+  }
+
   return { moduleCount: allModuleRows.length, nextOrderIndex: orderIndex };
 }
 
@@ -304,9 +382,11 @@ async function insertModuleResults(docId, segmentResults, startOrderIndex) {
  * can start learning immediately. Returns quickly.
  */
 async function generateInitialModules(docId, documentText, userId = null) {
-  const [teachingLevel, interests] = await Promise.all([
+  const [teachingLevel, interests, learningStyle, learningPace] = await Promise.all([
     getUserTeachingLevel(userId),
     getUserInterests(userId),
+    getEffectiveLearningStyle(userId),
+    getEffectiveLearningPace(userId),
   ]);
 
   const segments = splitIntoSegments(documentText, SEGMENT_SIZE);
@@ -314,8 +394,8 @@ async function generateInitialModules(docId, documentText, userId = null) {
   console.log(`[moduleGenerator] Document split into ${totalSegments} segment(s) (${documentText.length} chars total)`);
 
   // Generate modules from the first segment only
-  const firstResult = await generateModulesForSegment(segments[0], 0, totalSegments, teachingLevel, interests);
-  const { moduleCount } = await insertModuleResults(docId, [firstResult], 0);
+  const firstResult = await generateModulesForSegment(segments[0], 0, totalSegments, teachingLevel, interests, learningStyle, learningPace);
+  const { moduleCount } = await insertModuleResults(docId, [firstResult], 0, { userId });
 
   console.log(`[moduleGenerator] Initial batch: ${moduleCount} modules from segment 1/${totalSegments}`);
   return { moduleCount, totalSegments };
@@ -328,9 +408,11 @@ async function generateInitialModules(docId, documentText, userId = null) {
  * Individual segment failures are caught and logged — they don't kill the pipeline.
  */
 async function generateRemainingModules(docId, documentText, userId = null) {
-  const [teachingLevel, interests] = await Promise.all([
+  const [teachingLevel, interests, learningStyle, learningPace] = await Promise.all([
     getUserTeachingLevel(userId),
     getUserInterests(userId),
+    getEffectiveLearningStyle(userId),
+    getEffectiveLearningPace(userId),
   ]);
 
   const segments = splitIntoSegments(documentText, SEGMENT_SIZE);
@@ -358,10 +440,10 @@ async function generateRemainingModules(docId, documentText, userId = null) {
     for (let idx = 0; idx < remaining.length; idx++) {
       try {
         const result = await generateModulesForSegment(
-          remaining[idx], idx + 1, segments.length, teachingLevel, interests
+          remaining[idx], idx + 1, segments.length, teachingLevel, interests, learningStyle, learningPace
         );
         if (result?.modules?.length > 0) {
-          const { moduleCount, nextOrderIndex } = await insertModuleResults(docId, [result], nextOrder);
+          const { moduleCount, nextOrderIndex } = await insertModuleResults(docId, [result], nextOrder, { userId });
           nextOrder = nextOrderIndex;
           totalGenerated += moduleCount;
           console.log(`[moduleGenerator] Segment ${idx + 2}/${segments.length}: +${moduleCount} modules (running total: ${totalGenerated})`);
@@ -388,12 +470,14 @@ async function generateModules(docId, documentText, userId = null) {
 
   if (segments.length <= 1) {
     // Small doc — single pass, no background needed
-    const [teachingLevel, interests] = await Promise.all([
+    const [teachingLevel, interests, learningStyle, learningPace] = await Promise.all([
       getUserTeachingLevel(userId),
       getUserInterests(userId),
+      getEffectiveLearningStyle(userId),
+      getEffectiveLearningPace(userId),
     ]);
-    const result = await generateModulesForSegment(documentText, 0, 1, teachingLevel, interests);
-    await insertModuleResults(docId, [result], 0);
+    const result = await generateModulesForSegment(documentText, 0, 1, teachingLevel, interests, learningStyle, learningPace);
+    await insertModuleResults(docId, [result], 0, { userId });
     return await getModulesByDocument(docId);
   }
 
@@ -474,6 +558,31 @@ async function getAllModules() {
   return rows.map(row => formatModule(row, questionsByModule[row.id] || []));
 }
 
+async function getModulesByCourse(courseId) {
+  const { data: rows, error } = await supabase
+    .from('modules')
+    .select('*')
+    .eq('course_id', courseId)
+    .order('order_index');
+  if (error) throw error;
+  if (!rows || rows.length === 0) return [];
+
+  const moduleIds = rows.map(r => r.id);
+  const { data: allQuestions, error: qErr } = await supabase
+    .from('questions')
+    .select('*')
+    .in('module_id', moduleIds);
+  if (qErr) throw qErr;
+
+  const questionsByModule = {};
+  for (const q of (allQuestions || [])) {
+    if (!questionsByModule[q.module_id]) questionsByModule[q.module_id] = [];
+    questionsByModule[q.module_id].push(q);
+  }
+
+  return rows.map(row => formatModule(row, questionsByModule[row.id] || []));
+}
+
 async function deleteModulesByDocument(docId) {
   const { error } = await supabase
     .from('modules')
@@ -483,7 +592,7 @@ async function deleteModulesByDocument(docId) {
 }
 
 function formatModule(row, questionRows) {
-  return {
+  const mod = {
     id: row.id,
     documentId: row.document_id,
     orderIndex: row.order_index,
@@ -503,6 +612,9 @@ function formatModule(row, questionRows) {
     })),
     createdAt: row.created_at,
   };
+  if (row.course_id) mod.courseId = row.course_id;
+  if (row.source_documents) mod.sourceDocuments = row.source_documents;
+  return mod;
 }
 
 /**
@@ -610,9 +722,11 @@ module.exports = {
   generateRemainingModules,
   isGeneratingModules,
   getModulesByDocument,
+  getModulesByCourse,
   getModuleById,
   getAllModules,
   deleteModulesByDocument,
   enrichModulesWithResources,
   regenerateQuestions,
+  insertModuleResults,
 };

@@ -351,9 +351,20 @@ function formatDiagram(row) {
   };
 }
 
+async function getDiagramsByModule(moduleId) {
+  const { data, error } = await supabase
+    .from('document_diagrams')
+    .select('*')
+    .eq('module_id', moduleId)
+    .order('page_number', { ascending: true });
+  if (error) throw error;
+  return (data || []).map(formatDiagram);
+}
+
 module.exports = {
   processDocumentDiagrams,
   getDiagramsByDocument,
+  getDiagramsByModule,
   getDiagramById,
   getDiagramImageUrl,
   regenerateDiagramLevel,

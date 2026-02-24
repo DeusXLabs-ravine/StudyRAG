@@ -599,3 +599,200 @@ ALTER TABLE solver_sessions ADD COLUMN IF NOT EXISTS user_id UUID;
 ALTER TABLE exam_prep_sessions ADD COLUMN IF NOT EXISTS user_id UUID;
 ALTER TABLE module_progress ADD COLUMN IF NOT EXISTS user_id UUID;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS user_id UUID;
+
+-- ============================================================
+-- LEARNING STYLE & PACE DETECTION
+-- ============================================================
+
+-- Learning interactions — tracks user engagement signals for VARK auto-detection
+CREATE TABLE IF NOT EXISTS learning_interactions (
+  id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  content_type TEXT NOT NULL,     -- diagram|image|chart|text_explanation|reading|notes|example_analogy|video|audio|step_by_step|quiz|practice|interactive
+  engagement TEXT NOT NULL DEFAULT 'view',  -- view|click|request|dwell
+  user_id UUID,
+  recorded_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_learning_interactions_user ON learning_interactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_learning_interactions_type ON learning_interactions(content_type);
+
+-- ============================================================
+-- MULTI-SOURCE DOCUMENTS (URL, Notes, Primary Source)
+-- ============================================================
+
+-- source_type: 'file' (default) | 'url' | 'note'
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT 'file';
+-- Original URL for url-type documents
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_url TEXT;
+-- Raw text content for note-type documents
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_content TEXT;
+-- User-toggleable flag to mark key/authoritative sources
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_primary_source BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE INDEX IF NOT EXISTS idx_documents_source_type ON documents(source_type);
+CREATE INDEX IF NOT EXISTS idx_documents_primary_source ON documents(user_id, is_primary_source) WHERE is_primary_source = TRUE;
+
+-- ============================================================
+-- SMART COURSES: Topic Study, Syllabus Detection, Cross-Doc Merging
+-- ============================================================
+
+-- Courses: groups of documents forming a unified learning experience
+CREATE TABLE IF NOT EXISTS courses (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+  source_type TEXT NOT NULL DEFAULT 'manual', -- 'manual' | 'syllabus' | 'topic'
+  syllabus_document_id TEXT REFERENCES documents(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'processing',   -- 'processing' | 'ready' | 'failed'
+  error_message TEXT,
+  user_id UUID,
+  config JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Junction: which documents belong to which course
+CREATE TABLE IF NOT EXISTS course_documents (
+  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'source', -- 'syllabus' | 'source' | 'reference' | 'practice'
+  order_index INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (course_id, document_id)
+);
+CREATE INDEX IF NOT EXISTS idx_course_docs_course ON course_documents(course_id);
+CREATE INDEX IF NOT EXISTS idx_course_docs_doc ON course_documents(document_id);
+
+-- Modules can optionally belong to a course (for unified cross-doc modules)
+ALTER TABLE modules ADD COLUMN IF NOT EXISTS course_id TEXT REFERENCES courses(id) ON DELETE CASCADE;
+ALTER TABLE modules ADD COLUMN IF NOT EXISTS source_documents JSONB;
+CREATE INDEX IF NOT EXISTS idx_modules_course ON modules(course_id);
+
+-- Documents can have a subtype for content intelligence
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS document_subtype TEXT;
+-- Values: 'syllabus' | 'textbook' | 'lecture_notes' | 'problem_set' | 'exam' | 'reference_doc' | null
+
+-- ============================================================
+-- GENERATED DIAGRAMS (on-demand Mermaid/D2/AI-image per module)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS generated_diagrams (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  module_id TEXT REFERENCES modules(id) ON DELETE CASCADE,
+  document_id TEXT REFERENCES documents(id) ON DELETE CASCADE,
+  topic TEXT NOT NULL,
+  diagram_type TEXT NOT NULL,           -- 'mermaid' | 'd2' | 'image'
+  title TEXT,
+  description TEXT,
+  teaching_level TEXT NOT NULL DEFAULT 'intermediate',
+  diagram_code TEXT,                    -- Mermaid or D2 source code
+  rendered_svg TEXT,                    -- Pre-rendered SVG (D2)
+  image_storage_path TEXT,              -- Supabase Storage path (AI images)
+  image_prompt TEXT,
+  interests_used TEXT[],
+  generation_model TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  error_message TEXT,
+  user_id UUID,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_gen_diagrams_module ON generated_diagrams(module_id);
+CREATE INDEX IF NOT EXISTS idx_gen_diagrams_doc ON generated_diagrams(document_id);
+
+-- Link existing document_diagrams to modules
+ALTER TABLE document_diagrams ADD COLUMN IF NOT EXISTS module_id TEXT REFERENCES modules(id) ON DELETE SET NULL;
+
+-- ============================================================
+-- PERFORMANCE INDEXES FOR 5K CONCURRENT STUDENTS
+-- ============================================================
+
+-- User-scoped queries (most frequent at scale)
+CREATE INDEX IF NOT EXISTS idx_documents_user ON documents(user_id);
+CREATE INDEX IF NOT EXISTS idx_modules_doc_order ON modules(document_id, order_index);
+CREATE INDEX IF NOT EXISTS idx_module_progress_user ON module_progress(user_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_sessions_user ON quiz_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_flashcard_decks_user ON flashcard_decks(user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_user ON chat_messages(user_id);
+CREATE INDEX IF NOT EXISTS idx_topic_perf_user ON topic_performance(user_id);
+CREATE INDEX IF NOT EXISTS idx_study_sessions_user ON study_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_settings_user ON user_settings(user_id);
+CREATE INDEX IF NOT EXISTS idx_solver_sessions_user ON solver_sessions(user_id);
+
+-- Composite indexes for common query patterns
+CREATE INDEX IF NOT EXISTS idx_topic_perf_user_topic ON topic_performance(user_id, topic);
+CREATE INDEX IF NOT EXISTS idx_learning_interactions_user_recent ON learning_interactions(user_id, recorded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_module_progress_user_completed ON module_progress(user_id, completed);
+
+-- NOTE: pgvector vector indexes (HNSW, IVFFlat) have a 2000-dim limit.
+-- gemini-embedding-001 produces 3072-dim vectors, so vector indexing is skipped.
+-- Sequential scan still works; embedding cache compensates at scale.
+
+-- ============================================================
+-- MEDICAL RESOURCES (PubMed, ICD-10, WikiDoc, Open Textbooks)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS medical_resources (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  document_id TEXT REFERENCES documents(id) ON DELETE CASCADE,
+  module_id TEXT REFERENCES modules(id) ON DELETE CASCADE,
+  topic TEXT NOT NULL,
+  source_type TEXT NOT NULL,              -- 'pubmed' | 'icd10' | 'wikidoc' | 'msd_manual' | 'open_textbook' | 'med_dataset'
+  title TEXT NOT NULL,
+  url TEXT,
+  snippet TEXT,
+  extra_data JSONB DEFAULT '{}',          -- source-specific data (PMID, ICD code, authors, etc.)
+  user_id UUID,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_med_resources_doc ON medical_resources(document_id);
+CREATE INDEX IF NOT EXISTS idx_med_resources_module ON medical_resources(module_id);
+CREATE INDEX IF NOT EXISTS idx_med_resources_source ON medical_resources(source_type);
+
+-- ============================================================
+-- GAMIFICATION: XP, Streaks, Achievements, Game Stats
+-- ============================================================
+
+-- XP event ledger
+CREATE TABLE IF NOT EXISTS user_xp (
+  id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id UUID NOT NULL,
+  amount INTEGER NOT NULL,
+  source TEXT NOT NULL,
+  source_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_user_xp_user ON user_xp(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_xp_created ON user_xp(user_id, created_at DESC);
+
+-- Daily streak tracker
+CREATE TABLE IF NOT EXISTS user_streaks (
+  user_id UUID PRIMARY KEY,
+  current_streak INTEGER DEFAULT 0,
+  longest_streak INTEGER DEFAULT 0,
+  last_activity_date DATE,
+  streak_freezes INTEGER DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Multi-tier achievement badges
+CREATE TABLE IF NOT EXISTS user_achievements (
+  id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id UUID NOT NULL,
+  achievement_key TEXT NOT NULL,
+  tier INTEGER DEFAULT 1,
+  unlocked_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_id, achievement_key, tier)
+);
+CREATE INDEX IF NOT EXISTS idx_user_achievements_user ON user_achievements(user_id);
+
+-- Aggregate game stats + daily progress
+CREATE TABLE IF NOT EXISTS user_game_stats (
+  user_id UUID PRIMARY KEY,
+  total_xp INTEGER DEFAULT 0,
+  level INTEGER DEFAULT 1,
+  games_played INTEGER DEFAULT 0,
+  games_won INTEGER DEFAULT 0,
+  best_combo INTEGER DEFAULT 0,
+  daily_xp_goal INTEGER DEFAULT 20,
+  daily_xp_earned INTEGER DEFAULT 0,
+  daily_xp_date DATE,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);

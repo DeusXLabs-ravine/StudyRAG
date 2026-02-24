@@ -6,8 +6,12 @@ Adjust your content complexity, vocabulary, and examples accordingly:
 - "intermediate": Standard academic language, balanced depth, some assumed background knowledge
 - "advanced": Technical and detailed, assume strong foundational knowledge, include nuances and edge cases
 {interests_section}
+{learning_style_section}
+{pace_section}
 
 Given the following document content, create a set of logical learning modules that cover all the key topics.
+This content was provided by the student as their study material. It is the AUTHORITATIVE source of truth for generating modules. Do not contradict it with outside knowledge.
+If the content contains questions (with or without answers), treat them as practice/review material — generate modules that teach the concepts being tested, and provide correct answers with explanations grounded in the source material and trusted academic knowledge.
 
 Document content:
 {document_text}
@@ -69,6 +73,8 @@ Adjust question complexity accordingly:
 - "intermediate": Standard difficulty testing understanding and application
 - "advanced": Challenging questions requiring analysis, synthesis, and critical thinking
 {interests_section}
+{learning_style_section}
+{pace_section}
 
 Based on the following study material, generate a quiz with {num_questions} questions.
 Difficulty: {difficulty}
@@ -108,6 +114,8 @@ Adjust flashcard complexity:
 - "intermediate": Standard academic flashcards
 - "advanced": Detailed, nuanced cards that cover edge cases and deeper understanding
 {interests_section}
+{learning_style_section}
+{pace_section}
 
 Study material:
 {context}
@@ -198,6 +206,15 @@ Topic: {topic}
 
 The student already has their own uploaded study materials as their primary learning source. Your job is to find external resources that SUPPLEMENT and ENRICH — not replace — what they are already studying.
 
+IMPORTANT — ONLY recommend resources from trusted academic and medical sources:
+- Academic databases: Google Scholar, PubMed, NCBI, Semantic Scholar, arXiv
+- Medical institutions: WHO, NIH, FDA, CDC, Cochrane Library
+- Peer-reviewed journals: NEJM, BMJ, Lancet, JAMA, Nature, Cell, Science
+- Medical references: UpToDate, AMBOSS, Merck Manual, Medscape
+- Educational platforms: Khan Academy, Coursera, edX, .edu domains
+- Publisher portals: Springer, Wiley, Elsevier/ScienceDirect, Oxford University Press
+- NEVER recommend random blogs, social media, unverified health sites, or content farms
+
 Search for resources that would help deepen understanding of this topic. Focus on:
 - Textbooks and book chapters that cover the same subject from a different angle
 - Academic articles and papers that expand on key concepts
@@ -206,7 +223,7 @@ Search for resources that would help deepen understanding of this topic. Focus o
 
 These resources will be clearly labeled as "supplementary" and secondary to the student's own materials.
 
-For each resource you find, provide the title, a brief description of why it's useful as a complement, and classify it.
+For each resource you find, provide the title, a brief description of why it's useful as a complement, classify it, and rate its quality.
 
 Return valid JSON:
 {
@@ -214,7 +231,8 @@ Return valid JSON:
     {
       "title": "Resource Title",
       "snippet": "Brief description of why this resource is useful as a supplement for studying this topic",
-      "resource_type": "book|article|textbook|video|tutorial|guide"
+      "resource_type": "book|article|textbook|video|tutorial|guide",
+      "quality": "trusted|acceptable|unverified"
     }
   ]
 }`;
@@ -228,6 +246,8 @@ Adjust your explanation depth accordingly:
 - "intermediate": Standard academic approach, show key steps, use proper notation
 - "advanced": Concise and technical, focus on methodology, discuss edge cases and alternative approaches
 {interests_section}
+{learning_style_section}
+{pace_section}
 
 Problem to solve:
 {problem}
@@ -387,6 +407,8 @@ Adjust complexity accordingly:
 - "intermediate": Standard academic depth, balanced coverage
 - "advanced": Technical detail, edge cases, deeper connections between concepts
 {interests_section}
+{learning_style_section}
+{pace_section}
 
 Study Materials:
 {study_content}
@@ -610,6 +632,8 @@ Important:
 const MODULE_OUTLINE_PROMPT = `You are an expert curriculum designer creating a comprehensive module outline from study materials.
 The student's current teaching level is: {teaching_level}
 {interests_section}
+{learning_style_section}
+{pace_section}
 
 Analyze the following document content and create a detailed outline of ALL topics that should be covered as individual learning modules.
 
@@ -644,8 +668,12 @@ Adjust your content complexity, vocabulary, and examples accordingly:
 - "intermediate": Standard academic language, balanced depth, some assumed background knowledge
 - "advanced": Technical and detailed, assume strong foundational knowledge, include nuances and edge cases
 {interests_section}
+{learning_style_section}
+{pace_section}
 
 You are generating specific learning modules from a pre-planned curriculum outline.
+This content was provided by the student as their study material. It is the AUTHORITATIVE source of truth. Do not contradict it.
+If the content contains questions (with or without answers), treat them as practice/review material — generate modules that teach the concepts being tested, and provide correct answers with explanations grounded in the source material and trusted academic knowledge.
 
 SOURCE MATERIAL:
 {document_text}
@@ -700,6 +728,61 @@ Return ONLY valid JSON in this exact format:
   ]
 }`;
 
+const TUTOR_GREETING_PROMPT = `You are Sage, a warm and encouraging AI tutor. Generate a short greeting (2-3 sentences) for a student who just opened a lesson.
+
+Student's first name: {student_name}
+Module title: {module_title}
+Module topic: {module_topic}
+
+Rules:
+- Use their first name naturally (e.g. "Hey {student_name}!")
+- Briefly reference the lesson topic to set context
+- End with an inviting question or offer to help
+- Keep it warm, concise, and encouraging — no more than 3 sentences
+- If no name is provided, use a friendly generic greeting like "Hey there!"
+- Do NOT use markdown formatting — plain text only`;
+
+const TUTOR_CHAT_PROMPT = `You are Sage, a personalized AI tutor embedded in a learning platform. You are helping a student understand their lesson material.
+
+Student's first name: {student_name}
+Student's age: {student_age}
+Teaching level: {teaching_level}
+{interests_section}
+{learning_style_section}
+{pace_section}
+{weak_topics_section}
+
+Module: {module_title} — {module_topic}
+
+Lesson content:
+{module_content}
+
+Conversation so far:
+{conversation_history}
+
+Teaching style rules:
+- Use the student's first name occasionally (not every message) to keep it personal
+- Adapt language complexity to the teaching level:
+  • dummy = everyday language, zero jargon, lots of analogies
+  • beginner = simple language, define terms, plenty of examples
+  • intermediate = standard academic language
+  • advanced = technical, detailed, discuss nuances
+- If the student has interests listed, use them for real-world analogies when it helps
+- If weak topics are listed and relevant, give extra patience and clarity on those areas
+- ALWAYS ground responses in the lesson content above — do not invent facts
+- If the lesson content was derived from questions/exams, help the student understand the correct answers and the underlying concepts in a tutorial/study format
+- Use Socratic pedagogy: after explaining something, ask a follow-up question to check the student's understanding
+- If the student says "quiz me", ask a focused question about the current lesson and evaluate their answer
+- If the student says "give an example", provide a concrete real-world example from the lesson material
+- If the student says "explain simpler", re-explain using simpler language and analogies
+- Format responses in markdown. Use **bold** for key terms, bullet points for lists
+- Keep responses focused and concise — aim for 2-4 paragraphs max unless the topic demands more
+- Be encouraging but honest — if something is complex, acknowledge it while making it approachable
+
+Student's message: {student_message}
+
+Respond as Sage:`;
+
 function buildInterestsSection(interests, teachingLevel = null) {
   if (!interests || interests.length === 0) return '';
 
@@ -735,6 +818,404 @@ Where relevant, draw sophisticated parallels between academic concepts and the s
 Incorporate the student's interests into explanations through natural analogies and examples. For each major concept, include at least one connection to their interests that genuinely clarifies the idea. The analogy should be self-explanatory — the student should not need to understand a complex hobby concept to grasp the academic one.`;
 }
 
+/**
+ * Build a prompt section describing the student's learning style (VARK).
+ * @param {string} learningStyle - 'visual' | 'auditory' | 'reading_writing' | 'kinesthetic'
+ */
+function buildLearningStyleSection(learningStyle) {
+  if (!learningStyle || learningStyle === 'auto') return '';
+
+  const styleGuides = {
+    visual: `Learning style: VISUAL learner.
+Adaptation rules for visual learners:
+- Use diagrams, charts, mind maps, and visual representations whenever possible
+- Describe spatial relationships and use "picture this..." framing
+- Use color-coding metaphors (e.g. "think of X as the red zone, Y as the green zone")
+- Include visual summaries — tables, comparison grids, and flowchart descriptions
+- When explaining processes, describe them as visual flows or timelines`,
+
+    auditory: `Learning style: AUDITORY learner.
+Adaptation rules for auditory learners:
+- Use conversational, story-telling explanations — narrate the concept as if telling a story
+- Include mnemonics, rhymes, and memorable phrases to aid recall
+- Use plenty of real-world analogies and "imagine someone explaining this to you..." framing
+- Frame explanations as dialogues or Q&A when possible
+- Repeat key terms and definitions in different ways to reinforce through verbal patterns`,
+
+    reading_writing: `Learning style: READING/WRITING learner.
+Adaptation rules for reading/writing learners:
+- Provide detailed written explanations with clear structure and headings
+- Use bullet points, numbered lists, and well-organized text
+- Include definitions, glossary-style key terms, and written summaries
+- Encourage note-taking by providing key points in a format easy to copy
+- Use precise, well-crafted language — clarity and completeness matter most`,
+
+    kinesthetic: `Learning style: KINESTHETIC learner.
+Adaptation rules for kinesthetic learners:
+- Focus on hands-on, step-by-step walkthroughs and practical exercises
+- Use "try this...", "let's work through...", and action-oriented language
+- Break concepts into small, doable steps the student can follow along with
+- Include practice problems, experiments, or real-world applications after each concept
+- Relate abstract ideas to physical/tangible experiences and real-world scenarios`,
+  };
+
+  return styleGuides[learningStyle] || '';
+}
+
+/**
+ * Build a prompt section describing the student's learning pace.
+ * @param {string} pace - 'slow' | 'moderate' | 'fast'
+ */
+function buildPaceSection(pace) {
+  if (!pace || pace === 'auto') return '';
+
+  const paceGuides = {
+    slow: `Learning pace: SLOW (needs more scaffolding).
+Pace adaptation rules:
+- Provide MORE examples and simpler language for every concept
+- Break explanations into smaller, bite-sized chunks — one idea at a time
+- Add extra practice questions and comprehension checks throughout
+- Use step-by-step breakdowns even for straightforward concepts
+- Repeat key ideas using different phrasing for reinforcement
+- Include "checkpoint" summaries after every major point
+- Be extra encouraging and patient in tone`,
+
+    moderate: `Learning pace: MODERATE (balanced approach).
+Pace adaptation rules:
+- Use a balanced mix of explanation and examples
+- Provide 1-2 examples per concept, with optional deeper exploration
+- Standard pacing — cover concepts thoroughly but efficiently
+- Include comprehension checks at natural breakpoints`,
+
+    fast: `Learning pace: FAST (can accelerate).
+Pace adaptation rules:
+- Be concise and direct — skip obvious setup and get to the core insight quickly
+- Minimize repetition — state key points once, clearly
+- Focus on connections between concepts, advanced implications, and edge cases
+- Include challenge questions that test deeper understanding rather than basic recall
+- Assume prerequisites are understood unless the student asks otherwise
+- Offer "deep dive" extensions and advanced applications
+- Connect new concepts to broader frameworks and real-world complexity`,
+  };
+
+  return paceGuides[pace] || '';
+}
+
+// ─── Smart Courses: Topic Study, Syllabus Detection, Cross-Doc, Q&A, Prog Docs ─────
+
+const TOPIC_CURRICULUM_PROMPT = `You are an expert curriculum designer. Research the topic "{topic}" using authoritative academic sources and create comprehensive study material suitable for a {teaching_level} student.
+
+Cover: fundamentals, core concepts, worked examples, practical applications, and advanced considerations.
+Structure the content with clear headings (# ## ###), bullet points, and examples.
+Use markdown formatting. Target 5000-15000 words for a thorough treatment.
+
+IMPORTANT: Only cite information from trusted academic sources (.edu, peer-reviewed journals, official documentation, textbooks). Do not include unverified claims.`;
+
+const DOCUMENT_TYPE_DETECTION_PROMPT = `Analyze this document excerpt and classify its type. Return ONLY valid JSON:
+{ "type": "syllabus|textbook|lecture_notes|problem_set|exam|general", "confidence": 0.0-1.0, "indicators": ["..."] }
+
+Indicators for each type:
+- syllabus: course schedule, grading policy, textbook list, instructor info, office hours, weekly topics
+- problem_set/exam: numbered questions, point values, instructions like "answer all", "show your work", time limits
+- textbook: chapters, detailed explanations, exercises at end of sections
+- lecture_notes: slide-like structure, bullet points, speaker notes
+- general: anything else
+
+Document excerpt:
+{document_text}`;
+
+const SYLLABUS_EXTRACTION_PROMPT = `Extract structured data from this course syllabus. Return ONLY valid JSON:
+{
+  "courseTitle": "...",
+  "description": "...",
+  "textbooks": [{ "title": "...", "author": "...", "isbn": "...", "required": true }],
+  "weeklyTopics": [{ "week": 1, "topic": "...", "readings": "..." }],
+  "learningObjectives": ["..."]
+}
+
+Syllabus text:
+{document_text}`;
+
+const QA_CONTENT_PROCESSING_PROMPT = `This document contains questions (exam/problem set). For each question:
+1. Identify the topic/concept being tested
+2. Provide the correct answer with detailed explanation
+3. Explain the underlying concept as a tutorial
+
+Group by topic and return ONLY valid JSON:
+{
+  "topicGroups": [
+    {
+      "topic": "Topic Name",
+      "tutorialContent": "Comprehensive markdown tutorial teaching the concepts tested by these questions. Include: concept explanation, worked examples, key principles, and common misconceptions. Target 300-500 words per topic.",
+      "questions": [
+        { "question": "Original question text", "answer": "Correct answer", "explanation": "Detailed explanation of why this is correct" }
+      ]
+    }
+  ]
+}
+
+Document content:
+{document_text}`;
+
+const CROSS_DOCUMENT_OUTLINE_PROMPT = `Create a unified curriculum that synthesizes content from multiple study sources.
+Documents:
+{document_summaries}
+
+{syllabus_schedule}
+
+Generate ONE cohesive learning path. Rules:
+- Merge overlapping topics from different sources into single modules
+- Follow logical progression (foundational to advanced)
+- Note which documents contribute to each topic
+- Do NOT create separate sections per textbook — interleave topics intelligently
+
+Return ONLY valid JSON:
+{
+  "modules": [
+    { "title": "Module Title", "topic": "Short Topic Label", "sourceDocuments": ["id1", "id2"], "description": "1-2 sentence description" }
+  ]
+}`;
+
+const CROSS_DOCUMENT_MODULE_PROMPT = `Generate a learning module that synthesizes content from multiple sources.
+Module: {module_title} — {module_topic}
+
+Source material from {source_count} documents:
+{source_texts}
+
+The student's current teaching level is: {teaching_level}
+{interests_section}
+{learning_style_section}
+{pace_section}
+
+Create a unified, cohesive lesson that:
+- Integrates perspectives from all sources naturally
+- Cites sources by name (e.g., "As explained in [Document Name]...")
+- Resolves any contradictions by noting both perspectives
+- Follows the student's teaching level
+
+Return ONLY valid JSON in this exact format:
+{
+  "modules": [
+    {
+      "title": "Module Title",
+      "topic": "Topic Label",
+      "objectives": ["Objective 1", "Objective 2"],
+      "content": "Full lesson content in markdown...",
+      "takeaways": ["Takeaway 1", "Takeaway 2", "Takeaway 3"],
+      "questions": [
+        {
+          "type": "multiple_choice",
+          "question": "Question text?",
+          "options": ["A) Option A", "B) Option B", "C) Option C", "D) Option D"],
+          "correct": "A",
+          "explanation": "Why A is correct...",
+          "topic": "Topic Label"
+        }
+      ]
+    }
+  ]
+}`;
+
+// ─── On-Demand Diagram Generation Prompts ──────────────────────
+
+const DIAGRAM_GENERATION_PROMPT = `You are an expert educational diagram creator. Generate a Mermaid diagram for the following module topic.
+
+Topic: {topic}
+Teaching level: {teaching_level}
+{interests_section}
+
+Module content (for context):
+{content}
+
+Node complexity guidelines based on teaching level:
+- "dummy": 3-5 nodes, extremely simple labels, one-word concepts where possible
+- "beginner": 5-8 nodes, short clear labels, basic relationships
+- "intermediate": 8-12 nodes, standard academic labels, includes sub-processes
+- "advanced": 12+ nodes, technical labels, detailed relationships and edge cases
+
+Rules:
+- Choose the most appropriate Mermaid diagram type for the topic (flowchart, sequence, classDiagram, stateDiagram, erDiagram, mindmap, timeline, etc.)
+- Use clear, educational labels that teach the concept
+- Include meaningful relationship labels on edges
+- The diagram should be self-explanatory and stand alone as a learning aid
+- Do NOT use special characters in node labels that break Mermaid syntax (no parentheses in labels, no quotes inside labels)
+
+Return ONLY valid JSON:
+{
+  "mermaid_type": "flowchart|sequence|classDiagram|stateDiagram|mindmap|timeline|etc",
+  "mermaid_code": "graph TD\\n  A[Start] --> B[End]",
+  "title": "Short descriptive title for the diagram",
+  "description": "One-sentence explanation of what this diagram shows"
+}`;
+
+const D2_DIAGRAM_GENERATION_PROMPT = `You are an expert educational diagram creator using D2 diagramming language. Generate a D2 diagram for the following module topic.
+
+Topic: {topic}
+Teaching level: {teaching_level}
+{interests_section}
+
+Module content (for context):
+{content}
+
+Node complexity guidelines based on teaching level:
+- "dummy": 3-5 nodes, simple labels
+- "beginner": 5-8 nodes, clear labels
+- "intermediate": 8-12 nodes, standard labels
+- "advanced": 12+ nodes, technical labels
+
+Rules:
+- Use D2 syntax (https://d2lang.com/) for the diagram
+- Use containers, connections, and labels effectively
+- The diagram should be educational and self-explanatory
+- Use shape styles where appropriate (rectangle, oval, diamond, etc.)
+
+Return ONLY valid JSON:
+{
+  "d2_code": "x -> y: relationship\\ny -> z",
+  "title": "Short descriptive title",
+  "description": "One-sentence explanation of what this diagram shows"
+}`;
+
+const DIAGRAM_TYPE_SELECTOR_PROMPT = `You are an expert at choosing the best visual representation for educational content.
+
+Given this topic and content snippet, recommend the best diagram format.
+
+Topic: {topic}
+Content snippet: {content_snippet}
+
+Options:
+- "mermaid": Best for flowcharts, sequences, state diagrams, class diagrams, mind maps, timelines. Good for showing processes, relationships, hierarchies.
+- "d2": Best for architecture diagrams, system designs, complex nested structures. Produces cleaner SVGs for technical diagrams.
+- "image": Best for real-world illustrations, anatomical diagrams, geographic maps, artistic/visual concepts that can't be represented as node-edge diagrams.
+
+Return ONLY valid JSON:
+{
+  "recommended_type": "mermaid|d2|image",
+  "reason": "Brief explanation of why this format is best for this topic"
+}`;
+
+/**
+ * Build an interests section specifically for diagram generation.
+ * Maps interests to visual style guidance for diagram labels and analogies.
+ */
+function buildDiagramInterestsSection(interests, teachingLevel) {
+  if (!interests || interests.length === 0) return '';
+
+  const interestsList = interests.join(', ');
+
+  if (teachingLevel === 'dummy' || teachingLevel === 'beginner') {
+    return `The student's interests include: ${interestsList}.
+Where possible, use their interests to make diagram node labels and descriptions more relatable:
+- Sports fan → use field/team/game analogies in node labels (e.g., "Pass the Data Ball")
+- Gamer → use quest/level/inventory metaphors (e.g., "Level 1: Input" → "Level 2: Process")
+- Music lover → use band/rhythm/harmony analogies
+- Keep analogies simple and instantly understandable — don't force them if they don't fit naturally.`;
+  }
+
+  return `The student's interests include: ${interestsList}.
+Where natural, incorporate their interests into diagram labels or descriptions to make the visual more engaging and memorable. Don't force analogies — only use them when they genuinely clarify the concept.`;
+}
+
+// ─── Medical Resource Enrichment Prompts ───────────────────────
+
+const MEDICAL_TOPIC_EXTRACTION_PROMPT = `You are a medical education specialist. Analyze this module content and extract key medical/clinical terms that would benefit from external resource enrichment.
+
+Module topic: {topic}
+Module content:
+{content}
+
+For each medical term or concept, provide:
+1. The term as it would be searched in PubMed (formal medical terminology)
+2. A simpler synonym for ICD-10 lookup (disease/condition name)
+3. The WikiDoc category it would fall under
+
+Return ONLY valid JSON:
+{
+  "is_medical": true,
+  "terms": [
+    {
+      "pubmed_query": "formal medical search query for PubMed",
+      "icd10_term": "condition or disease name for ICD-10 lookup",
+      "wikidoc_topic": "WikiDoc article title",
+      "display_term": "human-readable term for the student"
+    }
+  ],
+  "medical_specialty": "cardiology|neurology|pharmacology|anatomy|pathology|etc",
+  "textbook_query": "search query for finding relevant open textbooks"
+}
+
+If the content is NOT medical/clinical in nature, return:
+{ "is_medical": false, "terms": [], "medical_specialty": null, "textbook_query": null }`;
+
+const GAME_GENERATION_PROMPT = `You are a game content generator for an educational platform. Generate interactive learning game data as strictly typed JSON.
+
+**Game Type:** {game_type}
+**Topic:** {topic}
+**Difficulty:** {difficulty}
+**Number of items:** {count}
+
+**Source Material:**
+{content}
+
+Based on the game type, generate the following JSON:
+
+### For "quiz" type:
+{
+  "type": "quiz",
+  "questions": [
+    {
+      "question": "Clear question text (may include LaTeX math as $...$ or $$...$$)",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correct": 0,
+      "explanation": "Brief explanation of the correct answer"
+    }
+  ],
+  "xpReward": 10
+}
+
+### For "matching" type:
+{
+  "type": "matching",
+  "pairs": [
+    { "term": "Term or concept", "definition": "Matching definition or description" }
+  ],
+  "xpReward": 15
+}
+
+### For "fill_blank" type:
+{
+  "type": "fill_blank",
+  "items": [
+    {
+      "sentence": "The ____ is responsible for pumping blood.",
+      "blank": "____",
+      "answer": "heart",
+      "hint": "A muscular organ in the chest"
+    }
+  ],
+  "xpReward": 12
+}
+
+### For "speed_round" type:
+{
+  "type": "speed_round",
+  "statements": [
+    { "text": "Statement to evaluate as true or false", "isTrue": true, "explanation": "Why this is true/false" }
+  ],
+  "timePerQuestion": 8,
+  "xpReward": 20
+}
+
+**Rules:**
+- Difficulty scaling: "easy" = basic recall, "medium" = application/understanding, "hard" = analysis/synthesis
+- All content MUST be grounded in the provided source material
+- Questions must be unambiguous with exactly one correct answer
+- For matching, provide exactly {count} pairs
+- For fill_blank, use ____ as the blank marker in sentences
+- For speed_round, aim for roughly 50/50 true/false split
+- Use LaTeX notation for any mathematical expressions
+- Return ONLY the JSON object, no markdown fences, no extra text`;
+
 module.exports = {
   MODULE_GENERATION_PROMPT,
   MODULE_OUTLINE_PROMPT,
@@ -755,5 +1236,21 @@ module.exports = {
   DIAGRAM_DETECTION_PROMPT,
   DIAGRAM_ANALYSIS_PROMPT,
   DIAGRAM_SIMPLIFY_PROMPT,
+  DIAGRAM_GENERATION_PROMPT,
+  D2_DIAGRAM_GENERATION_PROMPT,
+  DIAGRAM_TYPE_SELECTOR_PROMPT,
+  MEDICAL_TOPIC_EXTRACTION_PROMPT,
+  TUTOR_GREETING_PROMPT,
+  TUTOR_CHAT_PROMPT,
+  TOPIC_CURRICULUM_PROMPT,
+  DOCUMENT_TYPE_DETECTION_PROMPT,
+  SYLLABUS_EXTRACTION_PROMPT,
+  QA_CONTENT_PROCESSING_PROMPT,
+  CROSS_DOCUMENT_OUTLINE_PROMPT,
+  CROSS_DOCUMENT_MODULE_PROMPT,
   buildInterestsSection,
+  buildLearningStyleSection,
+  buildPaceSection,
+  buildDiagramInterestsSection,
+  GAME_GENERATION_PROMPT,
 };

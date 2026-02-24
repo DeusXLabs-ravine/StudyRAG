@@ -82,11 +82,150 @@ async function extractDocxFromBuffer(buffer) {
 }
 
 /**
+ * Decode XML entities to plain text.
+ */
+function decodeXmlEntities(str) {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+}
+
+/**
+ * Extract paragraph-structured text from an XML string.
+ * Respects <a:p> paragraph boundaries and joins text runs within each paragraph.
+ * Returns an array of paragraph strings.
+ */
+function extractParagraphs(xml) {
+  const paragraphs = [];
+  const paraRegex = /<a:p\b[^>]*>(.*?)<\/a:p>/gs;
+  let paraMatch;
+
+  while ((paraMatch = paraRegex.exec(xml)) !== null) {
+    const paraContent = paraMatch[1];
+    const runs = [];
+    const runRegex = /<a:t>(.*?)<\/a:t>/gs;
+    let runMatch;
+    while ((runMatch = runRegex.exec(paraContent)) !== null) {
+      const text = decodeXmlEntities(runMatch[1]);
+      if (text) runs.push(text);
+    }
+    if (runs.length > 0) {
+      paragraphs.push(runs.join(''));
+    }
+  }
+
+  return paragraphs;
+}
+
+/**
+ * Extract table text from XML containing <a:tbl> elements.
+ * Returns a markdown-formatted table string, or empty string if no tables found.
+ */
+function extractTables(xml) {
+  const tables = [];
+  const tableRegex = /<a:tbl\b[^>]*>(.*?)<\/a:tbl>/gs;
+  let tableMatch;
+
+  while ((tableMatch = tableRegex.exec(xml)) !== null) {
+    const tableXml = tableMatch[1];
+    const rows = [];
+    const rowRegex = /<a:tr\b[^>]*>(.*?)<\/a:tr>/gs;
+    let rowMatch;
+
+    while ((rowMatch = rowRegex.exec(tableXml)) !== null) {
+      const rowXml = rowMatch[1];
+      const cells = [];
+      const cellRegex = /<a:tc\b[^>]*>(.*?)<\/a:tc>/gs;
+      let cellMatch;
+
+      while ((cellMatch = cellRegex.exec(rowXml)) !== null) {
+        const cellParagraphs = extractParagraphs(cellMatch[1]);
+        cells.push(cellParagraphs.join(' ') || '');
+      }
+
+      if (cells.length > 0) {
+        rows.push(cells);
+      }
+    }
+
+    if (rows.length > 0) {
+      // Format as markdown table
+      const header = '| ' + rows[0].map(c => c || ' ').join(' | ') + ' |';
+      const separator = '| ' + rows[0].map(() => '---').join(' | ') + ' |';
+      const body = rows.slice(1).map(row =>
+        '| ' + row.map(c => c || ' ').join(' | ') + ' |'
+      ).join('\n');
+      tables.push([header, separator, body].filter(Boolean).join('\n'));
+    }
+  }
+
+  return tables.join('\n\n');
+}
+
+/**
+ * Build a map from slide number to its notes slide entry name.
+ * Reads ppt/slides/_rels/slideN.xml.rels to find the notesSlide relationship.
+ */
+function buildNotesMap(entries) {
+  const notesMap = new Map();
+
+  const relEntries = entries.filter(e =>
+    /^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/.test(e.entryName)
+  );
+
+  for (const relEntry of relEntries) {
+    try {
+      const slideNum = parseInt(relEntry.entryName.match(/slide(\d+)/)[1]);
+      const xml = relEntry.getData().toString('utf-8');
+      // Look for a relationship pointing to a notesSlide
+      const noteRefRegex = /Target="\.\.\/notesSlides\/(notesSlide\d+\.xml)"/;
+      const match = noteRefRegex.exec(xml);
+      if (match) {
+        notesMap.set(slideNum, `ppt/notesSlides/${match[1]}`);
+      }
+    } catch {
+      // Skip malformed relationship files
+    }
+  }
+
+  return notesMap;
+}
+
+/**
+ * Extract text from a single slide's XML, returning structured parts.
+ * Separates table content from body text to avoid duplication.
+ */
+function extractSlideContent(xml) {
+  // Remove table XML before extracting body paragraphs to avoid duplication
+  const xmlWithoutTables = xml.replace(/<a:tbl\b[^>]*>.*?<\/a:tbl>/gs, '');
+
+  // Extract body paragraphs (main slide content, excluding tables)
+  const bodyParagraphs = extractParagraphs(xmlWithoutTables);
+
+  // Extract table content separately with structure preserved
+  const tableText = extractTables(xml);
+
+  return { bodyParagraphs, tableText };
+}
+
+/**
  * Extract text from PowerPoint .pptx files.
+ * Extracts text from slides, speaker notes, tables, and SmartArt diagrams.
  * PPTX is a ZIP containing XML slides at ppt/slides/slide*.xml
  */
 async function extractPptxFromBuffer(buffer) {
-  const zip = new AdmZip(buffer);
+  let zip;
+  try {
+    zip = new AdmZip(buffer);
+  } catch (err) {
+    throw new Error(`Invalid or corrupt PPTX file: ${err.message}`);
+  }
+
   const entries = zip.getEntries();
 
   // Find slide XML files and sort by slide number
@@ -98,33 +237,109 @@ async function extractPptxFromBuffer(buffer) {
       return numA - numB;
     });
 
-  const slideTexts = [];
-  for (const entry of slideEntries) {
-    const xml = entry.getData().toString('utf-8');
-    // Extract text content from XML <a:t> tags (PowerPoint text runs)
-    const textParts = [];
-    const regex = /<a:t>(.*?)<\/a:t>/gs;
-    let match;
-    while ((match = regex.exec(xml)) !== null) {
-      textParts.push(match[1]);
+  if (slideEntries.length === 0) {
+    return {
+      text: '',
+      pages: null,
+      metadata: { slides: 0, format: 'pptx' },
+    };
+  }
+
+  // Build notes map: slide number -> notes entry path
+  const notesMap = buildNotesMap(entries);
+
+  // Build a lookup for all entries by name for quick access
+  const entryByName = new Map();
+  for (const e of entries) {
+    entryByName.set(e.entryName, e);
+  }
+
+  // Extract SmartArt / diagram text (shared across slides)
+  let diagramText = '';
+  const diagramEntries = entries.filter(e =>
+    /^ppt\/diagrams\/data\d*\.xml$/.test(e.entryName)
+  );
+  if (diagramEntries.length > 0) {
+    const diagramParts = [];
+    for (const de of diagramEntries) {
+      try {
+        const dxml = de.getData().toString('utf-8');
+        const paragraphs = extractParagraphs(dxml);
+        if (paragraphs.length > 0) {
+          diagramParts.push(paragraphs.join('\n'));
+        }
+      } catch {
+        // Skip malformed diagram files
+      }
     }
-    if (textParts.length > 0) {
-      const slideNum = entry.entryName.match(/slide(\d+)/)[1];
-      slideTexts.push(`## Slide ${slideNum}\n\n${textParts.join(' ')}`);
+    if (diagramParts.length > 0) {
+      diagramText = diagramParts.join('\n');
     }
   }
 
-  // Build per-slide pages for PageIndex
-  const pages = slideEntries.map((entry, i) => {
-    const xml = entry.getData().toString('utf-8');
-    const textParts = [];
-    const rx = /<a:t>(.*?)<\/a:t>/gs;
-    let m;
-    while ((m = rx.exec(xml)) !== null) {
-      textParts.push(m[1]);
+  const slideTexts = [];
+  const pages = [];
+
+  for (let i = 0; i < slideEntries.length; i++) {
+    const entry = slideEntries[i];
+    const slideNum = parseInt(entry.entryName.match(/slide(\d+)/)[1]);
+
+    try {
+      const xml = entry.getData().toString('utf-8');
+      const { bodyParagraphs, tableText } = extractSlideContent(xml);
+
+      // Build slide text with proper structure
+      const parts = [];
+
+      // Main slide body text (paragraphs separated by newlines)
+      if (bodyParagraphs.length > 0) {
+        parts.push(bodyParagraphs.join('\n'));
+      }
+
+      // Tables
+      if (tableText) {
+        parts.push(tableText);
+      }
+
+      // Speaker notes
+      const notesPath = notesMap.get(slideNum);
+      if (notesPath) {
+        const notesEntry = entryByName.get(notesPath);
+        if (notesEntry) {
+          try {
+            const notesXml = notesEntry.getData().toString('utf-8');
+            const notesParagraphs = extractParagraphs(notesXml);
+            // Filter out slide number placeholder text that PowerPoint inserts
+            const meaningfulNotes = notesParagraphs.filter(p => {
+              const trimmed = p.trim();
+              // Skip empty, pure numeric (slide number placeholders), and very short generic text
+              return trimmed && !/^\d+$/.test(trimmed);
+            });
+            if (meaningfulNotes.length > 0) {
+              parts.push(`Speaker Notes:\n${meaningfulNotes.join('\n')}`);
+            }
+          } catch {
+            // Skip malformed notes
+          }
+        }
+      }
+
+      const slideText = parts.join('\n\n');
+      if (slideText.trim()) {
+        slideTexts.push(`## Slide ${slideNum}\n\n${slideText}`);
+        pages.push({ pageNumber: i + 1, text: slideText });
+      }
+    } catch (err) {
+      console.warn(`[PPTX] Failed to parse slide ${slideNum}: ${err.message}`);
+      // Continue processing remaining slides
     }
-    return { pageNumber: i + 1, text: textParts.join(' ') };
-  }).filter(p => p.text.trim());
+  }
+
+  // Append SmartArt text as a supplementary section if it contains text
+  // not already captured in slides
+  if (diagramText.trim()) {
+    slideTexts.push(`## Diagrams & SmartArt\n\n${diagramText}`);
+  }
 
   return {
     text: slideTexts.join('\n\n'),
@@ -132,6 +347,8 @@ async function extractPptxFromBuffer(buffer) {
     metadata: {
       slides: slideEntries.length,
       format: 'pptx',
+      hasNotes: notesMap.size > 0,
+      hasDiagrams: diagramEntries.length > 0,
     },
   };
 }
@@ -233,4 +450,24 @@ async function extractTextFromUrl(url, ext) {
   return extractTextFromBuffer(buffer, ext);
 }
 
-module.exports = { extractTextFromBuffer, extractTextFromUrl };
+/**
+ * Normalize typed note content into the standard { text, pages, metadata } shape
+ * that runProcessingPipeline expects.
+ * @param {string} content - The raw note text (may include markdown)
+ * @param {string} title - The note title
+ */
+function extractTextFromNote(content, title = 'Untitled Note') {
+  const text = title ? `# ${title}\n\n${content}` : content;
+  return {
+    text,
+    pages: null,
+    metadata: {
+      title,
+      format: 'note',
+      charCount: content.length,
+      wordCount: content.split(/\s+/).filter(Boolean).length,
+    },
+  };
+}
+
+module.exports = { extractTextFromBuffer, extractTextFromUrl, extractTextFromNote };

@@ -1,10 +1,18 @@
 const { v4: uuidv4 } = require('uuid');
-const { extractTextFromBuffer } = require('../services/fileProcessor');
+const { extractTextFromBuffer, extractTextFromNote } = require('../services/fileProcessor');
+const { extractContentFromUrl } = require('../services/webScrapingService');
 const { buildPageIndex, invalidateDocCache } = require('../services/pageIndexService');
 const vectorStore = require('../services/vectorStore');
 const { generateInitialModules, generateRemainingModules, deleteModulesByDocument, enrichModulesWithResources } = require('../services/moduleGenerator');
 const { researchDocument, getResourcesByDocument, deleteResourcesByDocument } = require('../services/webResearchService');
 const { processDocumentDiagrams, deleteDiagramsByDocument } = require('../services/diagramService');
+// Lazy-loaded to avoid circular dependencies (syllabusDetection imports registerUrlInternal from this file)
+let _topicResearchService, _syllabusDetectionService, _qaContentService, _programmingDocsService;
+function getTopicResearchService() { return _topicResearchService || (_topicResearchService = require('../services/topicResearchService')); }
+function getSyllabusDetectionService() { return _syllabusDetectionService || (_syllabusDetectionService = require('../services/syllabusDetectionService')); }
+function getQAContentService() { return _qaContentService || (_qaContentService = require('../services/qaContentService')); }
+function getProgrammingDocsService() { return _programmingDocsService || (_programmingDocsService = require('../services/programmingDocsService')); }
+const courseService = require('../services/courseService');
 const supabase = require('../config/database');
 const { allowedFileTypes } = require('../config/env');
 const path = require('path');
@@ -237,6 +245,53 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
     log('TOTAL PIPELINE (with enrichment)', pipelineStart);
   })();
 
+  // Phase 3: Content intelligence detection (background, non-blocking)
+  (async () => {
+    try {
+      const { detectDocumentType } = getSyllabusDetectionService();
+      const docType = await detectDocumentType(text);
+      const currentMeta = metadata || {};
+
+      // Store document subtype
+      await supabase.from('documents')
+        .update({ document_subtype: docType.type })
+        .eq('id', docId);
+
+      await vectorStore.updateDocumentStatus(docId, {
+        extractedMetadata: { ...currentMeta, documentSubtype: docType.type },
+      });
+
+      console.log(`${prefix} Content intelligence: type=${docType.type}, confidence=${docType.confidence}`);
+
+      // Syllabus detection → auto-create course
+      if (docType.type === 'syllabus' && docType.confidence > 0.7) {
+        console.log(`${prefix} Syllabus detected — extracting course data...`);
+        const { extractSyllabusData, createCourseFromSyllabus } = getSyllabusDetectionService();
+        const syllabusData = await extractSyllabusData(text);
+        await createCourseFromSyllabus(docId, syllabusData, userId);
+      }
+
+      // Q&A content → generate tutorial modules with answers
+      if (['problem_set', 'exam'].includes(docType.type) && docType.confidence > 0.7) {
+        console.log(`${prefix} Q&A content detected — generating tutorial modules...`);
+        const { processQAContent } = getQAContentService();
+        await processQAContent(docId, text, userId);
+      }
+
+      // Programming documentation detection
+      const { detectProgrammingContext } = getProgrammingDocsService();
+      const progContext = detectProgrammingContext(text);
+      if (progContext.isProgramming) {
+        console.log(`${prefix} Programming content detected: ${progContext.language} (${progContext.frameworks.join(', ')})`);
+        await vectorStore.updateDocumentStatus(docId, {
+          extractedMetadata: { ...currentMeta, documentSubtype: docType.type, programmingContext: progContext },
+        });
+      }
+    } catch (err) {
+      console.error(`${prefix} Content intelligence failed: ${err.message}`);
+    }
+  })();
+
   // Diagram detection & analysis (also background, independent from web research)
   if (buffer && ext) {
     (async () => {
@@ -325,7 +380,10 @@ async function reprocessDocument(req, res, next) {
       return res.status(404).json({ error: 'Document not found' });
     }
 
-    if (!doc.storagePath) {
+    // URL and note documents can be reprocessed from their stored source
+    const sourceType = doc.sourceType || 'file';
+
+    if (sourceType === 'file' && !doc.storagePath) {
       return res.status(400).json({
         error: 'This document was uploaded before the storage migration. Please delete and re-upload it.',
       });
@@ -350,11 +408,34 @@ async function reprocessDocument(req, res, next) {
 
     res.json({ message: 'Reprocessing started', status: 'processing' });
 
-    // Download from Supabase Storage and reprocess (pass old pages for incremental diffing)
-    processDocumentFromStorage(id, doc.storagePath, doc.fileType, oldPages, req.user?.id || null).catch(async (err) => {
-      console.error(`Error reprocessing document ${id}:`, err);
-      await vectorStore.updateDocumentStatus(id, { status: 'failed', error: err.message });
-    });
+    const userId = req.user?.id || null;
+
+    if (sourceType === 'url' && doc.sourceUrl) {
+      // Re-fetch from the original URL
+      processUrlDocument(id, doc.sourceUrl, userId).catch(async (err) => {
+        console.error(`Error reprocessing URL document ${id}:`, err);
+        await vectorStore.updateDocumentStatus(id, { status: 'failed', error: err.message });
+      });
+    } else if (sourceType === 'note') {
+      // Re-process from stored source_content
+      // Fetch source_content directly since formatDoc omits it
+      const { data: raw } = await supabase.from('documents').select('source_content').eq('id', id).single();
+      const content = raw?.source_content || '';
+      if (!content) {
+        await vectorStore.updateDocumentStatus(id, { status: 'failed', error: 'No stored note content found' });
+        return;
+      }
+      processNoteDocument(id, content, doc.originalName, userId).catch(async (err) => {
+        console.error(`Error reprocessing note document ${id}:`, err);
+        await vectorStore.updateDocumentStatus(id, { status: 'failed', error: err.message });
+      });
+    } else {
+      // Download from Supabase Storage and reprocess (pass old pages for incremental diffing)
+      processDocumentFromStorage(id, doc.storagePath, doc.fileType, oldPages, userId).catch(async (err) => {
+        console.error(`Error reprocessing document ${id}:`, err);
+        await vectorStore.updateDocumentStatus(id, { status: 'failed', error: err.message });
+      });
+    }
   } catch (error) {
     next(error);
   }
@@ -457,4 +538,293 @@ async function registerDocument(req, res, next) {
   }
 }
 
-module.exports = { uploadDocument, signUpload, registerDocument, listDocuments, getDocument, deleteDocument, reprocessDocument, getDocumentResources };
+/**
+ * Register a URL as a document source. Fetches, extracts, and processes.
+ */
+async function registerUrl(req, res, next) {
+  try {
+    const { url } = req.body;
+    if (!url) {
+      return res.status(400).json({ error: 'url is required' });
+    }
+
+    // Validate URL format
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return res.status(400).json({ error: 'Only HTTP and HTTPS URLs are supported' });
+    }
+
+    const userId = req.user?.id || null;
+
+    // Check for duplicate URL per user
+    const dupQuery = supabase
+      .from('documents')
+      .select('id')
+      .eq('source_url', url);
+    if (userId) dupQuery.eq('user_id', userId);
+    const { data: existing } = await dupQuery.limit(1);
+    if (existing && existing.length > 0) {
+      return res.status(409).json({ error: 'This URL has already been added', existingId: existing[0].id });
+    }
+
+    const docId = uuidv4();
+    const displayName = parsedUrl.hostname + parsedUrl.pathname.slice(0, 60);
+
+    await vectorStore.addDocument(docId, {
+      originalName: displayName,
+      filename: `url_${docId}`,
+      filePath: url,
+      fileType: 'url',
+      fileSize: 0,
+      status: 'processing',
+      uploadDate: new Date().toISOString(),
+      userId,
+      sourceType: 'url',
+      sourceUrl: url,
+    });
+
+    res.status(202).json({
+      id: docId,
+      originalName: displayName,
+      sourceType: 'url',
+      sourceUrl: url,
+      status: 'processing',
+      message: 'URL registered. Fetching and processing started.',
+    });
+
+    // Background processing
+    processUrlDocument(docId, url, userId).catch(async (err) => {
+      console.error(`Error processing URL document ${docId}:`, err);
+      await vectorStore.updateDocumentStatus(docId, { status: 'failed', error: err.message });
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function processUrlDocument(docId, url, userId = null) {
+  const prefix = `[Pipeline ${docId.slice(0, 8)}]`;
+  const t = Date.now();
+
+  const { text, pages: rawPages, metadata } = await extractContentFromUrl(url);
+  console.log(`${prefix} URL extraction: ${((Date.now() - t) / 1000).toFixed(1)}s (${text.length} chars)`);
+
+  // Update the document name with the extracted title if available
+  if (metadata.title) {
+    await vectorStore.addDocument(docId, {
+      originalName: metadata.title,
+      filename: `url_${docId}`,
+      filePath: url,
+      fileType: 'url',
+      fileSize: text.length,
+      status: 'processing',
+      userId,
+      sourceType: 'url',
+      sourceUrl: url,
+      extractedMetadata: metadata,
+    });
+  }
+
+  await runProcessingPipeline(docId, text, metadata, rawPages, null, null, userId);
+}
+
+/**
+ * Register typed notes as a document source.
+ */
+async function registerNote(req, res, next) {
+  try {
+    const { title, content } = req.body;
+    if (!content || !content.trim()) {
+      return res.status(400).json({ error: 'content is required' });
+    }
+    if (content.length > 512000) { // ~500KB
+      return res.status(400).json({ error: 'Note content exceeds maximum size (500KB)' });
+    }
+
+    const userId = req.user?.id || null;
+    const docId = uuidv4();
+    const noteTitle = title?.trim() || 'Untitled Note';
+
+    await vectorStore.addDocument(docId, {
+      originalName: noteTitle,
+      filename: `note_${docId}`,
+      filePath: `note_${docId}`,
+      fileType: 'note',
+      fileSize: content.length,
+      status: 'processing',
+      uploadDate: new Date().toISOString(),
+      userId,
+      sourceType: 'note',
+      sourceContent: content,
+    });
+
+    res.status(202).json({
+      id: docId,
+      originalName: noteTitle,
+      sourceType: 'note',
+      status: 'processing',
+      message: 'Note saved. Processing started.',
+    });
+
+    // Background processing
+    processNoteDocument(docId, content, noteTitle, userId).catch(async (err) => {
+      console.error(`Error processing note document ${docId}:`, err);
+      await vectorStore.updateDocumentStatus(docId, { status: 'failed', error: err.message });
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function processNoteDocument(docId, content, title, userId = null) {
+  const prefix = `[Pipeline ${docId.slice(0, 8)}]`;
+  const t = Date.now();
+
+  const { text, pages: rawPages, metadata } = extractTextFromNote(content, title);
+  console.log(`${prefix} Note processing: ${((Date.now() - t) / 1000).toFixed(1)}s (${text.length} chars)`);
+
+  await runProcessingPipeline(docId, text, metadata, rawPages, null, null, userId);
+}
+
+/**
+ * Toggle the is_primary_source flag on a document.
+ */
+async function togglePrimarySource(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { isPrimary } = req.body;
+
+    const doc = await vectorStore.getDocument(id);
+    if (!doc) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    await vectorStore.updateDocumentStatus(id, { isPrimarySource: !!isPrimary });
+
+    res.json({
+      id,
+      isPrimarySource: !!isPrimary,
+      message: isPrimary ? 'Document marked as primary source' : 'Primary source flag removed',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * POST /register-topic — Study a topic without uploading a document.
+ * AI researches the topic and generates a full curriculum.
+ */
+async function registerTopic(req, res, next) {
+  try {
+    const { topic, description } = req.body;
+    if (!topic || !topic.trim()) {
+      return res.status(400).json({ error: 'topic is required' });
+    }
+    if (topic.trim().length > 200) {
+      return res.status(400).json({ error: 'topic must be 200 characters or fewer' });
+    }
+
+    const userId = req.user?.id || null;
+    const docId = uuidv4();
+    const topicTitle = topic.trim();
+
+    // Create document record for the topic
+    await vectorStore.addDocument(docId, {
+      originalName: topicTitle,
+      filename: `topic_${docId}`,
+      filePath: `topic_${docId}`,
+      fileType: 'topic',
+      fileSize: 0,
+      status: 'processing',
+      uploadDate: new Date().toISOString(),
+      userId,
+      sourceType: 'topic',
+      sourceContent: description || null,
+    });
+
+    res.status(202).json({
+      id: docId,
+      originalName: topicTitle,
+      sourceType: 'topic',
+      status: 'processing',
+      message: 'Topic registered. AI is researching and generating your curriculum.',
+    });
+
+    // Background: research topic → generate modules
+    (async () => {
+      try {
+        const { researchTopic } = getTopicResearchService();
+        const { text, metadata } = await researchTopic(topicTitle, userId);
+
+        // Store the researched text as source_content
+        await supabase.from('documents').update({
+          source_content: text,
+          file_size: text.length,
+        }).eq('id', docId);
+
+        const rawPages = null;
+        await runProcessingPipeline(docId, text, metadata, rawPages, null, null, userId);
+
+        // Auto-create a course for the topic
+        const courseId = await courseService.createCourse(topicTitle, description || `AI-researched curriculum for: ${topicTitle}`, 'topic', userId);
+        await courseService.addDocumentToCourse(courseId, docId, 'source', 0);
+        await courseService.updateCourseStatus(courseId, { status: 'ready' });
+      } catch (err) {
+        console.error(`Error processing topic "${topicTitle}" for doc ${docId}:`, err);
+        await vectorStore.updateDocumentStatus(docId, { status: 'failed', error: err.message });
+      }
+    })();
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Internal helper to register a URL document programmatically (no req/res).
+ * Used by syllabusDetectionService to auto-import free textbooks.
+ * Returns the new document ID or null on failure.
+ */
+async function registerUrlInternal(url, userId = null) {
+  const docId = uuidv4();
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    return null;
+  }
+
+  const displayName = parsedUrl.hostname + parsedUrl.pathname.slice(0, 60);
+
+  await vectorStore.addDocument(docId, {
+    originalName: displayName,
+    filename: `url_${docId}`,
+    filePath: url,
+    fileType: 'url',
+    fileSize: 0,
+    status: 'processing',
+    uploadDate: new Date().toISOString(),
+    userId,
+    sourceType: 'url',
+    sourceUrl: url,
+  });
+
+  // Background processing
+  processUrlDocument(docId, url, userId).catch(async (err) => {
+    console.error(`Error processing internal URL document ${docId}:`, err);
+    await vectorStore.updateDocumentStatus(docId, { status: 'failed', error: err.message });
+  });
+
+  return docId;
+}
+
+module.exports = {
+  uploadDocument, signUpload, registerDocument, listDocuments, getDocument,
+  deleteDocument, reprocessDocument, getDocumentResources,
+  registerUrl, registerNote, togglePrimarySource, registerTopic, registerUrlInternal,
+};

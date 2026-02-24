@@ -22,13 +22,14 @@ async function queryChat(req, res, next) {
     const { data: recentRows } = await histQuery;
     const recentMessages = (recentRows || []).reverse();
 
-    const { answer, sources } = await queryWithRAG(query, documentId || null, recentMessages, userId);
+    const { answer, sources, webSources } = await queryWithRAG(query, documentId || null, recentMessages, userId);
 
     const message = {
       id: uuidv4(),
       query,
       answer,
       sources,
+      webSources: webSources || [],
       documentId: documentId || null,
       timestamp: new Date().toISOString(),
     };

@@ -1,18 +1,20 @@
 const supabase = require('../config/database');
 const { getGenerativeModel, getSearchGroundedModel } = require('../config/gemini');
-const { SOLVER_PROMPT, SOLVER_FOLLOWUP_PROMPT, buildInterestsSection } = require('../utils/prompts');
+const { SOLVER_PROMPT, SOLVER_FOLLOWUP_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection } = require('../utils/prompts');
 const vectorStore = require('./vectorStore');
 const { searchPageIndex } = require('./pageIndexService');
-const { getUserTeachingLevel, getUserInterests } = require('./userProfileService');
+const { getUserTeachingLevel, getUserInterests, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
 const { v4: uuidv4 } = require('uuid');
 
 /**
  * Solve a STEM problem step-by-step using Gemini 3 Pro.
  */
 async function solveProblem(problem, subject, docId, useWebSearch, userId = null) {
-  const [teachingLevel, interests] = await Promise.all([
+  const [teachingLevel, interests, learningStyle, learningPace] = await Promise.all([
     getUserTeachingLevel(userId),
     getUserInterests(userId),
+    getEffectiveLearningStyle(userId),
+    getEffectiveLearningPace(userId),
   ]);
 
   // Build optional context from uploaded study materials (PRIMARY source)
@@ -60,7 +62,9 @@ async function solveProblem(problem, subject, docId, useWebSearch, userId = null
     .replace('{teaching_level}', teachingLevel)
     .replace('{problem}', problem)
     .replace('{context_section}', contextSection)
-    .replace('{interests_section}', buildInterestsSection(interests));
+    .replace('{interests_section}', buildInterestsSection(interests))
+    .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
+    .replace('{pace_section}', buildPaceSection(learningPace));
 
   // Always use advanced model for problem solving; optionally with web search grounding
   const model = useWebSearch

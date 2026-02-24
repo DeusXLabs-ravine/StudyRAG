@@ -96,6 +96,65 @@ const useDocumentStore = create((set, get) => ({
       // ignore
     }
   },
+
+  addUrl: async (url) => {
+    set({ error: null });
+    try {
+      const result = await documentService.registerUrl(url);
+      set(state => ({
+        documents: [...state.documents, { ...result, status: 'processing' }],
+      }));
+      return result;
+    } catch (error) {
+      const msg = error.response?.data?.error || error.message;
+      set({ error: msg });
+      throw error;
+    }
+  },
+
+  addNote: async (title, content) => {
+    set({ error: null });
+    try {
+      const result = await documentService.registerNote(title, content);
+      set(state => ({
+        documents: [...state.documents, { ...result, status: 'processing' }],
+      }));
+      return result;
+    } catch (error) {
+      const msg = error.response?.data?.error || error.message;
+      set({ error: msg });
+      throw error;
+    }
+  },
+
+  togglePrimary: async (id, isPrimary) => {
+    try {
+      await documentService.togglePrimarySource(id, isPrimary);
+      set(state => ({
+        documents: state.documents.map(d =>
+          d.id === id ? { ...d, isPrimarySource: isPrimary } : d
+        ),
+      }));
+    } catch (error) {
+      set({ error: error.message });
+      throw error;
+    }
+  },
+
+  addTopic: async (topic, description) => {
+    set({ error: null });
+    try {
+      const result = await documentService.registerTopic(topic, description);
+      set(state => ({
+        documents: [...state.documents, { ...result, status: 'processing' }],
+      }));
+      return result;
+    } catch (error) {
+      const msg = error.response?.data?.error || error.message;
+      set({ error: msg });
+      throw error;
+    }
+  },
 }));
 
 export default useDocumentStore;

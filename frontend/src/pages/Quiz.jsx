@@ -62,81 +62,105 @@ export default function Quiz() {
   // Config view
   if (view === 'config') {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Quiz Mode</h1>
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Configure Your Quiz</h2>
+      <div className="max-w-2xl mx-auto px-4 py-8 md:py-12">
+        <div className="mb-10">
+          <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">Quiz Mode</h1>
+          <p className="text-sm md:text-base text-gray-500 mt-2 font-medium">Test your knowledge with AI-generated assessments.</p>
+        </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Document</label>
-              <select
-                value={config.documentId || ''}
-                onChange={e => setConfig(prev => ({ ...prev, documentId: e.target.value || null }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="">All Documents</option>
-                {readyDocs.map(doc => (
-                  <option key={doc.id} value={doc.id}>{doc.originalName}</option>
-                ))}
-              </select>
-            </div>
+        <div className="sleek-card p-6 md:p-8">
+          <h2 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-2">
+            <Zap className="h-5 w-5 text-primary" />
+            Quiz Configuration
+          </h2>
 
+          <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Number of Questions</label>
-              <select
-                value={config.numQuestions}
-                onChange={e => setConfig(prev => ({ ...prev, numQuestions: parseInt(e.target.value) }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
-              >
-                {[5, 10, 15, 20].map(n => (
-                  <option key={n} value={n}>{n} questions</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty</label>
-              <div className="flex gap-2">
-                {['easy', 'medium', 'hard'].map(level => (
-                  <button
-                    key={level}
-                    onClick={() => setConfig(prev => ({ ...prev, difficulty: level }))}
-                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium capitalize border transition-colors ${config.difficulty === level
-                        ? 'border-primary-500 bg-primary-50 text-primary-700'
-                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                      }`}
-                  >
-                    {level}
-                  </button>
-                ))}
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Subject Material</label>
+              <div className="relative group">
+                <select
+                  value={config.documentId || ''}
+                  onChange={e => setConfig(prev => ({ ...prev, documentId: e.target.value || null }))}
+                  className="w-full appearance-none px-4 py-3 bg-white border border-gray-200 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all shadow-sm outline-none pr-10"
+                >
+                  <option value="">All Documents</option>
+                  {readyDocs.map(doc => (
+                    <option key={doc.id} value={doc.id}>{doc.originalName}</option>
+                  ))}
+                </select>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 group-hover:text-blue-500 transition-colors">
+                  <Play className="h-4 w-4 rotate-90" />
+                </div>
               </div>
             </div>
 
-            <div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={config.adaptive}
-                  onChange={e => setConfig(prev => ({ ...prev, adaptive: e.target.checked }))}
-                  className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                />
-                <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
-                  <Zap className="h-4 w-4 text-purple-500" /> Adaptive Mode
-                </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Questions Count</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[5, 10, 15, 20].map(n => (
+                    <button
+                      key={n}
+                      onClick={() => setConfig(prev => ({ ...prev, numQuestions: n }))}
+                      className={`py-2.5 rounded-xl text-xs font-black transition-all ${config.numQuestions === n
+                        ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                        }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Challenge Level</label>
+                <div className="flex gap-2">
+                  {['easy', 'medium', 'hard'].map(level => (
+                    <button
+                      key={level}
+                      onClick={() => setConfig(prev => ({ ...prev, difficulty: level }))}
+                      className={`flex-1 py-2.5 rounded-xl text-[10px] font-black capitalize transition-all border ${config.difficulty === level
+                        ? 'border-primary bg-primary text-white shadow-lg shadow-primary/20'
+                        : 'border-gray-100 text-gray-600 bg-gray-50 hover:bg-gray-100'
+                        }`}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-gray-50">
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    checked={config.adaptive}
+                    onChange={e => setConfig(prev => ({ ...prev, adaptive: e.target.checked }))}
+                    className="sr-only"
+                  />
+                  <div className={`w-10 h-6 rounded-full transition-colors ${config.adaptive ? 'bg-blue-600' : 'bg-gray-200'}`} />
+                  <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${config.adaptive ? 'translate-x-4' : ''}`} />
+                </div>
+                <div className="flex-1">
+                  <span className="text-sm font-black text-gray-700 flex items-center gap-1.5">
+                    <Zap className={`h-4 w-4 ${config.adaptive ? 'text-blue-500 animate-pulse' : 'text-gray-400'}`} />
+                    Adaptive Mode
+                  </span>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Focuses on your weak topics</p>
+                </div>
               </label>
-              <p className="text-xs text-gray-500 mt-1 ml-6">
-                Focus questions on your weak topics for targeted practice.
-              </p>
             </div>
           </div>
 
           <button
             onClick={handleGenerate}
             disabled={loading}
-            className="mt-6 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50"
+            className="mt-8 w-full flex items-center justify-center gap-3 px-8 py-4 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-primary/90 transition-all shadow-xl shadow-primary/20 active:scale-95 disabled:opacity-50"
           >
-            {loading ? <Spinner size="sm" /> : <Play className="h-4 w-4" />}
+            {loading ? <Spinner size="sm" /> : <Play className="h-5 w-5" />}
             Generate Quiz
           </button>
         </div>
@@ -178,8 +202,8 @@ export default function Quiz() {
                     key={i}
                     onClick={() => handleAnswer(q.id, letter)}
                     className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition-colors ${isSelected
-                        ? 'border-primary-500 bg-primary-50 text-primary-700'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      ? 'border-primary-500 bg-primary-50 text-primary-700'
+                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                       }`}
                   >
                     {option}
@@ -196,8 +220,8 @@ export default function Quiz() {
                   key={val}
                   onClick={() => handleAnswer(q.id, val)}
                   className={`flex-1 px-4 py-3 rounded-lg border text-sm font-medium capitalize transition-colors ${answers[q.id] === val
-                      ? 'border-primary-500 bg-primary-50 text-primary-700'
-                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                    ? 'border-primary-500 bg-primary-50 text-primary-700'
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                     }`}
                 >
                   {val}

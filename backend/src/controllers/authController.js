@@ -69,11 +69,7 @@ async function createProfile(req, res, next) {
     });
 
     // Sync teaching_level into user_settings for backward compat (non-blocking)
-    supabase.rpc('upsert_user_setting', {
-      p_key: 'teaching_level',
-      p_value: teachingLevel || 'intermediate',
-      p_user_id: req.user.id,
-    }).catch(err => console.warn('Non-critical: failed to sync teaching_level to user_settings:', err.message));
+    syncTeachingLevel(teachingLevel || 'intermediate');
   } catch (error) {
     next(error);
   }
@@ -117,15 +113,21 @@ async function updateProfile(req, res, next) {
 
     // Sync teaching_level to user_settings for backward compat (non-blocking)
     if (teachingLevel !== undefined) {
-      supabase.rpc('upsert_user_setting', {
-        p_key: 'teaching_level',
-        p_value: teachingLevel,
-        p_user_id: req.user.id,
-      }).catch(err => console.warn('Non-critical: failed to sync teaching_level to user_settings:', err.message));
+      syncTeachingLevel(teachingLevel);
     }
   } catch (error) {
     next(error);
   }
+}
+
+/** Non-blocking sync of teaching_level to user_settings table */
+function syncTeachingLevel(level) {
+  supabase.rpc('upsert_user_setting', {
+    p_key: 'teaching_level',
+    p_value: level,
+  }).then(({ error }) => {
+    if (error) console.warn('Non-critical: failed to sync teaching_level:', error.message);
+  });
 }
 
 module.exports = { getProfile, createProfile, updateProfile };

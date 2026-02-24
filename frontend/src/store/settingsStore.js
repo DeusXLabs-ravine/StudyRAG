@@ -1,15 +1,24 @@
 import { create } from 'zustand';
-import { getSettings, updateSetting } from '../services/analyticsService';
+import { getSettings, updateSetting, getLearningProfile } from '../services/analyticsService';
 
 const useSettingsStore = create((set, get) => ({
   settings: {},
   voices: [],
   loaded: false,
+  tutorial_completed: false,
+
+  // Learning profile (resolved effective style + pace, preferences, detected)
+  learningProfile: null,
+  learningProfileLoaded: false,
 
   fetchSettings: async () => {
     try {
       const settings = await getSettings();
-      set({ settings: settings || {}, loaded: true });
+      set({
+        settings: settings || {},
+        loaded: true,
+        tutorial_completed: settings?.tutorial_completed === 'true' || settings?.tutorial_completed === true
+      });
     } catch (err) {
       console.error('Failed to load settings:', err.message);
       set({ loaded: true });
@@ -29,7 +38,52 @@ const useSettingsStore = create((set, get) => ({
     return get().settings.tts_voice_id || 'Kore';
   },
 
+  setTutorialCompleted: async (completed) => {
+    set({ tutorial_completed: completed });
+    try {
+      await updateSetting('tutorial_completed', completed);
+    } catch (err) {
+      console.error('Failed to save tutorial status:', err.message);
+    }
+  },
+
   setVoices: (voices) => set({ voices: Array.isArray(voices) ? voices : [] }),
+
+  // ─── Learning Style & Pace ────────────────────────────────
+
+  fetchLearningProfile: async () => {
+    try {
+      const profile = await getLearningProfile();
+      set({ learningProfile: profile, learningProfileLoaded: true });
+    } catch (err) {
+      console.error('Failed to load learning profile:', err.message);
+      set({ learningProfileLoaded: true });
+    }
+  },
+
+  setLearningStyle: async (style) => {
+    // Update setting and refresh profile
+    set(state => ({ settings: { ...state.settings, learning_style: style } }));
+    try {
+      await updateSetting('learning_style', style);
+      // Refresh the profile to get the resolved effective values
+      const profile = await getLearningProfile();
+      set({ learningProfile: profile });
+    } catch (err) {
+      console.error('Failed to save learning style:', err.message);
+    }
+  },
+
+  setLearningPace: async (pace) => {
+    set(state => ({ settings: { ...state.settings, learning_pace: pace } }));
+    try {
+      await updateSetting('learning_pace', pace);
+      const profile = await getLearningProfile();
+      set({ learningProfile: profile });
+    } catch (err) {
+      console.error('Failed to save learning pace:', err.message);
+    }
+  },
 }));
 
 export default useSettingsStore;

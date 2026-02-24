@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
-import { BookOpen, FileText, MessageCircle, ClipboardCheck, Layers, Home, Menu, X, BarChart3, Timer, Settings, LogOut, User } from 'lucide-react';
+import { BookOpen, FileText, MessageCircle, ClipboardCheck, Layers, Home, Menu, X, BarChart3, Timer, Settings, LogOut, User, ChevronRight } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Logo from '../common/Logo';
 import useAuthStore from '../../store/authStore';
 
@@ -71,7 +72,7 @@ export default function Navbar() {
         <div className="flex justify-between h-20">
           <div className="flex items-center">
             <Link to="/">
-              <Logo className="h-14 w-14" hideText />
+              <Logo className="h-16 w-16" textClassName="text-2xl font-black text-gray-900" />
             </Link>
           </div>
 
@@ -85,8 +86,8 @@ export default function Navbar() {
                   key={item.path}
                   to={item.path}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive
-                    ? 'bg-primary-50 text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    ? 'bg-primary-50 text-sky-700'
+                    : 'text-gray-600 hover:text-sky-600 hover:bg-sky-50'
                     }`}
                 >
                   <Icon className="h-4 w-4" />
@@ -150,10 +151,10 @@ export default function Navbar() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden border-t border-gray-100 bg-white overflow-hidden"
+            className="md:hidden border-t border-gray-100 bg-white overflow-hidden shadow-inner"
           >
-            <div className="px-5 py-4 space-y-2">
-              <div className="grid grid-cols-2 gap-2 pb-4">
+            <div className="px-4 py-6 space-y-6">
+              <div className="grid grid-cols-2 gap-3">
                 {navItems.map(item => {
                   const Icon = icons[item.icon];
                   const isActive = location.pathname === item.path;
@@ -162,37 +163,40 @@ export default function Navbar() {
                       key={item.path}
                       to={item.path}
                       onClick={() => setMobileOpen(false)}
-                      className={`flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-bold transition-all ${isActive
-                        ? 'bg-primary text-white shadow-md shadow-primary/20'
-                        : 'text-gray-600 bg-gray-50 hover:bg-gray-100'
+                      className={`flex flex-col items-center justify-center gap-2 p-4 rounded-2xl text-[11px] font-black transition-all border ${isActive
+                        ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-[1.02]'
+                        : 'text-gray-600 bg-gray-50 border-gray-100'
                         }`}
                     >
-                      <Icon className="h-4 w-4" />
+                      <Icon className="h-5 w-5" />
                       {item.label}
                     </Link>
                   );
                 })}
               </div>
 
-              <div className="border-t border-gray-100 pt-4 mt-2">
-                <div className="flex items-center gap-3 px-2 mb-4">
-                  <UserAvatar profile={profile || { email: user?.email }} className="h-10 w-10" />
+              <div className="bg-gray-50 rounded-[2rem] p-5 border border-gray-100">
+                <div className="flex items-center gap-4 mb-6 px-1">
+                  <UserAvatar profile={profile || { email: user?.email }} className="h-12 w-12" />
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-gray-900 truncate">{profile?.displayName || 'User'}</p>
-                    <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                    <p className="text-sm font-black text-gray-900 truncate">{profile?.displayName || 'User'}</p>
+                    <p className="text-[10px] text-gray-400 font-bold truncate uppercase tracking-widest">{user?.email}</p>
                   </div>
                 </div>
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2">
                   <Link
                     to="/settings"
                     onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-bold text-gray-700 bg-gray-50 hover:bg-gray-100"
+                    className="flex items-center justify-between w-full px-5 py-4 rounded-2xl text-sm font-black text-gray-700 bg-white border border-gray-100 shadow-sm active:scale-95 transition-all"
                   >
-                    <Settings className="h-4 w-4" /> Account Settings
+                    <div className="flex items-center gap-3">
+                      <Settings className="h-4 w-4 text-gray-400" /> Account Settings
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-gray-300" />
                   </Link>
                   <button
                     onClick={() => { setMobileOpen(false); handleSignOut(); }}
-                    className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
+                    className="flex items-center gap-3 w-full px-5 py-4 rounded-2xl text-sm font-black text-red-600 bg-red-50/50 hover:bg-red-50 active:scale-95 transition-all"
                   >
                     <LogOut className="h-4 w-4" /> Sign Out
                   </button>

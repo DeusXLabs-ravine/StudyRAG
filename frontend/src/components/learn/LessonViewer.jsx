@@ -1,18 +1,18 @@
 import { useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Target, Lightbulb, HelpCircle, X, CheckCircle, Lock, ChevronRight, Shapes } from 'lucide-react';
+import { Target, Lightbulb, HelpCircle, X, CheckCircle, Lock, ChevronRight, Shapes, Wand2, Loader2 } from 'lucide-react';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { explainSimply } from '../../services/moduleService';
 import Spinner from '../common/Spinner';
 import TTSButton from '../common/TTSButton';
 import DiagramViewer from './DiagramViewer';
+import GeneratedDiagramCard from './GeneratedDiagramCard';
+import MedicalResourcesPanel from './MedicalResourcesPanel';
 import useSettingsStore from '../../store/settingsStore';
 import { resolveThemeVars, getBoardType, parseThemeSetting } from '../../lib/boardThemes';
 
-export default function LessonViewer({ module, onStartQuiz, regeneratingQuestions, diagrams = [], teachingLevel }) {
-  if (!module) return null;
-
+export default function LessonViewer({ module, onStartQuiz, regeneratingQuestions, diagrams = [], teachingLevel, generatedDiagrams = [], onGenerateDiagram, generatingDiagram, medicalResources = [] }) {
   const settings = useSettingsStore(state => state.settings);
 
   const { themeVars, boardType } = useMemo(() => {
@@ -25,6 +25,8 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
 
   const isNotebook = boardType === 'notebook';
   const isWhiteboard = boardType === 'whiteboard';
+
+  if (!module) return null;
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -167,7 +169,55 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
         </div>
       )}
 
-      {/* Visual Diagrams */}
+      {/* Generated Topic Visuals */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-violet-100 text-violet-600 rounded-xl flex items-center justify-center">
+              <Wand2 className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Topic Visuals</h3>
+              <p className="text-xs text-gray-500">AI-generated diagrams and illustrations for this module</p>
+            </div>
+          </div>
+          {onGenerateDiagram && (
+            <button
+              onClick={() => onGenerateDiagram(module.topic || module.title)}
+              disabled={generatingDiagram}
+              className="px-4 py-2 text-xs font-bold text-violet-700 bg-violet-50 border border-violet-200 rounded-xl hover:bg-violet-100 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+            >
+              {generatingDiagram ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating...</>
+              ) : (
+                <><Wand2 className="h-3.5 w-3.5" /> Generate Visual</>
+              )}
+            </button>
+          )}
+        </div>
+
+        {generatedDiagrams.filter(d => d.status !== 'failed').length > 0 ? (
+          <div className="space-y-4">
+            {generatedDiagrams.filter(d => d.status !== 'failed').map(d => (
+              <GeneratedDiagramCard key={d.id} diagram={d} />
+            ))}
+          </div>
+        ) : !generatingDiagram && onGenerateDiagram && (
+          <div className="sleek-card p-8 text-center border border-dashed border-violet-200 bg-violet-50/20">
+            <Wand2 className="h-8 w-8 text-violet-300 mx-auto mb-3" />
+            <p className="text-sm font-bold text-gray-600 mb-1">No visuals generated yet</p>
+            <p className="text-xs text-gray-400 mb-4">Click "Generate Visual" to create an AI diagram for this topic</p>
+            <button
+              onClick={() => onGenerateDiagram(module.topic || module.title)}
+              className="px-5 py-2.5 text-xs font-bold text-white bg-violet-600 rounded-xl hover:bg-violet-700 transition-all active:scale-95"
+            >
+              Generate Visual for This Topic
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Visual Diagrams (extracted from document) */}
       {diagrams.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center gap-3 px-1">
@@ -175,7 +225,7 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
               <Shapes className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-gray-900">Visual Diagrams</h3>
+              <h3 className="text-lg font-bold text-gray-900">Document Diagrams</h3>
               <p className="text-xs text-gray-500">Detected diagrams from your document, simplified for your level</p>
             </div>
           </div>
@@ -186,6 +236,9 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
           </div>
         </div>
       )}
+
+      {/* Medical References (auto-populated for medical content) */}
+      <MedicalResourcesPanel resources={medicalResources} />
     </div>
   );
 }

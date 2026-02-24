@@ -10,11 +10,21 @@ const {
   deleteDocument,
   reprocessDocument,
   getDocumentResources,
+  registerUrl,
+  registerNote,
+  togglePrimarySource,
+  registerTopic,
 } = require('../controllers/documentController');
 
 // Direct-to-Supabase-Storage upload flow (preferred)
 router.post('/sign-upload', signUpload);
 router.post('/register', registerDocument);
+
+// Multi-source document registration
+router.post('/register-url', registerUrl);
+router.post('/register-note', registerNote);
+router.post('/register-topic', registerTopic);
+router.patch('/:id/primary', togglePrimarySource);
 
 // Legacy upload flow (fallback)
 router.post('/upload', upload.single('file'), uploadDocument);

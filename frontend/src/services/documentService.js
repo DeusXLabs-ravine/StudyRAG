@@ -158,3 +158,23 @@ export async function reprocessDocument(id) {
   const { data } = await api.post(`/documents/${id}/reprocess`);
   return data;
 }
+
+export async function registerUrl(url) {
+  const { data } = await api.post('/documents/register-url', { url });
+  return data;
+}
+
+export async function registerNote(title, content) {
+  const { data } = await api.post('/documents/register-note', { title, content });
+  return data;
+}
+
+export async function togglePrimarySource(id, isPrimary) {
+  const { data } = await api.patch(`/documents/${id}/primary`, { isPrimary });
+  return data;
+}
+
+export async function registerTopic(topic, description) {
+  const { data } = await api.post('/documents/register-topic', { topic, description });
+  return data;
+}

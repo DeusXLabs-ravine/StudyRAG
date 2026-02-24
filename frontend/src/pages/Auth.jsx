@@ -135,7 +135,7 @@ export default function Auth() {
         </div>
 
         <p className="text-center text-gray-400 text-xs mt-6">
-          No password needed — we'll email you a link each time you sign in.
+          No password needed: we'll email you a link each time you sign in.
         </p>
       </div>
     </div>
