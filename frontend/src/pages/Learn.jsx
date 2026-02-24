@@ -103,6 +103,22 @@ export default function Learn() {
     }
   }, [currentModule?.id]);
 
+  // Smart Resume: Auto-select first incomplete module on load
+  const lastSelectedDocRef = useRef(null);
+  useEffect(() => {
+    if (modules?.length > 0 && (selectedDocId || selectedCourseId)) {
+      const currentRef = selectedDocId || selectedCourseId;
+      if (lastSelectedDocRef.current !== currentRef) {
+        lastSelectedDocRef.current = currentRef;
+        // Only auto-select if no module is currently active for this specific document/course
+        if (!currentModule || (currentModule.documentId !== selectedDocId && currentModule.courseId !== selectedCourseId)) {
+          const firstIncomplete = modules.find(m => !m.progress?.completed) || modules[0];
+          setCurrentModule(firstIncomplete);
+        }
+      }
+    }
+  }, [modules, selectedDocId, selectedCourseId, currentModule, setCurrentModule]);
+
   // Background prefetch TTS audio chunks when module changes
   useEffect(() => {
     // Cancel any previous prefetch

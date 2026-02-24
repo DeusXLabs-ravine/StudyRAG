@@ -1,6 +1,6 @@
 import logoImg from '../../assets/logo.png';
 
-export default function Logo({ className = "h-12 w-12", textClassName = "text-xl font-bold text-gray-900", hideText = false, boxed = false }) {
+export default function Logo({ className = "h-6 w-6 sm:h-12 sm:w-12", textClassName = "text-xs sm:text-xl font-bold text-gray-900", hideText = false, boxed = false }) {
     return (
         <div className="flex items-center gap-3 group">
             <div className={`relative flex items-center justify-center ${className} transition-all duration-500 group-hover:scale-110 ${boxed ? 'bg-white rounded-2xl shadow-md p-2 border border-blue-100' : 'bg-transparent border-transparent'}`}>
