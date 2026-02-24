@@ -18,7 +18,7 @@ export default function PublicNavbar({ transparent = false }) {
     ];
 
     return (
-        <nav className={`sticky top-0 z-50 transition-all duration-300 ${transparent ? 'bg-transparent border-transparent' : 'bg-white border-b border-gray-100 shadow-sm'}`}>
+        <nav className={`${transparent ? 'absolute' : 'sticky shadow-sm'} top-0 left-0 right-0 z-50 transition-all duration-300 ${transparent ? 'bg-transparent border-transparent' : 'bg-white border-b border-gray-100'}`}>
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-20">
                 <div className="flex items-center gap-4">
                     <button
