@@ -99,7 +99,7 @@ async function generateOutlineForSegment(segmentText, segmentIndex, totalSegment
   const prompt = MODULE_OUTLINE_PROMPT
     .replace('{document_text}', segmentText + segmentNote)
     .replace('{teaching_level}', teachingLevel)
-    .replace('{interests_section}', buildInterestsSection(interests))
+    .replace('{interests_section}', buildInterestsSection(interests, teachingLevel))
     .replace('{word_count}', String(wordCount))
     .replace('{target_modules}', String(targetModules))
     .replace('{min_modules}', String(minModules));
@@ -128,7 +128,7 @@ async function generateModuleBatch(segmentText, fullOutline, batchModules, batch
   const prompt = MODULE_BATCH_GENERATION_PROMPT
     .replace('{document_text}', segmentText)
     .replace('{teaching_level}', teachingLevel)
-    .replace('{interests_section}', buildInterestsSection(interests))
+    .replace('{interests_section}', buildInterestsSection(interests, teachingLevel))
     .replace('{full_outline}', outlineText)
     .replace('{batch_modules}', batchText);
 
@@ -150,7 +150,7 @@ async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalS
   const prompt = MODULE_GENERATION_PROMPT
     .replace('{document_text}', segmentText + segmentNote)
     .replace('{teaching_level}', teachingLevel)
-    .replace('{interests_section}', buildInterestsSection(interests));
+    .replace('{interests_section}', buildInterestsSection(interests, teachingLevel));
 
   const model = getGenerativeModel('fast');
   const result = await model.generateContent(prompt);
@@ -352,31 +352,22 @@ async function generateRemainingModules(docId, documentText, userId = null) {
     let nextOrder = (lastMod?.order_index ?? -1) + 1;
     let totalGenerated = 0;
 
-    // Wrap each segment task with error handling so one failure doesn't kill all
-    const tasks = remaining.map((seg, idx) => async () => {
+    // Process segments one by one — each is generated and inserted immediately
+    // so the frontend sees modules appearing progressively via polling.
+    // Within each segment, batch LLM calls still run in parallel for speed.
+    for (let idx = 0; idx < remaining.length; idx++) {
       try {
-        return await generateModulesForSegment(seg, idx + 1, segments.length, teachingLevel, interests);
-      } catch (err) {
-        console.error(`[moduleGenerator] Segment ${idx + 2}/${segments.length} failed entirely:`, err.message);
-        return { modules: [] };
-      }
-    });
-
-    // Process segments with concurrency
-    const segmentResults = await runWithConcurrency(tasks, MAX_CONCURRENCY);
-
-    // Insert results segment by segment (preserves ordering)
-    for (let i = 0; i < segmentResults.length; i++) {
-      const result = segmentResults[i];
-      if (result?.modules?.length > 0) {
-        try {
+        const result = await generateModulesForSegment(
+          remaining[idx], idx + 1, segments.length, teachingLevel, interests
+        );
+        if (result?.modules?.length > 0) {
           const { moduleCount, nextOrderIndex } = await insertModuleResults(docId, [result], nextOrder);
           nextOrder = nextOrderIndex;
           totalGenerated += moduleCount;
-          console.log(`[moduleGenerator] Background seg ${i + 2}/${segments.length}: +${moduleCount} modules (running total: ${totalGenerated})`);
-        } catch (err) {
-          console.error(`[moduleGenerator] Failed to insert modules for segment ${i + 2}:`, err.message);
+          console.log(`[moduleGenerator] Segment ${idx + 2}/${segments.length}: +${moduleCount} modules (running total: ${totalGenerated})`);
         }
+      } catch (err) {
+        console.error(`[moduleGenerator] Segment ${idx + 2}/${segments.length} failed:`, err.message);
       }
     }
 

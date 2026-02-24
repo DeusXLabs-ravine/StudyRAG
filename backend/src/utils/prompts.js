@@ -26,7 +26,7 @@ For each module, provide:
    - Clear explanation with one or two examples
    - Key points highlighted
 5. takeaways: 2-3 bullet points summarizing main ideas
-6. questions: 2-3 comprehension check questions with:
+6. questions: 5 comprehension check questions with:
    - Mix of types: multiple_choice, true_false
    - Correct answers and explanations
    - Each question should have a "topic" field matching the module topic
@@ -306,7 +306,7 @@ Module content:
 Previous questions the student already saw (do NOT reuse these):
 {previous_questions}
 
-Create 3-5 NEW comprehension check questions that:
+Create exactly 5 NEW comprehension check questions that:
 - Test understanding of the same material but from different angles
 - Use different question structures and focus on different details
 - Include a "topic" field matching the module topic: {topic}
@@ -665,7 +665,7 @@ For each module listed above, provide:
    - Clear explanation with one or two examples
    - Key points highlighted
 5. takeaways: 2-3 bullet points summarizing main ideas
-6. questions: 2-3 comprehension check questions with:
+6. questions: 5 comprehension check questions with:
    - Mix of types: multiple_choice, true_false
    - Correct answers and explanations
    - Each question should have a "topic" field matching the module topic
@@ -700,9 +700,39 @@ Return ONLY valid JSON in this exact format:
   ]
 }`;
 
-function buildInterestsSection(interests) {
+function buildInterestsSection(interests, teachingLevel = null) {
   if (!interests || interests.length === 0) return '';
-  return `The student's interests and hobbies include: ${interests.join(', ')}.\nWhen explaining concepts, use analogies and examples that relate to these interests where it genuinely helps clarify the concept.`;
+
+  const interestsList = interests.join(', ');
+
+  if (teachingLevel === 'dummy') {
+    return `The student likes: ${interestsList}.
+Use their interests to create VERY simple, everyday analogies that make the concept instantly click. Rules:
+- Keep each analogy to one short sentence — "Think of X like Y"
+- The analogy must be simpler than the concept itself — if it needs explaining, don't use it
+- Use the most obvious, surface-level connection to their interest — nothing technical
+- Only use an analogy when it genuinely makes things easier, skip it if it would confuse
+Example: If they like Sports → "Your heart pumps blood around your body, kind of like how a player passes the ball around the field to keep the game going."`;
+  }
+
+  if (teachingLevel === 'beginner') {
+    return `The student's interests include: ${interestsList}.
+Use their interests to create clear, relatable analogies when explaining concepts. Rules:
+- One straightforward comparison per concept — don't stack multiple analogies
+- The analogy itself should need zero explanation — it should be immediately obvious
+- Connect to the fun, familiar side of their interest, not the technical side
+- If an analogy would add confusion instead of clarity, leave it out
+Example: If they like Gaming → "A variable is like a chest in a game — it holds something you can open and use later."`;
+  }
+
+  if (teachingLevel === 'advanced') {
+    return `The student's interests include: ${interestsList}.
+Where relevant, draw sophisticated parallels between academic concepts and the student's interests. You can reference technical aspects of their hobbies to build deeper understanding and illuminate nuances or edge cases.`;
+  }
+
+  // intermediate or unspecified — balanced approach
+  return `The student's interests include: ${interestsList}.
+Incorporate the student's interests into explanations through natural analogies and examples. For each major concept, include at least one connection to their interests that genuinely clarifies the idea. The analogy should be self-explanatory — the student should not need to understand a complex hobby concept to grasp the academic one.`;
 }
 
 module.exports = {

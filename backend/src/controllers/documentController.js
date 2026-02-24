@@ -79,7 +79,7 @@ async function uploadDocument(req, res, next) {
       message: 'Document uploaded. Processing started.',
     });
 
-    processDocumentFromBuffer(docId, file.buffer, ext).catch(async (err) => {
+    processDocumentFromBuffer(docId, file.buffer, ext, req.user?.id || null).catch(async (err) => {
       console.error(`Error processing document ${docId}:`, err);
       await vectorStore.updateDocumentStatus(docId, { status: 'failed', error: err.message });
     });
@@ -88,11 +88,11 @@ async function uploadDocument(req, res, next) {
   }
 }
 
-async function processDocumentFromBuffer(docId, buffer, ext) {
+async function processDocumentFromBuffer(docId, buffer, ext, userId = null) {
   const t = Date.now();
   const { text, pages: rawPages, metadata } = await extractTextFromBuffer(buffer, ext);
   console.log(`[Pipeline ${docId.slice(0, 8)}] Text extraction: ${((Date.now() - t) / 1000).toFixed(1)}s (${text.length} chars, ${rawPages ? rawPages.length + ' pages' : 'no native pages'})`);
-  await runProcessingPipeline(docId, text, metadata, rawPages, buffer, ext);
+  await runProcessingPipeline(docId, text, metadata, rawPages, buffer, ext, userId);
 }
 
 /**
@@ -123,7 +123,7 @@ async function downloadChunk(storagePath) {
  * @param {string|string[]} storagePaths - single path or ordered array of chunk paths
  * @param {string} ext - file extension
  */
-async function processDocumentFromStorage(docId, storagePaths, ext, oldPages = null) {
+async function processDocumentFromStorage(docId, storagePaths, ext, oldPages = null, userId = null) {
   const paths = Array.isArray(storagePaths) ? storagePaths : [storagePaths];
   const prefix = `[Pipeline ${docId.slice(0, 8)}]`;
 
@@ -148,10 +148,10 @@ async function processDocumentFromStorage(docId, storagePaths, ext, oldPages = n
     console.log(`${prefix} Incremental diff: ${changedCount} changed, ${addedCount} added, ${removedCount} removed pages`);
   }
 
-  return await runProcessingPipeline(docId, text, metadata, rawPages, buffer, ext);
+  return await runProcessingPipeline(docId, text, metadata, rawPages, buffer, ext, userId);
 }
 
-async function runProcessingPipeline(docId, text, metadata, rawPages = null, buffer = null, ext = null) {
+async function runProcessingPipeline(docId, text, metadata, rawPages = null, buffer = null, ext = null, userId = null) {
   const pipelineStart = Date.now();
   const prefix = `[Pipeline ${docId.slice(0, 8)}]`;
   const log = (step, startTime) =>
@@ -180,7 +180,7 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
     // Pipeline B: Generate initial learning modules (first segment only)
     (async () => {
       const t = Date.now();
-      const result = await generateInitialModules(docId, text);
+      const result = await generateInitialModules(docId, text, userId);
       log(`Initial modules (${result.moduleCount} modules, segment 1/${result.totalSegments})`, t);
       return result;
     })(),
@@ -213,7 +213,7 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
   (async () => {
     try {
       const t = Date.now();
-      await generateRemainingModules(docId, text);
+      await generateRemainingModules(docId, text, userId);
       log('Remaining modules (background)', t);
     } catch (err) {
       console.error(`${prefix} Background module generation failed: ${err.message}`);
@@ -351,7 +351,7 @@ async function reprocessDocument(req, res, next) {
     res.json({ message: 'Reprocessing started', status: 'processing' });
 
     // Download from Supabase Storage and reprocess (pass old pages for incremental diffing)
-    processDocumentFromStorage(id, doc.storagePath, doc.fileType, oldPages).catch(async (err) => {
+    processDocumentFromStorage(id, doc.storagePath, doc.fileType, oldPages, req.user?.id || null).catch(async (err) => {
       console.error(`Error reprocessing document ${id}:`, err);
       await vectorStore.updateDocumentStatus(id, { status: 'failed', error: err.message });
     });
@@ -448,7 +448,7 @@ async function registerDocument(req, res, next) {
       message: 'Document registered. Processing started.',
     });
 
-    processDocumentFromStorage(docId, paths, ext).catch(async (err) => {
+    processDocumentFromStorage(docId, paths, ext, null, req.user?.id || null).catch(async (err) => {
       console.error(`Error processing document ${docId}:`, err);
       await vectorStore.updateDocumentStatus(docId, { status: 'failed', error: err.message });
     });

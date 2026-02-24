@@ -248,8 +248,9 @@ export default function Learn() {
                     setShowQuiz(false);
                     setExplanation('');
                     setCustomQuestion('');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  onBack={() => setShowQuiz(false)}
+                  onBack={() => { setShowQuiz(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                 />
               ) : (
                 <LessonViewer
@@ -270,6 +271,7 @@ export default function Learn() {
                       }
                     }
                     setShowQuiz(true);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                   regeneratingQuestions={regeneratingQuestions}
                 />
