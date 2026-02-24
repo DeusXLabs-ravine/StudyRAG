@@ -1,0 +1,82 @@
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in to StudyRAG</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f3f4f6; font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f3f4f6; padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 4px 24px rgba(0,0,0,0.06);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding:32px 40px; text-align:center;">
+              <h1 style="margin:0; font-size:28px; font-weight:800; color:#ffffff; letter-spacing:-0.5px;">
+                StudyRAG
+              </h1>
+              <p style="margin:8px 0 0; font-size:13px; color:rgba(255,255,255,0.8); font-weight:500;">
+                Your AI-Powered Study Companion
+              </p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px;">
+              <h2 style="margin:0 0 8px; font-size:20px; font-weight:700; color:#111827;">
+                Sign in to your account
+              </h2>
+              <p style="margin:0 0 28px; font-size:14px; color:#6b7280; line-height:1.6;">
+                Click the button below to securely sign in to StudyRAG. This link will expire in 1 hour.
+              </p>
+
+              <!-- CTA Button -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="padding:4px 0 28px;">
+                    <a href="{{ .ConfirmationURL }}"
+                       target="_blank"
+                       style="display:inline-block; padding:14px 40px; background-color:#2563eb; color:#ffffff; font-size:15px; font-weight:700; text-decoration:none; border-radius:12px; letter-spacing:0.2px;">
+                      Sign in to StudyRAG
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Divider -->
+              <hr style="border:none; border-top:1px solid #e5e7eb; margin:0 0 24px;" />
+
+              <!-- Fallback link -->
+              <p style="margin:0 0 12px; font-size:12px; color:#9ca3af; line-height:1.5;">
+                If the button doesn't work, copy and paste this link into your browser:
+              </p>
+              <p style="margin:0 0 24px; font-size:12px; color:#3b82f6; word-break:break-all; line-height:1.5;">
+                {{ .ConfirmationURL }}
+              </p>
+
+              <!-- Security note -->
+              <div style="background-color:#f9fafb; border-radius:10px; padding:16px; border:1px solid #f3f4f6;">
+                <p style="margin:0; font-size:12px; color:#6b7280; line-height:1.5;">
+                  If you didn't request this email, you can safely ignore it. No account will be created unless you click the link above.
+                </p>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:20px 40px 28px; text-align:center; border-top:1px solid #f3f4f6;">
+              <p style="margin:0; font-size:11px; color:#9ca3af; line-height:1.5;">
+                StudyRAG &mdash; Learn smarter with AI-generated lessons
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
