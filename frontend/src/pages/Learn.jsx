@@ -1018,10 +1018,8 @@ function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded,
                 if (onGameRequest) {
                   const modId = currentModule?.id;
                   if (modId) {
-                    // null = AI picks a random game type (quiz, matching, fill_blank, speed_round)
                     onGameRequest(modId, null);
                   }
-                }
                 }
               } else if (action.type === 'game_complete') {
                 if (onGameComplete) onGameComplete(action);
