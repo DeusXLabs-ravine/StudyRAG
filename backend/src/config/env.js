@@ -16,7 +16,7 @@ const config = {
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
   maxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 209715200,
   allowedFileTypes: (process.env.ALLOWED_FILE_TYPES || 'pdf,docx,pptx,txt,md,ipynb,py,js,ts,jsx,tsx,java,c,cpp,h,hpp,go,rs,rb,php,swift,kt,scala,r,html,css,scss,json,xml,csv,yaml,yml,toml,sql,sh').split(','),
-  allowedOrigins: (process.env.ALLOWED_ORIGINS || 'http://localhost:5173').split(','),
+  allowedOrigins: [...new Set([...(process.env.ALLOWED_ORIGINS || 'http://localhost:5173').split(','), 'https://studyrag.co'])],
   cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME,
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY,
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET,
