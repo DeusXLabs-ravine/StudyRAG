@@ -24,7 +24,14 @@ export default function MermaidDiagram({ code, id }) {
     (async () => {
       try {
         setError(null);
-        const { svg: rendered } = await mermaid.render(renderKey, code);
+
+        // Sanitize code by replacing literal newlines inside [], (), or {} with <br/> 
+        // as Mermaid parser breaks on literal newlines within node labels.
+        const sanitizedCode = code.replace(/(\[[^\]]+\]|\([^)]+\)|\{[^}]+\})/g, (match) => {
+          return match.replace(/\n/g, '<br/>');
+        });
+
+        const { svg: rendered } = await mermaid.render(renderKey, sanitizedCode);
         if (!cancelled) setSvg(rendered);
       } catch (err) {
         if (!cancelled) {

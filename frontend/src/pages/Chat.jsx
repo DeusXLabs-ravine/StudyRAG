@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { Trash2, FileText, Sparkles, ArrowUp, Globe, MessageSquare, Plus, ChevronDown, Menu, X, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as chatService from '../services/chatService';
@@ -11,6 +11,40 @@ import AchievementToast from '../components/chat/AchievementToast';
 import FormulaInput from '../components/chat/FormulaInput';
 import { ChatInput } from '@/components/ui/chat-input';
 import { MorphingSquare } from '../components/ui/morphing-square';
+
+// Sidebar extracted outside Chat to prevent re-creation on every keystroke
+const SidebarContent = memo(function SidebarContent({ messages, onClear, onCloseSidebar }) {
+  return (
+    <div className="p-6 h-full flex flex-col">
+      <button
+        onClick={onClear}
+        className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-white border border-[#e2e8f0] text-[#0f172a] font-bold text-sm rounded-2xl hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm active:scale-95 mb-10"
+      >
+        <Plus className="h-4 w-4" />
+        New Chat
+      </button>
+
+      <div className="space-y-6 flex-1 overflow-y-auto">
+        <div>
+          <h3 className="text-[10px] font-black uppercase text-[#94a3b8] tracking-[0.2em] mb-4 px-2">History</h3>
+          <div className="space-y-1">
+            {messages.length > 0 ? (
+              <button
+                onClick={onCloseSidebar}
+                className="w-full flex items-center gap-3 text-left px-3 py-2.5 text-sm text-blue-600 bg-blue-50 rounded-xl font-bold border border-blue-100"
+              >
+                <MessageSquare className="h-4 w-4 opacity-70" />
+                <span className="truncate">Active Session</span>
+              </button>
+            ) : (
+              <p className="px-3 py-2 text-xs text-[#94a3b8] font-medium italic">No recent chats</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
 
 export default function Chat() {
   const { documents, fetchDocuments } = useDocumentStore();
@@ -245,51 +279,23 @@ export default function Chat() {
     }
   };
 
-  const handleClear = async () => {
+  const handleClear = useCallback(async () => {
     await chatService.clearChatHistory();
     setMessages([]);
     setIsSidebarOpen(false);
-  };
+  }, []);
 
   const toggleSource = (msgIdx) => {
     setExpandedSources(prev => ({ ...prev, [msgIdx]: !prev[msgIdx] }));
   };
 
-  const triggerFileUpload = () => fileInputRef.current?.click();
-  const handleFileChange = (e) => {
+  const triggerFileUpload = useCallback(() => fileInputRef.current?.click(), []);
+  const handleFileChange = useCallback((e) => {
     if (e.target.files && e.target.files[0]) setIsPhotoActive(true);
-  };
+  }, []);
+  const handleInputChange = useCallback((e) => setInput(e.target.value), []);
 
-  const SidebarContent = () => (
-    <div className="p-6 h-full flex flex-col">
-      <button
-        onClick={handleClear}
-        className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-white border border-[#e2e8f0] text-[#0f172a] font-bold text-sm rounded-2xl hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm active:scale-95 mb-10"
-      >
-        <Plus className="h-4 w-4" />
-        New Chat
-      </button>
-
-      <div className="space-y-6 flex-1 overflow-y-auto">
-        <div>
-          <h3 className="text-[10px] font-black uppercase text-[#94a3b8] tracking-[0.2em] mb-4 px-2">History</h3>
-          <div className="space-y-1">
-            {messages.length > 0 ? (
-              <button
-                onClick={() => setIsSidebarOpen(false)}
-                className="w-full flex items-center gap-3 text-left px-3 py-2.5 text-sm text-blue-600 bg-blue-50 rounded-xl font-bold border border-blue-100"
-              >
-                <MessageSquare className="h-4 w-4 opacity-70" />
-                <span className="truncate">Active Session</span>
-              </button>
-            ) : (
-              <p className="px-3 py-2 text-xs text-[#94a3b8] font-medium italic">No recent chats</p>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  const closeSidebar = useCallback(() => setIsSidebarOpen(false), []);
 
   return (
     <div className="flex bg-white h-[calc(100vh-5rem)] overflow-hidden w-full relative">
@@ -301,7 +307,7 @@ export default function Chat() {
 
       {/* Desktop Sidebar */}
       <div className="w-64 md:w-72 bg-[#fcfdff] border-r border-[#f1f5f9] hidden md:flex flex-col flex-shrink-0 z-10">
-        <SidebarContent />
+        <SidebarContent messages={messages} onClear={handleClear} onCloseSidebar={closeSidebar} />
       </div>
 
       {/* Mobile Drawer */}
@@ -314,7 +320,7 @@ export default function Chat() {
                 <span className="text-sm font-black text-[#0f172a] uppercase tracking-widest">Chat History</span>
                 <button onClick={() => setIsSidebarOpen(false)} className="p-2 text-[#94a3b8]"><X className="h-5 w-5" /></button>
               </div>
-              <SidebarContent />
+              <SidebarContent messages={messages} onClear={handleClear} onCloseSidebar={closeSidebar} />
             </motion.div>
           </>
         )}
@@ -418,7 +424,7 @@ export default function Chat() {
                   <ChatInput
                     ref={chatTextareaRef}
                     value={input}
-                    onChange={e => setInput(e.target.value)}
+                    onChange={handleInputChange}
                     onKeyDown={e => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();

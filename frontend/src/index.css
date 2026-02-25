@@ -240,3 +240,28 @@ body {
 .animate-success-glow {
   animation: success-glow 2s infinite;
 }
+
+/* KaTeX styling inside student (blue) chat bubbles */
+.student-bubble-markdown .katex {
+  color: inherit;
+}
+
+.student-bubble-markdown .katex .mord,
+.student-bubble-markdown .katex .mbin,
+.student-bubble-markdown .katex .mrel,
+.student-bubble-markdown .katex .mopen,
+.student-bubble-markdown .katex .mclose,
+.student-bubble-markdown .katex .mpunct,
+.student-bubble-markdown .katex .mop,
+.student-bubble-markdown .katex .minner {
+  color: inherit;
+}
+
+.student-bubble-markdown .katex-display {
+  margin: 0.5em 0;
+  overflow-x: auto;
+}
+
+.student-bubble-markdown .katex-display > .katex {
+  white-space: normal;
+}

@@ -268,7 +268,30 @@ export default function TutorMessage({ msg, onAction, isCompact }) {
                     <div className="absolute -top-2 -right-2 bg-yellow-400 p-1.5 rounded-full shadow-lg rotate-12">
                         <Zap className="h-3 w-3 text-white fill-current" />
                     </div>
-                    <p className={`${isCompact ? 'text-[11px]' : 'text-sm'} font-black leading-relaxed tracking-tight`}>{msg.text}</p>
+                    <div className={`${isCompact ? 'text-[11px]' : 'text-sm'} font-black leading-relaxed tracking-tight student-bubble-markdown`}>
+                        <ReactMarkdown
+                            remarkPlugins={[remarkMath, remarkGfm]}
+                            rehypePlugins={[rehypeKatex]}
+                            components={{
+                                p({ children }) { return <p className="mb-1 last:mb-0">{children}</p>; },
+                                code({ inline, className, children, ...props }) {
+                                    if (inline || !className) {
+                                        return <code className="px-1 py-0.5 bg-white/20 rounded text-[0.9em] font-mono" {...props}>{children}</code>;
+                                    }
+                                    return <code className="block p-2 my-1 bg-black/20 rounded-lg text-[0.85em] font-mono overflow-x-auto whitespace-pre" {...props}>{children}</code>;
+                                },
+                                a({ href, children }) { return <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 font-bold">{children}</a>; },
+                                ul({ children }) { return <ul className="list-disc list-inside my-1 space-y-0.5">{children}</ul>; },
+                                ol({ children }) { return <ol className="list-decimal list-inside my-1 space-y-0.5">{children}</ol>; },
+                                blockquote({ children }) { return <blockquote className="pl-3 border-l-2 border-white/40 my-1 opacity-90">{children}</blockquote>; },
+                                table({ children }) { return <div className="overflow-x-auto my-1"><table className="min-w-full text-xs border-collapse">{children}</table></div>; },
+                                th({ children }) { return <th className="px-2 py-1 text-left border-b border-white/30 font-black">{children}</th>; },
+                                td({ children }) { return <td className="px-2 py-1 border-b border-white/10">{children}</td>; },
+                            }}
+                        >
+                            {msg.text}
+                        </ReactMarkdown>
+                    </div>
                 </motion.div>
             </div>
         );
