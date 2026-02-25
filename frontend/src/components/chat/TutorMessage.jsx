@@ -21,11 +21,6 @@ const RunnableCodeBlock = lazy(() => import('./RunnableCodeBlock'));
 const InlineChart = lazy(() => import('./InlineChart'));
 const CalculatorWidget = lazy(() => import('./CalculatorWidget'));
 
-const SUPPORTED_LANGUAGES = new Set([
-    'python', 'py', 'javascript', 'js', 'typescript', 'ts', 'c', 'cpp', 'java',
-    'json', 'xml', 'html', 'css', 'sql', 'bash', 'sh', 'rust', 'go', 'ruby', 'php',
-]);
-
 function CopyButton({ text }) {
     const [copied, setCopied] = useState(false);
     const handleCopy = () => {
@@ -167,30 +162,41 @@ function useMarkdownComponents(isCompact) {
     }), [isCompact]);
 }
 
+// Error boundary for canvas blocks — prevents one broken block from crashing entire chat
+function BlockErrorFallback({ type }) {
+    return (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 font-medium">
+            Failed to load {type || 'interactive'} block. Try refreshing.
+        </div>
+    );
+}
+
 // Render a single canvas block
 function CanvasBlockRenderer({ block, onAction }) {
+    if (!block || !block.type) return null;
+    console.log('[Sage] Rendering block:', block.type, block);
     switch (block.type) {
         case 'quiz':
             return (
-                <Suspense fallback={<div className="p-4 bg-gray-50 rounded-xl animate-pulse">Loading quiz...</div>}>
+                <Suspense fallback={<div className="p-4 bg-indigo-50 rounded-xl animate-pulse text-xs font-bold text-indigo-400">Loading quiz game...</div>}>
                     <InlineQuizBlock block={block} onComplete={(result) => onAction?.({ type: 'game_complete', ...result })} />
                 </Suspense>
             );
         case 'speed_round':
             return (
-                <Suspense fallback={<div className="p-4 bg-gray-50 rounded-xl animate-pulse">Loading...</div>}>
+                <Suspense fallback={<div className="p-4 bg-orange-50 rounded-xl animate-pulse text-xs font-bold text-orange-400">Loading speed round...</div>}>
                     <SpeedRoundBlock block={block} onComplete={(result) => onAction?.({ type: 'game_complete', ...result })} />
                 </Suspense>
             );
         case 'fill_blank':
             return (
-                <Suspense fallback={<div className="p-4 bg-gray-50 rounded-xl animate-pulse">Loading...</div>}>
+                <Suspense fallback={<div className="p-4 bg-purple-50 rounded-xl animate-pulse text-xs font-bold text-purple-400">Loading fill-in-the-blank...</div>}>
                     <FillBlankBlock block={block} onComplete={(result) => onAction?.({ type: 'game_complete', ...result })} />
                 </Suspense>
             );
         case 'matching':
             return (
-                <Suspense fallback={<div className="p-4 bg-gray-50 rounded-xl animate-pulse">Loading...</div>}>
+                <Suspense fallback={<div className="p-4 bg-cyan-50 rounded-xl animate-pulse text-xs font-bold text-cyan-400">Loading matching game...</div>}>
                     <MatchingGameBlock block={block} onComplete={(result) => onAction?.({ type: 'game_complete', ...result })} />
                 </Suspense>
             );
@@ -223,11 +229,19 @@ function CanvasBlockRenderer({ block, onAction }) {
                         <Zap className="h-8 w-8 text-yellow-500 mx-auto mb-2" />
                         <p className="text-2xl font-black text-yellow-700">+{block.earned} XP</p>
                         <p className="text-xs font-bold text-yellow-600">Total: {block.total} XP</p>
-                        {block.streak > 0 && <p className="text-xs font-bold text-orange-600 mt-1">🔥 {block.streak} day streak</p>}
+                        {block.streak > 0 && (
+                            <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-orange-600 mt-2">
+                                <Flame className="h-3.5 w-3.5 fill-current" />
+                                <span>{block.streak} day streak</span>
+                            </div>
+                        )}
                         {block.newAchievements?.length > 0 && (
-                            <div className="mt-2 space-y-1">
+                            <div className="mt-4 space-y-1.5">
                                 {block.newAchievements.map((a, i) => (
-                                    <div key={i} className="text-xs font-bold text-purple-600">🏆 {a.label} (Tier {a.tier})</div>
+                                    <div key={i} className="flex items-center justify-center gap-1.5 text-xs font-bold text-purple-600 bg-purple-100/50 py-1.5 px-3 rounded-full">
+                                        <Trophy className="h-3 w-3" />
+                                        <span>{a.label}</span>
+                                    </div>
                                 ))}
                             </div>
                         )}
@@ -410,8 +424,8 @@ export default function TutorMessage({ msg, onAction, isCompact }) {
 
                             {segment.type === 'summary' && (
                                 <div className="absolute right-4 bottom-4 rotate-12 opacity-80 scale-75 sm:scale-100">
-                                    <div className="bg-yellow-100 text-yellow-700 border-2 border-dashed border-yellow-300 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-sm">
-                                        Keep it real!
+                                    <div className="bg-blue-100 text-blue-700 border-2 border-dashed border-blue-200 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-sm">
+                                        Key Insight
                                     </div>
                                 </div>
                             )}
@@ -420,21 +434,18 @@ export default function TutorMessage({ msg, onAction, isCompact }) {
                 </motion.div>
             ))}
 
-            {/* Canvas Blocks — interactive widgets after text segments */}
-            {blocks.length > 0 && (
-                <div className="sm:pl-14 space-y-4">
-                    {blocks.map((block, idx) => (
-                        <motion.div
-                            key={`block-${idx}`}
-                            initial={{ opacity: 0, y: 15 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: segments.length * 0.15 + idx * 0.1 }}
-                        >
-                            <CanvasBlockRenderer block={block} onAction={onAction} />
-                        </motion.div>
-                    ))}
-                </div>
-            )}
+            {/* Canvas Blocks — interactive widgets (games, charts, calculator, etc.) */}
+            {blocks.length > 0 && blocks.map((block, idx) => (
+                <motion.div
+                    key={`block-${block.type}-${idx}`}
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: segments.length * 0.15 + idx * 0.1 }}
+                    className="sm:pl-14"
+                >
+                    <CanvasBlockRenderer block={block} onAction={onAction} />
+                </motion.div>
+            ))}
 
             {/* Web Sources Badge */}
             {msg.webSources && msg.webSources.length > 0 && (

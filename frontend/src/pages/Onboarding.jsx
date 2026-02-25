@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { User, Calendar, GraduationCap, Heart, ChevronRight, ChevronLeft, Check } from 'lucide-react';
+import { User, Calendar, GraduationCap, Heart, ChevronRight, ChevronLeft, Check, BookOpen, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import useAuthStore from '../store/authStore';
 import Logo from '../components/common/Logo';
-import Spinner from '../components/common/Spinner';
+import { MorphingSquare } from '../components/ui/morphing-square';
 
 const TEACHING_LEVELS = [
   {
@@ -33,15 +33,14 @@ const TEACHING_LEVELS = [
 ];
 
 const SUGGESTED_INTERESTS = [
-  // General
-  'Sports', 'Music', 'Gaming', 'Cooking', 'Movies', 'Anime',
-  'Cars', 'Technology', 'Art', 'Fashion', 'Nature', 'Science',
-  'History', 'Travel', 'Fitness',
+  'Reading', 'Writing', 'Cooking', 'Photography', 'Music', 'Gaming',
+  'Hiking', 'Technology', 'Art', 'Travel', 'Gardening', 'History',
+];
 
-  // Broad Medical / Health
-  'Medicine & Health Sciences', 'Pharmacy & Drug Sciences',
-  'Nursing & Allied Health', 'Biomedical Sciences',
-  'Dentistry', 'Veterinary Medicine',
+const SUGGESTED_CURRICULA = [
+  'Medicine', 'Chemistry', 'Computer Science', 'Biology', 'Physics',
+  'Mathematics', 'History', 'Literature', 'Art History', 'Philosophy',
+  'Psychology', 'Economics',
 ];
 
 export default function Onboarding() {
@@ -51,29 +50,28 @@ export default function Onboarding() {
   const [teachingLevel, setTeachingLevel] = useState('intermediate');
   const [interests, setInterests] = useState([]);
   const [customInterest, setCustomInterest] = useState('');
+  const [academicFields, setAcademicFields] = useState([]);
+  const [customField, setCustomField] = useState('');
   const [loading, setLoading] = useState(false);
   const { createProfile, user } = useAuthStore();
 
-  const totalSteps = 4;
+  const totalSteps = 5;
 
-  const handleAddInterest = (tag) => {
-    if (!interests.includes(tag)) {
-      setInterests([...interests, tag]);
+  const handleAddTag = (tag, list, setter) => {
+    if (!list.includes(tag)) {
+      setter([...list, tag]);
     }
   };
 
-  const handleRemoveInterest = (tag) => {
-    setInterests(interests.filter(t => t !== tag));
+  const handleRemoveTag = (tag, list, setter) => {
+    setter(list.filter(t => t !== tag));
   };
 
-  const handleCustomInterest = (e) => {
-    if (e.key === 'Enter' && customInterest.trim()) {
+  const handleCustomKey = (e, val, setVal, list, setter) => {
+    if (e.key === 'Enter' && val.trim()) {
       e.preventDefault();
-      const tag = customInterest.trim();
-      if (!interests.includes(tag)) {
-        setInterests([...interests, tag]);
-      }
-      setCustomInterest('');
+      handleAddTag(val.trim(), list, setter);
+      setVal('');
     }
   };
 
@@ -85,6 +83,7 @@ export default function Onboarding() {
         age: age ? parseInt(age) : null,
         teachingLevel,
         interests,
+        academicFields,
       });
       toast.success('Welcome aboard!');
     } catch (err) {
@@ -92,14 +91,6 @@ export default function Onboarding() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const canAdvance = () => {
-    if (step === 0) return true; // Name is optional
-    if (step === 1) return true; // Age is optional
-    if (step === 2) return true; // Level has default
-    if (step === 3) return true; // Interests optional
-    return true;
   };
 
   const handleNext = () => {
@@ -113,113 +104,58 @@ export default function Onboarding() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-2xl">
-        {/* Header */}
         <div className="text-center mb-10 animate-in fade-in duration-700">
           <div className="flex justify-center mb-6">
             <Logo className="h-24 w-24" textClassName="text-3xl font-black text-gray-900" />
           </div>
-          <p className="text-sm font-bold text-blue-500 uppercase tracking-[0.2em] mb-1">
-            Welcome to StudyRAG
-          </p>
-          <p className="text-xs text-gray-400 font-medium">
-            {user?.email}
-          </p>
+          <p className="text-sm font-bold text-blue-500 uppercase tracking-[0.2em] mb-1">Welcome to StudyRAG</p>
+          <p className="text-xs text-gray-400 font-medium">{user?.email}</p>
         </div>
 
-        {/* Progress bar */}
         <div className="flex gap-2 mb-8">
           {Array.from({ length: totalSteps }).map((_, i) => (
-            <div
-              key={i}
-              className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${i <= step ? 'bg-primary' : 'bg-gray-200'
-                }`}
-            />
+            <div key={i} className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${i <= step ? 'bg-primary' : 'bg-gray-200'}`} />
           ))}
         </div>
 
-        {/* Step content */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 animate-in fade-in duration-300" key={step}>
           {step === 0 && (
-            <div>
+            <div className="animate-in slide-in-from-bottom-4 duration-500">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-primary-100 text-primary-600 rounded-xl flex items-center justify-center">
-                  <User className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">What should we call you?</h2>
-                  <p className="text-sm text-gray-500">Your display name (optional)</p>
-                </div>
+                <div className="w-10 h-10 bg-primary-100 text-primary-600 rounded-xl flex items-center justify-center"><User className="h-5 w-5" /></div>
+                <div><h2 className="text-lg font-semibold text-gray-900">What should we call you?</h2><p className="text-sm text-gray-500">Your display name (optional)</p></div>
               </div>
-              <input
-                type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Enter your name"
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
-                autoFocus
-              />
+              <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Enter your name" className="w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all" autoFocus />
             </div>
           )}
 
           {step === 1 && (
-            <div>
+            <div className="animate-in slide-in-from-bottom-4 duration-500">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center">
-                  <Calendar className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">How old are you?</h2>
-                  <p className="text-sm text-gray-500">This helps us calibrate content appropriateness</p>
-                </div>
+                <div className="w-10 h-10 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center"><Calendar className="h-5 w-5" /></div>
+                <div><h2 className="text-lg font-semibold text-gray-900">How old are you?</h2><p className="text-sm text-gray-500">This helps us calibrate content appropriateness</p></div>
               </div>
-              <input
-                type="number"
-                value={age}
-                onChange={(e) => setAge(e.target.value)}
-                placeholder="Enter your age"
-                min="5"
-                max="120"
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
-                autoFocus
-              />
+              <input type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="Enter your age" min="5" max="120" className="w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all" autoFocus />
             </div>
           )}
 
           {step === 2 && (
-            <div>
+            <div className="animate-in slide-in-from-bottom-4 duration-500">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center">
-                  <GraduationCap className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Choose your teaching style</h2>
-                  <p className="text-sm text-gray-500">See how a lesson about "photosynthesis" looks at each level</p>
-                </div>
+                <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center"><GraduationCap className="h-5 w-5" /></div>
+                <div><h2 className="text-lg font-semibold text-gray-900">Choose your teaching style</h2><p className="text-sm text-gray-500">Scale neural complexity to your current depth</p></div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {TEACHING_LEVELS.map((level) => {
                   const isSelected = teachingLevel === level.id;
                   return (
-                    <button
-                      key={level.id}
-                      onClick={() => setTeachingLevel(level.id)}
-                      className={`text-left p-4 rounded-xl border-2 transition-all ${isSelected
-                        ? 'border-primary bg-primary-50 shadow-md'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                        }`}
-                    >
+                    <button key={level.id} onClick={() => setTeachingLevel(level.id)} className={`text-left p-4 rounded-xl border-2 transition-all ${isSelected ? 'border-primary bg-primary-50 shadow-md' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}>
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-bold text-gray-900">{level.label}</span>
-                        {isSelected && (
-                          <span className="w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center">
-                            <Check className="h-3 w-3" />
-                          </span>
-                        )}
+                        {isSelected && <span className="w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center"><Check className="h-3 w-3" /></span>}
                       </div>
                       <p className="text-xs text-gray-500 mb-2">{level.description}</p>
-                      <p className="text-xs text-gray-600 bg-gray-50 rounded-lg p-2 italic leading-relaxed">
-                        "{level.example}"
-                      </p>
+                      <p className="text-xs text-gray-600 bg-gray-50 rounded-lg p-2 italic leading-relaxed text-[10px]">"{level.example}"</p>
                     </button>
                   );
                 })}
@@ -228,87 +164,57 @@ export default function Onboarding() {
           )}
 
           {step === 3 && (
-            <div>
+            <div className="animate-in slide-in-from-bottom-4 duration-500">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center">
-                  <Heart className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">What are you into?</h2>
-                  <p className="text-sm text-gray-500">We'll use these to make your learning more relatable</p>
-                </div>
+                <div className="w-10 h-10 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center"><Heart className="h-5 w-5" /></div>
+                <div><h2 className="text-lg font-semibold text-gray-900">Hobbies & Interests</h2><p className="text-sm text-gray-500">Help the AI use relatable analogies from your life</p></div>
               </div>
-
-              {/* Selected tags */}
               {interests.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-4">
                   {interests.map(tag => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-50 text-primary-700 rounded-full text-sm font-medium cursor-pointer hover:bg-primary-100 transition-colors"
-                      onClick={() => handleRemoveInterest(tag)}
-                    >
-                      {tag}
-                      <span className="text-primary-400 hover:text-primary-600">&times;</span>
-                    </span>
+                    <span key={tag} className="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-50 text-rose-700 rounded-full text-xs font-bold cursor-pointer hover:bg-rose-100 transition-colors" onClick={() => handleRemoveTag(tag, interests, setInterests)}>{tag}<X className="h-3 w-3 ml-1 opacity-50" /></span>
                   ))}
                 </div>
               )}
-
-              {/* Custom input */}
-              <input
-                type="text"
-                value={customInterest}
-                onChange={(e) => setCustomInterest(e.target.value)}
-                onKeyDown={handleCustomInterest}
-                placeholder="Type an interest and press Enter..."
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all mb-4"
-                autoFocus
-              />
-
-              {/* Suggestions */}
+              <input type="text" value={customInterest} onChange={(e) => setCustomInterest(e.target.value)} onKeyDown={(e) => handleCustomKey(e, customInterest, setCustomInterest, interests, setInterests)} placeholder="Type a hobby and press Enter..." className="w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all mb-4" autoFocus />
               <div className="flex flex-wrap gap-2">
                 {SUGGESTED_INTERESTS.filter(s => !interests.includes(s)).map(tag => (
-                  <button
-                    key={tag}
-                    onClick={() => handleAddInterest(tag)}
-                    className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full text-sm font-medium hover:bg-gray-200 transition-colors"
-                  >
-                    + {tag}
-                  </button>
+                  <button key={tag} onClick={() => handleAddTag(tag, interests, setInterests)} className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full text-xs font-semibold hover:bg-gray-200 transition-colors">+ {tag}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className="animate-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center"><BookOpen className="h-5 w-5" /></div>
+                <div><h2 className="text-lg font-semibold text-gray-900">Academic Curricula <span className="text-xs font-normal text-gray-400 capitalize">(Optional)</span></h2><p className="text-sm text-gray-500">Specific subjects you're currently mastering</p></div>
+              </div>
+              {academicFields.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {academicFields.map(tag => (
+                    <span key={tag} className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold cursor-pointer hover:bg-indigo-100 transition-colors" onClick={() => handleRemoveTag(tag, academicFields, setAcademicFields)}>{tag}<X className="h-3 w-3 ml-1 opacity-50" /></span>
+                  ))}
+                </div>
+              )}
+              <div className="relative mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input type="text" value={customField} onChange={(e) => setCustomField(e.target.value)} onKeyDown={(e) => handleCustomKey(e, customField, setCustomField, academicFields, setAcademicFields)} placeholder="Enter a subject (e.g. Physics) and press Enter..." className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all" autoFocus />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {SUGGESTED_CURRICULA.filter(s => !academicFields.includes(s)).map(tag => (
+                  <button key={tag} onClick={() => handleAddTag(tag, academicFields, setAcademicFields)} className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full text-xs font-semibold hover:bg-gray-200 transition-colors">+ {tag}</button>
                 ))}
               </div>
             </div>
           )}
         </div>
 
-        {/* Navigation */}
         <div className="flex justify-between mt-6">
-          <button
-            onClick={() => setStep(step - 1)}
-            disabled={step === 0}
-            className="flex items-center gap-1 px-4 py-2 text-gray-600 hover:text-gray-900 font-medium transition-colors disabled:opacity-0 disabled:pointer-events-none"
-          >
-            <ChevronLeft className="h-4 w-4" /> Back
-          </button>
-          <button
-            onClick={handleNext}
-            disabled={!canAdvance() || loading}
-            className="flex items-center gap-2 px-6 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? (
-              <>
-                <Spinner size="sm" /> Saving...
-              </>
-            ) : step < totalSteps - 1 ? (
-              <>
-                Next <ChevronRight className="h-4 w-4" />
-              </>
-            ) : (
-              <>
-                Get Started <ChevronRight className="h-4 w-4" />
-              </>
-            )}
+          <button onClick={() => setStep(step - 1)} disabled={step === 0} className="flex items-center gap-1 px-4 py-2 text-gray-600 hover:text-gray-900 font-medium transition-colors disabled:opacity-0 disabled:pointer-events-none"><ChevronLeft className="h-4 w-4" /> Back</button>
+          <button onClick={handleNext} disabled={loading} className="flex items-center gap-2 px-6 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[140px] justify-center">
+            {loading ? <><MorphingSquare size="sm" /><span className="ml-3">Syncing...</span></> : step < totalSteps - 1 ? <>Next <ChevronRight className="h-4 w-4" /></> : <>Empower AI <ChevronRight className="h-4 w-4" /></>}
           </button>
         </div>
       </div>

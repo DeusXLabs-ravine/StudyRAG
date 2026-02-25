@@ -3,7 +3,7 @@ import { Volume2, VolumeX } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import useTTS from '../../hooks/useTTS';
-import Spinner from './Spinner';
+import { MorphingSquare } from '../ui/morphing-square';
 
 // Show the settings hint only once per session
 let hintShown = false;
@@ -37,14 +37,13 @@ export default function TTSButton({ text, className = '' }) {
       onClick={handleClick}
       disabled={isLoading}
       title={isPlaying ? 'Stop reading' : 'Listen to this content'}
-      className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all disabled:opacity-50 ${
-        isPlaying
+      className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all disabled:opacity-50 ${isPlaying
           ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'
           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-      } ${className}`}
+        } ${className}`}
     >
       {isLoading ? (
-        <Spinner size="sm" />
+        <MorphingSquare size="sm" />
       ) : isPlaying ? (
         <VolumeX className="h-4 w-4" />
       ) : (

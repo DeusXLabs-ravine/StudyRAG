@@ -3,7 +3,7 @@ import useAuthStore from '../../store/authStore';
 import useSettingsStore from '../../store/settingsStore';
 import Auth from '../../pages/Auth';
 import Onboarding from '../../pages/Onboarding';
-import Spinner from '../common/Spinner';
+import { MorphingSquare } from '../ui/morphing-square';
 
 export default function AuthGuard({ children }) {
   const { user, profile, loading, initialize } = useAuthStore();
@@ -27,7 +27,7 @@ export default function AuthGuard({ children }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <Spinner />
+          <MorphingSquare />
           <p className="mt-4 text-gray-500 font-medium">Loading...</p>
         </div>
       </div>

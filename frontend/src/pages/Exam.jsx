@@ -7,7 +7,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import * as examService from '../services/examService';
 import useDocumentStore from '../store/documentStore';
-import Spinner from '../components/common/Spinner';
+import { MorphingSquare } from '../components/ui/morphing-square';
 import { TextLoop } from '../components/ui/text-loop';
 import { getAestheticPhoto } from '../utils/imageHelpers';
 
@@ -310,7 +310,7 @@ export default function Exam() {
         </div>
 
         {sessionsLoading ? (
-          <div className="flex justify-center py-12"><Spinner /></div>
+          <div className="flex justify-center py-12"><MorphingSquare /></div>
         ) : sessions.length > 0 ? (
           <div className="space-y-4">
             <h2 className="text-sm font-black text-gray-900 mb-6 flex items-center gap-2">
@@ -341,8 +341,8 @@ export default function Exam() {
                   <div className="absolute inset-0 z-10 p-6 flex flex-col justify-end">
                     <div className="flex justify-between items-start mb-auto">
                       <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest backdrop-blur-md border border-white/20 ${s.status === 'ready' ? 'bg-green-500/20 text-green-100' :
-                          s.status === 'generating' ? 'bg-yellow-500/20 text-yellow-100' :
-                            'bg-white/20 text-white'
+                        s.status === 'generating' ? 'bg-yellow-500/20 text-yellow-100' :
+                          'bg-white/20 text-white'
                         }`}>
                         {s.status}
                       </span>
@@ -586,7 +586,7 @@ export default function Exam() {
 
         {uploadingMaterial && (
           <div className="flex items-center gap-4 mb-8 p-5 bg-primary/5 rounded-2xl border-2 border-primary/10">
-            <Spinner size="sm" />
+            <MorphingSquare size="sm" />
             <span className="text-[10px] font-black uppercase tracking-widest text-primary">AI is absorbing material...</span>
           </div>
         )}
@@ -690,7 +690,7 @@ export default function Exam() {
             disabled={generating}
             className="order-1 sm:order-2 flex-1 flex items-center justify-center gap-3 px-8 py-4 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-primary/90 transition-all shadow-xl shadow-primary/20 active:scale-95 disabled:opacity-50"
           >
-            {generating ? <Spinner size="sm" /> : <Sparkles className="h-5 w-5" />}
+            {generating ? <MorphingSquare size="sm" /> : <Sparkles className="h-5 w-5" />}
             Ignite Intelligence
           </button>
         </div>
@@ -917,9 +917,8 @@ export default function Exam() {
                   </div>
 
                   {questions.length === 0 ? (
-                    <div className="text-center py-16 bg-gray-50/50 rounded-3xl border-2 border-dashed border-gray-100">
-                      <Spinner />
-                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4">Generating focus questions...</p>
+                    <div className="text-center py-16 bg-gray-50/50 rounded-3xl border-2 border-dashed border-gray-100 uppercase tracking-widest mt-4">
+                      <MorphingSquare message="Generating focus questions..." />
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -1118,7 +1117,7 @@ export default function Exam() {
               disabled={submitting}
               className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
             >
-              {submitting ? <Spinner size="sm" /> : <CheckCircle className="h-4 w-4" />}
+              {submitting ? <MorphingSquare size="sm" /> : <CheckCircle className="h-4 w-4" />}
               Submit Exam
             </button>
           )}

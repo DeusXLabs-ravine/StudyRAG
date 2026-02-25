@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Image, RefreshCw, Eye, EyeOff, Tag } from 'lucide-react';
 import MermaidDiagram from './MermaidDiagram';
-import Spinner from '../common/Spinner';
+import { MorphingSquare } from '../ui/morphing-square';
 import { getDiagramImageUrl, regenerateDiagramLevel } from '../../services/diagramService';
 
 const LEVELS = [
@@ -91,7 +91,7 @@ export default function DiagramViewer({ diagram, teachingLevel = 'intermediate' 
           disabled={loadingImage}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-all"
         >
-          {loadingImage ? <Spinner size="xs" /> : showOriginal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          {loadingImage ? <MorphingSquare size="xs" /> : showOriginal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           {showOriginal ? 'Hide Original' : 'Show Original'}
         </button>
       </div>
@@ -102,11 +102,10 @@ export default function DiagramViewer({ diagram, teachingLevel = 'intermediate' 
           <button
             key={key}
             onClick={() => handleLevelChange(key)}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-              selectedLevel === key
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${selectedLevel === key
                 ? 'bg-white text-primary shadow-sm'
                 : 'text-gray-500 hover:text-gray-700'
-            }`}
+              }`}
           >
             {label}
           </button>
@@ -123,7 +122,7 @@ export default function DiagramViewer({ diagram, teachingLevel = 'intermediate' 
       {/* Mermaid Diagram */}
       {regenerating ? (
         <div className="flex flex-col items-center justify-center py-8 gap-2">
-          <Spinner size="sm" />
+          <MorphingSquare size="sm" />
           <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Generating {selectedLevel} view...</span>
         </div>
       ) : currentMermaid ? (

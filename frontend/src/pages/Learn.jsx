@@ -8,7 +8,8 @@ import useSettingsStore from '../store/settingsStore';
 import useTutorStore from '../store/tutorStore';
 import useCourseStore from '../store/courseStore';
 import useGameStore from '../store/gameStore';
-import Spinner from '../components/common/Spinner';
+import { MorphingSquare } from '../components/ui/morphing-square';
+import { AILoader } from '../components/ui/ai-loader';
 import LessonViewer from '../components/learn/LessonViewer';
 import QuizSection from '../components/learn/QuizSection';
 import OnboardingTutorial from '../components/learn/OnboardingTutorial';
@@ -195,14 +196,15 @@ export default function Learn() {
     }
 
     // Detect game/quiz intent from user message
-    if (/^(quiz me|test me|start.*game|play.*game|challenge me)/i.test(text) && currentModule?.id) {
+    if (/\b(quiz me|test me|play.*game|start.*game|challenge me|let'?s play|game time|trivia)\b/i.test(text) && currentModule?.id) {
       addMessage(currentModule.id, { role: 'student', text, timestamp: Date.now() });
-      handleGameRequest(currentModule.id, /quiz/i.test(text) ? 'quiz' : null);
+      // null = random game type (quiz, matching, fill_blank, speed_round)
+      handleGameRequest(currentModule.id, null);
       return;
     }
 
     // Detect calculator intent
-    if (/^calculator$/i.test(text) && currentModule?.id) {
+    if (/\b(calculator|calc|compute|calculate)\b/i.test(text) && currentModule?.id) {
       addMessage(currentModule.id, { role: 'student', text, timestamp: Date.now() });
       addMessage(currentModule.id, {
         role: 'tutor',
@@ -302,7 +304,9 @@ export default function Learn() {
   // ─── Game Complete Handler ──────────────────────────────────
   const handleGameComplete = async (result) => {
     try {
-      const submitResult = await useGameStore.getState().submitResult(result);
+      // Strip the 'type: game_complete' action type — submitResult needs gameType, score, etc.
+      const { type: _actionType, ...gameResult } = result;
+      const submitResult = await useGameStore.getState().submitResult(gameResult);
       if (submitResult && currentModule?.id) {
         const xpBlock = {
           type: 'xp_summary',
@@ -330,20 +334,51 @@ export default function Learn() {
   const handleGenerateDiagram = async (topicOverride) => {
     if (!currentModule || generatingDiagram) return;
     setGeneratingDiagram(true);
+
+    // Show generating feedback in chat
+    addMessage(currentModule.id, {
+      role: 'tutor',
+      text: `Generating a visual for **${topicOverride || currentModule.topic || currentModule.title}**... This may take a moment.`,
+      timestamp: Date.now(),
+    });
+
     try {
       const topic = topicOverride || currentModule.topic || currentModule.title;
-      await generateDiagramForTopic({
+      const docId = currentModule.documentId || currentModule.document_id || null;
+      const result = await generateDiagramForTopic({
         topic,
         moduleId: currentModule.id,
-        documentId: currentModule.documentId,
+        documentId: docId,
         diagramType: 'auto',
         teachingLevel: settings.teaching_level || 'intermediate',
       });
-      // Refresh diagrams list
+
+      // Refresh diagrams list for LessonViewer
       const updated = await getModuleDiagrams(currentModule.id);
       setGeneratedDiagrams(updated);
+
+      // Also show diagram in chat if it has mermaid code
+      const newDiagram = updated.find(d => d.status === 'ready' && d.diagramCode);
+      if (newDiagram?.diagramCode) {
+        addMessage(currentModule.id, {
+          role: 'tutor',
+          text: `Here's the diagram for **${topic}**:\n\n\`\`\`mermaid\n${newDiagram.diagramCode}\n\`\`\`\n\n${newDiagram.description || ''}`,
+          timestamp: Date.now(),
+        });
+      } else {
+        addMessage(currentModule.id, {
+          role: 'tutor',
+          text: `Visual generated! Check the lesson board to see it.`,
+          timestamp: Date.now(),
+        });
+      }
     } catch (err) {
       console.error('Diagram generation failed:', err.message);
+      addMessage(currentModule.id, {
+        role: 'tutor',
+        text: `Couldn't generate the visual right now: ${err.message}. Try again in a moment!`,
+        timestamp: Date.now(),
+      });
     } finally {
       setGeneratingDiagram(false);
     }
@@ -492,10 +527,7 @@ export default function Learn() {
           </div>
         </div>
       ) : modulesLoading ? (
-        <div className="flex flex-col items-center justify-center py-20 md:py-32 gap-4">
-          <Spinner size="lg" />
-          <p className="text-xs md:text-sm font-bold text-gray-400 uppercase tracking-widest animate-pulse">Building your classroom...</p>
-        </div>
+        <AILoader text="Sage Building" />
       ) : (modules || []).length === 0 ? (
         <div className="sleek-card p-20 text-center">
           <Sparkles className="h-12 w-12 text-primary/30 mx-auto mb-4" />
@@ -796,9 +828,8 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
         </div>
       ))}
       {generating && (
-        <div className="flex items-center gap-2 px-3 py-3 text-xs font-bold text-primary/70 animate-pulse">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Generating more...
+        <div className="flex items-center gap-3 px-3 py-3">
+          <MorphingSquare className="w-4 h-4" message="Generating" messagePlacement="right" />
         </div>
       )}
     </div>
@@ -925,9 +956,8 @@ function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded,
         }}
       >
         {!greetingLoaded && (
-          <div className="flex items-center gap-2 px-3 py-2 bg-white/50 backdrop-blur-sm rounded-xl border border-blue-50">
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />
-            <span className="text-[10px] font-black text-blue-400 animate-pulse uppercase tracking-widest">Sage is prepping your study plan... ⚡</span>
+          <div className="flex flex-col items-center justify-center p-8 bg-white/50 backdrop-blur-sm rounded-3xl border border-blue-50 shadow-sm">
+            <MorphingSquare message="Sage is prepping" />
           </div>
         )}
 
@@ -946,8 +976,8 @@ function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded,
                 if (onGameRequest) {
                   const modId = currentModule?.id;
                   if (modId) {
-                    const gameType = action.type === 'quiz_request' ? 'quiz' : null;
-                    onGameRequest(modId, gameType);
+                    // null = AI picks a random game type (quiz, matching, fill_blank, speed_round)
+                    onGameRequest(modId, null);
                   } else {
                     console.warn('[Sage] No currentModule for game request');
                   }
@@ -978,11 +1008,8 @@ function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded,
         )}
 
         {loading && messages.length > 0 && (
-          <div className="flex items-center gap-2 px-3 py-2 bg-white/50 backdrop-blur-sm rounded-xl border border-blue-50">
-            <div className="w-5 h-5 bg-blue-50 rounded-lg flex items-center justify-center">
-              <Loader2 className="h-3 w-3 animate-spin text-blue-400" />
-            </div>
-            <span className="text-[10px] font-black text-blue-400 animate-pulse uppercase tracking-widest">Thinking of a cool concept... 🧠</span>
+          <div className="flex items-center gap-3 px-3 py-2.5 bg-white/80 backdrop-blur-sm rounded-2xl border border-blue-50 shadow-sm w-fit">
+            <MorphingSquare className="w-5 h-5" message="Thinking" messagePlacement="right" />
           </div>
         )}
 

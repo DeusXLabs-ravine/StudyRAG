@@ -3,7 +3,8 @@ import { Layers, RotateCcw, ChevronLeft, ChevronRight, ChevronDown, Shuffle, Pla
 import { motion, AnimatePresence } from 'framer-motion';
 import * as flashcardService from '../services/flashcardService';
 import useDocumentStore from '../store/documentStore';
-import Spinner from '../components/common/Spinner';
+import { MorphingSquare } from '../components/ui/morphing-square';
+import { AILoader } from '../components/ui/ai-loader';
 import TTSButton from '../components/common/TTSButton';
 
 const QUALITY_BUTTONS = [
@@ -180,7 +181,7 @@ export default function Flashcards() {
               disabled={generating}
               className="w-full sm:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-blue-500 text-white rounded-2xl font-black text-sm hover:bg-blue-600 transition-all shadow-lg shadow-blue-200 active:scale-95 disabled:opacity-50"
             >
-              {generating ? <Spinner size="sm" /> : <Play className="h-5 w-5" />}
+              {generating ? <MorphingSquare size="sm" /> : <Play className="h-5 w-5" />}
               Generate Deck
             </button>
           </div>
@@ -203,7 +204,7 @@ export default function Flashcards() {
               disabled={generating}
               className="flex items-center gap-3 px-8 py-3.5 bg-white text-blue-600 rounded-2xl font-black text-sm hover:bg-blue-50 transition-all shadow-lg active:scale-95 disabled:opacity-50"
             >
-              {generating ? <Spinner size="sm" /> : <Zap className="h-5 w-5" />}
+              {generating ? <MorphingSquare size="sm" /> : <Zap className="h-5 w-5" />}
               Create Smart Deck
             </button>
           </div>
@@ -218,7 +219,7 @@ export default function Flashcards() {
 
           {loading ? (
             <div className="sleek-card p-20 flex flex-col items-center justify-center gap-4">
-              <Spinner size="lg" />
+              <MorphingSquare size="lg" />
               <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Loading Library</p>
             </div>
           ) : decks.length > 0 ? (

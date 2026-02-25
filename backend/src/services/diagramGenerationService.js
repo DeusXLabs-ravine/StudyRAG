@@ -108,13 +108,12 @@ async function selectDiagramType(topic, contentSnippet) {
 // ─── Generate Mermaid Diagram ─────────────────────────────────
 
 async function generateMermaidDiagram(topic, content, teachingLevel, interests) {
-  const interestsSection = buildDiagramInterestsSection(interests, teachingLevel);
-
+  // Interests removed from diagrams — they cause oversimplification and loss of meaning
   const prompt = DIAGRAM_GENERATION_PROMPT
     .replace('{topic}', topic)
     .replace('{content}', (content || '').slice(0, 8000))
     .replace('{teaching_level}', teachingLevel)
-    .replace('{interests_section}', interestsSection);
+    .replace('{interests_section}', '');
 
   const result = await withRetryOnRateLimit(async () => {
     const model = getGenerativeModel('fast');
@@ -127,13 +126,11 @@ async function generateMermaidDiagram(topic, content, teachingLevel, interests) 
 // ─── Generate D2 Diagram ──────────────────────────────────────
 
 async function generateD2Diagram(topic, content, teachingLevel, interests) {
-  const interestsSection = buildDiagramInterestsSection(interests, teachingLevel);
-
   const prompt = D2_DIAGRAM_GENERATION_PROMPT
     .replace('{topic}', topic)
     .replace('{content}', (content || '').slice(0, 8000))
     .replace('{teaching_level}', teachingLevel)
-    .replace('{interests_section}', interestsSection);
+    .replace('{interests_section}', '');
 
   const result = await withRetryOnRateLimit(async () => {
     const model = getGenerativeModel('fast');
@@ -146,15 +143,10 @@ async function generateD2Diagram(topic, content, teachingLevel, interests) {
 // ─── Generate AI Image ────────────────────────────────────────
 
 async function generateAIImage(topic, teachingLevel, interests) {
-  const interestsHint = interests?.length > 0
-    ? `The student is interested in: ${interests.join(', ')}. Subtly incorporate visual elements related to their interests where natural.`
-    : '';
-
   const imagePrompt = `Create a clean, educational illustration for a ${teachingLevel}-level student about: "${topic}".
 The image should be a clear, informative diagram or illustration suitable for a textbook or educational slide.
 Use a clean white or light background. Include labeled parts where appropriate.
 Style: professional educational illustration, clean lines, clear colors, informative.
-${interestsHint}
 Do NOT include any text that is hard to read. Keep labels large and clear.`;
 
   try {

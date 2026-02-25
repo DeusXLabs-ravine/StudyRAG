@@ -38,9 +38,14 @@ app.use(compression({
   },
 }));
 
-// Request timeout — prevent hung connections from blocking the pool
+// Request timeout — longer for document upload/processing, standard for everything else
 app.use((req, res, next) => {
-  res.setTimeout(120000); // 2 min response timeout (LLM generation can be slow)
+  // Document upload/processing endpoints get 10 minutes (1K+ page docs need time)
+  if (req.path.startsWith('/api/documents') && (req.method === 'POST' || req.method === 'PUT')) {
+    res.setTimeout(600000); // 10 min for uploads
+  } else {
+    res.setTimeout(120000); // 2 min for everything else
+  }
   next();
 });
 
@@ -51,7 +56,7 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json({ limit: '50mb' })); // Reduced from 200mb — prevents memory bloat
+app.use(express.json({ limit: '200mb' })); // Large enough for 1K+ page document uploads
 app.use(express.urlencoded({ extended: true }));
 
 // ─── Rate Limiting ────────────────────────────────────────────

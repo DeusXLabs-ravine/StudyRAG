@@ -3,7 +3,7 @@ import { Mail, ArrowLeft, Sparkles, Inbox } from 'lucide-react';
 import { toast } from 'sonner';
 import useAuthStore from '../store/authStore';
 import Logo from '../components/common/Logo';
-import Spinner from '../components/common/Spinner';
+import { MorphingSquare } from '../components/ui/morphing-square';
 
 export default function Auth() {
   const [step, setStep] = useState('email'); // 'email' | 'sent'
@@ -97,9 +97,9 @@ export default function Auth() {
               <button
                 type="submit"
                 disabled={loading || !email.trim()}
-                className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
               >
-                {loading ? <Spinner size="sm" /> : <Sparkles className="h-5 w-5" />}
+                {loading ? <MorphingSquare className="w-4 h-4 bg-white" /> : <Sparkles className="h-5 w-5" />}
                 {loading ? 'Sending...' : 'Continue'}
               </button>
             </form>

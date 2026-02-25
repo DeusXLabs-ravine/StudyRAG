@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { FileText, Trash2, AlertCircle, CheckCircle, Clock, X, Brain, Sparkles, Upload, Link2, StickyNote, Star, Globe, Shield, ShieldAlert, ShieldCheck, BookOpen, Search, FolderOpen, ChevronDown, ChevronRight } from 'lucide-react';
 import useDocumentStore from '../store/documentStore';
 import useCourseStore from '../store/courseStore';
-import Spinner from '../components/common/Spinner';
+
 import ProgressBar from '../components/common/ProgressBar';
 import { FileUpload } from '@/components/ui/file-upload';
 import { TextLoop } from '@/components/ui/text-loop';
+import { MorphingSquare } from '../components/ui/morphing-square';
+import { AILoader } from '../components/ui/ai-loader';
 
 const statusConfig = {
   processing: { icon: Clock, color: 'text-yellow-600 bg-yellow-50', label: 'Processing' },
@@ -214,8 +216,8 @@ export default function Documents() {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-xs font-black uppercase tracking-widest transition-all ${isActive
-                    ? 'text-primary border-b-2 border-primary bg-primary/5'
-                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                  ? 'text-primary border-b-2 border-primary bg-primary/5'
+                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
                   }`}
               >
                 <Icon className="h-4 w-4" />
@@ -254,9 +256,9 @@ export default function Documents() {
                   <button
                     type="submit"
                     disabled={urlLoading || !urlInput.trim()}
-                    className="px-6 py-3 bg-primary text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                    className="px-6 py-3 bg-primary text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-3"
                   >
-                    {urlLoading ? <Spinner size="sm" /> : <Link2 className="h-4 w-4" />}
+                    {urlLoading ? <MorphingSquare className="w-4 h-4 bg-white" /> : <Link2 className="h-4 w-4" />}
                     Fetch
                   </button>
                 </div>
@@ -302,7 +304,7 @@ export default function Documents() {
                 disabled={noteLoading || !noteContent.trim()}
                 className="w-full py-3 bg-primary text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
               >
-                {noteLoading ? <Spinner size="sm" /> : <StickyNote className="h-4 w-4" />}
+                {noteLoading ? <MorphingSquare size="sm" /> : <StickyNote className="h-4 w-4" />}
                 Save & Process
               </button>
             </form>
@@ -339,12 +341,13 @@ export default function Documents() {
                   className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-primary focus:ring-0 text-sm font-medium placeholder:text-gray-300 transition-colors resize-y"
                 />
               </div>
+              {topicLoading && <AILoader text="Researching" />}
               <button
                 type="submit"
                 disabled={topicLoading || !topicInput.trim()}
-                className="w-full py-3 bg-primary text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                className="w-full py-3 bg-primary text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3"
               >
-                {topicLoading ? <Spinner size="sm" /> : <Brain className="h-4 w-4" />}
+                {!topicLoading && <Brain className="h-4 w-4" />}
                 Research & Create Course
               </button>
               <p className="text-[10px] text-gray-400 font-medium text-center">
@@ -527,8 +530,7 @@ export default function Documents() {
 
         {loading && (documents || []).length === 0 ? (
           <div className="sleek-card p-12 md:p-20 flex flex-col items-center justify-center gap-4 text-center">
-            <Spinner size="lg" />
-            <p className="text-xs md:text-sm font-bold text-gray-400 uppercase tracking-widest">Synchronizing Library</p>
+            <MorphingSquare message="Synchronizing" />
           </div>
         ) : (documents || []).length === 0 ? (
           <div className="sleek-card p-12 md:p-24 text-center group">
@@ -618,8 +620,8 @@ export default function Documents() {
                     <button
                       onClick={() => handleTogglePrimary(doc.id, doc.isPrimarySource)}
                       className={`w-9 h-9 md:w-10 md:h-10 flex items-center justify-center rounded-xl transition-all ${doc.isPrimarySource
-                          ? 'text-amber-500 bg-amber-50 hover:bg-amber-100'
-                          : 'text-gray-300 hover:text-amber-400 hover:bg-amber-50'
+                        ? 'text-amber-500 bg-amber-50 hover:bg-amber-100'
+                        : 'text-gray-300 hover:text-amber-400 hover:bg-amber-50'
                         }`}
                       title={doc.isPrimarySource ? 'Remove primary source' : 'Mark as primary source'}
                     >

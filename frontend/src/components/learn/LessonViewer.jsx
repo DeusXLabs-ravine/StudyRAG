@@ -4,7 +4,7 @@ import { Target, Lightbulb, HelpCircle, X, CheckCircle, Lock, ChevronRight, Shap
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { explainSimply } from '../../services/moduleService';
-import Spinner from '../common/Spinner';
+import { MorphingSquare } from '../ui/morphing-square';
 import TTSButton from '../common/TTSButton';
 import DiagramViewer from './DiagramViewer';
 import GeneratedDiagramCard from './GeneratedDiagramCard';
@@ -142,7 +142,7 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
           className="w-full md:w-auto px-10 py-4 bg-primary text-white rounded-2xl text-sm font-extrabold hover:bg-primary/90 transition-all shadow-xl shadow-primary/20 active:scale-95 flex items-center justify-center gap-3 disabled:opacity-70"
         >
           {regeneratingQuestions ? (
-            <><Spinner size="xs" /> Preparing New Questions...</>
+            <><MorphingSquare size="xs" /> Preparing New Questions...</>
           ) : (
             <>Check Comprehension <ChevronRight className="h-4 w-4" /></>
           )}

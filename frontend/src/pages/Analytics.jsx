@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { BarChart3, TrendingUp, Target, Flame, Brain, BookOpen, Zap, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import * as analyticsService from '../services/analyticsService';
-import Spinner from '../components/common/Spinner';
+import { MorphingSquare } from '../components/ui/morphing-square';
 
 export default function Analytics() {
   const navigate = useNavigate();
@@ -39,7 +39,7 @@ export default function Analytics() {
   if (loading) {
     return (
       <div className="flex justify-center items-center py-24">
-        <Spinner size="lg" />
+        <MorphingSquare message="Analyzing progress" />
       </div>
     );
   }
@@ -71,149 +71,135 @@ export default function Analytics() {
         />
         <StatCard
           icon={<Brain className="h-5 w-5 text-purple-500" />}
-          label="Flashcards Due"
-          value={flashcardStats.dueToday || 0}
-          sub={`${flashcardStats.mastered || 0} mastered`}
+          label="Learned Topics"
+          value={overview?.topicCount || 0}
+          sub="Across all docs"
           color="purple"
         />
         <StatCard
           icon={<BookOpen className="h-5 w-5 text-green-500" />}
-          label="Total Days"
-          value={streak.totalDays}
-          sub="studied"
+          label="Flashcards"
+          value={flashcardStats.total || 0}
+          sub={`${flashcardStats.due || 0} due today`}
           color="green"
         />
       </div>
 
-      {/* AI Recommendation */}
-      {recommendation && (
-        <div className="mb-8 p-5 bg-gradient-to-r from-primary-50 to-blue-50 rounded-xl border border-primary-200">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary-100 rounded-lg">
-                <Zap className="h-5 w-5 text-primary-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-900">AI Recommendation</p>
-                <p className="text-sm text-gray-600">{recommendation.message}</p>
-              </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Main Chart Area */}
+        <div className="lg:col-span-2 space-y-8">
+          {/* Performance Trend */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-blue-500" />
+                Performance Trend
+              </h2>
             </div>
-            <button
-              onClick={() => {
-                if (recommendation.action === 'learn') navigate('/learn');
-                else if (recommendation.action === 'quiz') navigate('/quiz');
-                else if (recommendation.action === 'flashcards') navigate('/flashcards');
-              }}
-              className="flex items-center gap-1 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700"
-            >
-              Go <ArrowRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Topic Performance */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-gray-400" /> Topic Mastery
-          </h2>
-          {topics.length === 0 ? (
-            <p className="text-sm text-gray-500 py-4">No topic data yet. Complete modules or quizzes to see your progress.</p>
-          ) : (
-            <div className="space-y-3">
-              {topics.map(topic => (
-                <div key={topic.topic}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-700">{topic.topic}</span>
-                    <span className={`text-xs font-medium ${getMasteryColor(topic.mastery)}`}>
-                      {topic.avgScore}%
-                    </span>
+            <div className="h-64 flex items-end justify-between gap-2 px-2">
+              {quizTrend.length > 0 ? (
+                quizTrend.map((d, i) => (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
+                    <div className="relative w-full">
+                      <div
+                        className="w-full bg-blue-100 rounded-t-md hover:bg-blue-200 transition-all cursor-help relative"
+                        style={{ height: `${d.score}%` }}
+                      >
+                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                          {d.score}% score
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-gray-400 font-medium rotate-45 origin-left">{d.date}</span>
                   </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2">
+                ))
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-gray-50 rounded-lg border border-dashed border-gray-200 uppercase tracking-widest text-[10px] font-black">
+                  Complete quizzes to see your trend
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Topic Breakdown */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-purple-500" />
+              Topic Breakdown
+            </h2>
+            <div className="space-y-4">
+              {topics.map((t, i) => (
+                <div key={i} className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium text-gray-700">{t.name}</span>
+                    <span className="text-gray-500 font-bold">{t.mastery}%</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
                     <div
-                      className={`h-2 rounded-full transition-all ${getMasteryBarColor(topic.mastery)}`}
-                      style={{ width: `${topic.avgScore}%` }}
+                      className={`h-full rounded-full transition-all duration-1000 ${t.mastery > 80 ? 'bg-green-500' : t.mastery > 50 ? 'bg-blue-500' : 'bg-orange-500'}`}
+                      style={{ width: `${t.mastery}%` }}
                     />
                   </div>
                 </div>
               ))}
-            </div>
-          )}
-        </div>
-
-        {/* Weak Areas */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Target className="h-5 w-5 text-red-400" /> Areas to Improve
-          </h2>
-          {weakAreas.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-sm text-green-600 font-medium">Looking good!</p>
-              <p className="text-xs text-gray-500 mt-1">No weak areas detected. Keep it up!</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {weakAreas.map(area => (
-                <div key={area.topic} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium text-red-800">{area.topic}</p>
-                    <p className="text-xs text-red-600">{area.attempts} attempts</p>
-                  </div>
-                  <span className="text-sm font-bold text-red-600">{area.avgScore}%</span>
+              {topics.length === 0 && (
+                <div className="py-8 text-center text-gray-400 text-xs font-bold uppercase tracking-widest">
+                  No topics processed yet
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Quiz Score Trend */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 md:col-span-2">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-gray-400" /> Quiz Score Trend
-          </h2>
-          {quizTrend.length === 0 ? (
-            <p className="text-sm text-gray-500 py-4">No quiz history yet. Take a quiz to see your trend.</p>
-          ) : (
-            <div className="flex items-end gap-1 h-40">
-              {quizTrend.map((entry, i) => (
-                <div
-                  key={i}
-                  className="flex-1 flex flex-col items-center justify-end"
-                >
-                  <span className="text-[10px] text-gray-500 mb-1">{entry.score}%</span>
-                  <div
-                    className={`w-full rounded-t ${entry.isExam ? 'bg-purple-400' : entry.score >= 70 ? 'bg-green-400' : 'bg-red-400'}`}
-                    style={{ height: `${entry.score}%` }}
-                    title={`${entry.score}% - ${entry.difficulty}${entry.isExam ? ' (Exam)' : ''}`}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Flashcard Stats */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 md:col-span-2">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Flashcard Overview</h2>
-          <div className="grid grid-cols-4 gap-4">
-            <div className="text-center p-3 bg-blue-50 rounded-lg">
-              <p className="text-2xl font-bold text-blue-600">{flashcardStats.new || 0}</p>
-              <p className="text-xs text-blue-500">New</p>
-            </div>
-            <div className="text-center p-3 bg-orange-50 rounded-lg">
-              <p className="text-2xl font-bold text-orange-600">{flashcardStats.learning || 0}</p>
-              <p className="text-xs text-orange-500">Learning</p>
-            </div>
-            <div className="text-center p-3 bg-green-50 rounded-lg">
-              <p className="text-2xl font-bold text-green-600">{flashcardStats.mastered || 0}</p>
-              <p className="text-xs text-green-500">Mastered</p>
-            </div>
-            <div className="text-center p-3 bg-purple-50 rounded-lg">
-              <p className="text-2xl font-bold text-purple-600">{flashcardStats.dueToday || 0}</p>
-              <p className="text-xs text-purple-500">Due Today</p>
+              )}
             </div>
           </div>
+        </div>
+
+        {/* Sidebar Area */}
+        <div className="space-y-8">
+          {/* Weak Areas */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-orange-500" />
+              Growth Opportunities
+            </h2>
+            <div className="space-y-3">
+              {weakAreas.length > 0 ? (
+                weakAreas.map((w, i) => (
+                  <div key={i} className="p-3 bg-white border border-gray-100 rounded-xl hover:border-orange-200 transition-colors">
+                    <p className="text-sm font-bold text-gray-900">{w.name}</p>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-[10px] font-black uppercase text-orange-500 tracking-widest">Mastery: {w.mastery}%</span>
+                      <button
+                        onClick={() => navigate('/learn')}
+                        className="text-[10px] text-gray-400 hover:text-blue-500 font-black uppercase tracking-widest flex items-center gap-1"
+                      >
+                        Study <ArrowRight className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-gray-500 italic">No weak areas identified. Keep it up!</p>
+              )}
+            </div>
+          </div>
+
+          {/* Smart Recommendation */}
+          {recommendation && (
+            <div className="bg-primary/5 rounded-[2rem] border border-primary/10 p-6 relative overflow-hidden">
+              <div className="absolute -top-4 -right-4 w-20 h-20 bg-primary/10 rounded-full blur-2xl" />
+              <div className="relative z-10">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-white rounded-full text-[10px] font-black text-primary border border-primary/10 uppercase tracking-widest mb-4">
+                  <Zap className="h-3 w-3" /> Sage Suggestion
+                </div>
+                <h3 className="text-base font-black text-gray-900 mb-2">{recommendation.title}</h3>
+                <p className="text-xs text-gray-600 font-medium leading-relaxed mb-4">{recommendation.description}</p>
+                <button
+                  onClick={() => navigate(recommendation.link)}
+                  className="w-full py-2.5 bg-gray-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-black transition-colors"
+                >
+                  Start Now
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -221,38 +207,23 @@ export default function Analytics() {
 }
 
 function StatCard({ icon, label, value, sub, color }) {
-  const bgColors = {
-    blue: 'bg-blue-50 border-blue-100',
-    orange: 'bg-orange-50 border-orange-100',
-    purple: 'bg-purple-50 border-purple-100',
-    green: 'bg-green-50 border-green-100',
+  const colorMap = {
+    blue: 'bg-blue-50 text-blue-600',
+    orange: 'bg-orange-50 text-orange-600',
+    purple: 'bg-purple-50 text-purple-600',
+    green: 'bg-green-50 text-green-600',
   };
 
   return (
-    <div className={`p-4 rounded-xl border ${bgColors[color]}`}>
-      <div className="flex items-center gap-2 mb-2">{icon}<span className="text-xs text-gray-500">{label}</span></div>
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
-      <p className="text-xs text-gray-500">{sub}</p>
+    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${colorMap[color]}`}>
+        {icon}
+      </div>
+      <div>
+        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{label}</p>
+        <p className="text-xl font-black text-gray-900 leading-none">{value}</p>
+        <p className="text-[10px] font-bold text-gray-500 mt-2 uppercase tracking-tighter opacity-60">{sub}</p>
+      </div>
     </div>
   );
-}
-
-function getMasteryColor(mastery) {
-  switch (mastery) {
-    case 'mastered': return 'text-green-600';
-    case 'proficient': return 'text-blue-600';
-    case 'developing': return 'text-yellow-600';
-    case 'beginner': return 'text-orange-600';
-    default: return 'text-red-600';
-  }
-}
-
-function getMasteryBarColor(mastery) {
-  switch (mastery) {
-    case 'mastered': return 'bg-green-500';
-    case 'proficient': return 'bg-blue-500';
-    case 'developing': return 'bg-yellow-500';
-    case 'beginner': return 'bg-orange-500';
-    default: return 'bg-red-500';
-  }
 }

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Play, CheckCircle, XCircle, RotateCcw, Trophy, Zap } from 'lucide-react';
+import { Play, CheckCircle, XCircle, RotateCcw, Trophy, Zap, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as quizService from '../services/quizService';
 import useDocumentStore from '../store/documentStore';
-import Spinner from '../components/common/Spinner';
+import { MorphingSquare } from '../components/ui/morphing-square';
 
 export default function Quiz() {
   const { documents, fetchDocuments } = useDocumentStore();
@@ -59,7 +59,6 @@ export default function Quiz() {
     setView('config');
   };
 
-  // Config view
   if (view === 'config') {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8 md:py-12">
@@ -160,7 +159,7 @@ export default function Quiz() {
             disabled={loading}
             className="mt-8 w-full flex items-center justify-center gap-3 px-8 py-4 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-primary/90 transition-all shadow-xl shadow-primary/20 active:scale-95 disabled:opacity-50"
           >
-            {loading ? <Spinner size="sm" /> : <Play className="h-5 w-5" />}
+            {loading ? <MorphingSquare size="sm" /> : <Play className="h-5 w-5" />}
             Generate Quiz
           </button>
         </div>
@@ -168,7 +167,6 @@ export default function Quiz() {
     );
   }
 
-  // Quiz view
   if (view === 'quiz' && quiz) {
     const q = quiz.questions[currentQ];
     const answeredCount = Object.keys(answers).length;
@@ -251,7 +249,7 @@ export default function Quiz() {
                 disabled={answeredCount < quiz.questions.length || loading}
                 className="px-6 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
               >
-                {loading ? <Spinner size="sm" /> : 'Submit Quiz'}
+                {loading ? <MorphingSquare size="sm" /> : 'Submit Quiz'}
               </button>
             )}
           </div>
@@ -260,7 +258,6 @@ export default function Quiz() {
     );
   }
 
-  // Result view
   if (view === 'result' && result) {
     const passed = result.score >= 70;
     return (
@@ -270,7 +267,6 @@ export default function Quiz() {
         className="max-w-3xl mx-auto px-4 py-12"
       >
         <div className={`relative sleek-card overflow-hidden shadow-2xl mb-8 ${passed ? 'bg-gradient-to-b from-emerald-50 to-white' : 'bg-gradient-to-b from-red-50 to-white'}`}>
-          {/* Background Decoration */}
           <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
             <div className={`absolute -top-10 -left-10 w-40 h-40 rounded-full blur-3xl ${passed ? 'bg-emerald-400' : 'bg-red-400'}`} />
             <div className={`absolute -bottom-10 -right-10 w-40 h-40 rounded-full blur-3xl ${passed ? 'bg-emerald-400' : 'bg-red-400'}`} />

@@ -43,11 +43,14 @@ async function generateGame(moduleId, gameType, difficulty = 'medium') {
   }
 
   const count = DEFAULT_COUNTS[gameType] || 5;
+
+  // Truncate content to ~8K chars to stay well under Gemini's token limit
+  const moduleContent = (module.content || '').slice(0, 8000);
   const contentText = [
     `Title: ${module.title}`,
     `Topic: ${module.topic}`,
     `Objectives: ${JSON.stringify(module.objectives)}`,
-    `Content: ${module.content}`,
+    `Content: ${moduleContent}`,
     `Key Takeaways: ${JSON.stringify(module.takeaways)}`,
   ].join('\n\n');
 
@@ -65,11 +68,52 @@ async function generateGame(moduleId, gameType, difficulty = 'medium') {
     0
   );
 
-  const gameData = parseGameJSON(result);
+  let gameData = parseGameJSON(result);
 
-  // Validate structure
+  // Normalize the type field (Gemini may return "Quiz" instead of "quiz")
+  if (gameData.type) gameData.type = gameData.type.toLowerCase().replace(/[\s-]/g, '_');
+
+  // Force correct type if AI returned something unexpected
   if (!gameData.type || !GAME_TYPES.includes(gameData.type)) {
-    throw new Error('Invalid game data returned from AI');
+    // Try to infer from structure
+    if (gameData.questions && Array.isArray(gameData.questions)) gameData.type = 'quiz';
+    else if (gameData.pairs && Array.isArray(gameData.pairs)) gameData.type = 'matching';
+    else if (gameData.items && Array.isArray(gameData.items)) gameData.type = 'fill_blank';
+    else if (gameData.statements && Array.isArray(gameData.statements)) gameData.type = 'speed_round';
+    else throw new Error('Invalid game data returned from AI');
+  }
+
+  // Ensure required fields exist per type
+  if (gameData.type === 'quiz') {
+    if (!gameData.questions || !Array.isArray(gameData.questions) || gameData.questions.length === 0) {
+      throw new Error('Quiz game has no questions');
+    }
+    // Normalize: ensure correct is a number index
+    gameData.questions = gameData.questions.map(q => ({
+      question: q.question || q.text || '',
+      options: q.options || q.choices || [],
+      correct: typeof q.correct === 'number' ? q.correct :
+               typeof q.answer === 'number' ? q.answer :
+               typeof q.correct === 'string' ? (q.options || []).indexOf(q.correct) : 0,
+      explanation: q.explanation || q.hint || '',
+    }));
+    gameData.xpReward = gameData.xpReward || 10;
+  } else if (gameData.type === 'matching') {
+    if (!gameData.pairs || !Array.isArray(gameData.pairs) || gameData.pairs.length === 0) {
+      throw new Error('Matching game has no pairs');
+    }
+    gameData.xpReward = gameData.xpReward || 15;
+  } else if (gameData.type === 'fill_blank') {
+    if (!gameData.items || !Array.isArray(gameData.items) || gameData.items.length === 0) {
+      throw new Error('Fill blank game has no items');
+    }
+    gameData.xpReward = gameData.xpReward || 12;
+  } else if (gameData.type === 'speed_round') {
+    if (!gameData.statements || !Array.isArray(gameData.statements) || gameData.statements.length === 0) {
+      throw new Error('Speed round has no statements');
+    }
+    gameData.timePerQuestion = gameData.timePerQuestion || 8;
+    gameData.xpReward = gameData.xpReward || 20;
   }
 
   return gameData;
