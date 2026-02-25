@@ -22,7 +22,11 @@ class GeminiKeyPool {
       this.index = (this.index + 1) % total;
       if (entry.rateLimitedUntil <= now) return entry;
     }
-    return [...this.entries].sort((a, b) => a.rateLimitedUntil - b.rateLimitedUntil)[0];
+    // All keys are rate-limited — return the one whose cooldown expires soonest
+    const soonest = [...this.entries].sort((a, b) => a.rateLimitedUntil - b.rateLimitedUntil)[0];
+    const waitMs = soonest.rateLimitedUntil - now;
+    console.warn(`[GeminiKeyPool] All keys rate-limited, soonest available in ${Math.ceil(waitMs / 1000)}s`);
+    return soonest;
   }
 
   markRateLimited(entry) {
@@ -125,7 +129,7 @@ const MODELS = {
   fast: 'gemini-3-flash-preview',
   standard: 'gemini-3-flash-preview',
   advanced: 'gemini-3-pro-preview',
-  imageGen: 'gemini-2.0-flash-preview-image-generation',
+  imageGen: 'gemini-2.5-flash-image',
 };
 
 const FALLBACK_MODELS = {
@@ -211,8 +215,14 @@ async function withRetryOnRateLimit(fn, maxRetries = 3, priority = 0) {
           err?.message?.includes('overloaded');
 
         if ((isRateLimit || isOverloaded) && attempt < maxRetries && keyPool) {
-          const entry = keyPool.getClient();
-          if (isRateLimit) keyPool.markRateLimited(entry);
+          // Mark all entries that are likely rate-limited for this model
+          // (we can't know which key fn() used internally, so mark the most recently
+          // rotated entry — getClient() advances the index, so the previous one was used)
+          if (isRateLimit) {
+            const total = keyPool.entries.length;
+            const usedIdx = (keyPool.index - 1 + total) % total;
+            keyPool.markRateLimited(keyPool.entries[usedIdx]);
+          }
           const waitMs = isOverloaded ? 2000 * (attempt + 1) : 1000 * (attempt + 1);
           console.warn(`[GeminiKeyPool] ${isOverloaded ? '503 overloaded' : 'Rate limited'}, retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`);
           await new Promise(r => setTimeout(r, waitMs));

@@ -80,7 +80,7 @@ export default function Exam() {
       const data = await examService.listPrepSessions();
       setSessions(data || []);
     } catch (err) {
-      console.error('Failed to load sessions:', err);
+      // error silenced — UI shows empty state
     } finally {
       setSessionsLoading(false);
     }
@@ -126,7 +126,7 @@ export default function Exam() {
           pollRef.current = null;
         }
       } catch (err) {
-        console.error('Poll error:', err);
+        // poll error — will retry on next interval
       }
     }, 3000);
   }, []);

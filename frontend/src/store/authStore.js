@@ -44,7 +44,7 @@ const useAuthStore = create((set, get) => ({
         }
       });
     } catch (err) {
-      console.error('Auth initialization failed:', err);
+      // auth init failed — loading:false will show login
       set({ loading: false });
     }
   },
@@ -72,7 +72,7 @@ const useAuthStore = create((set, get) => ({
       if (err.response?.status === 401) {
         get().signOut();
       }
-      console.error('Failed to fetch profile:', err.message);
+      // fetch profile failed — cached profile (if any) remains in use
     }
   },
 

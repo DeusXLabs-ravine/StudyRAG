@@ -1,5 +1,6 @@
 function errorHandler(err, req, res, next) {
   console.error('Error:', err.message);
+  if (err.cause) console.error('Cause:', err.cause.message || err.cause);
   console.error(err.stack);
 
   const statusCode = parseInt(err.statusCode, 10) || 500;

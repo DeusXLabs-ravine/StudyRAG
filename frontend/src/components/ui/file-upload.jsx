@@ -43,7 +43,7 @@ export const FileUpload = ({ onChange }) => {
     noClick: true,
     onDrop: handleFileChange,
     onDropRejected: (error) => {
-      console.log(error);
+      // drop rejection handled by UI
     },
   });
 

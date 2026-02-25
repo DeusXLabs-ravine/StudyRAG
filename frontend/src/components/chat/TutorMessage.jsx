@@ -174,7 +174,6 @@ function BlockErrorFallback({ type }) {
 // Render a single canvas block
 function CanvasBlockRenderer({ block, onAction }) {
     if (!block || !block.type) return null;
-    console.log('[Sage] Rendering block:', block.type, block);
     switch (block.type) {
         case 'quiz':
             return (

@@ -31,7 +31,7 @@ export default function QuizSection({ module, onBack, onComplete }) {
     try {
       await submitProgress(module.id, score);
     } catch (err) {
-      console.error('Failed to save progress:', err.message);
+      // progress save failed — non-blocking
     }
   };
 

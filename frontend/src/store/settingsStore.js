@@ -20,7 +20,7 @@ const useSettingsStore = create((set, get) => ({
         tutorial_completed: settings?.tutorial_completed === 'true' || settings?.tutorial_completed === true
       });
     } catch (err) {
-      console.error('Failed to load settings:', err.message);
+      // settings load failed — defaults will be used
       set({ loaded: true });
     }
   },
@@ -30,7 +30,7 @@ const useSettingsStore = create((set, get) => ({
     try {
       await updateSetting(key, value);
     } catch (err) {
-      console.error('Failed to save setting:', err.message);
+      // save failed — optimistic update already applied
     }
   },
 
@@ -43,7 +43,7 @@ const useSettingsStore = create((set, get) => ({
     try {
       await updateSetting('tutorial_completed', completed);
     } catch (err) {
-      console.error('Failed to save tutorial status:', err.message);
+      // save failed — optimistic update already applied
     }
   },
 
@@ -56,7 +56,7 @@ const useSettingsStore = create((set, get) => ({
       const profile = await getLearningProfile();
       set({ learningProfile: profile, learningProfileLoaded: true });
     } catch (err) {
-      console.error('Failed to load learning profile:', err.message);
+      // profile load failed — defaults will be used
       set({ learningProfileLoaded: true });
     }
   },
@@ -70,7 +70,7 @@ const useSettingsStore = create((set, get) => ({
       const profile = await getLearningProfile();
       set({ learningProfile: profile });
     } catch (err) {
-      console.error('Failed to save learning style:', err.message);
+      // save failed — optimistic update already applied
     }
   },
 
@@ -81,7 +81,7 @@ const useSettingsStore = create((set, get) => ({
       const profile = await getLearningProfile();
       set({ learningProfile: profile });
     } catch (err) {
-      console.error('Failed to save learning pace:', err.message);
+      // save failed — optimistic update already applied
     }
   },
 }));

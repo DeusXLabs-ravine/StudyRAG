@@ -82,7 +82,7 @@ export default function useTTS() {
 
       await audio.play();
     } catch (err) {
-      console.error(`TTS chunk ${index} error:`, err.message);
+      // TTS chunk error — try next chunk
       if (!stoppedRef.current) {
         // Try next chunk
         playChunk(index + 1, voiceId);
@@ -146,7 +146,7 @@ export default function useTTS() {
       await audio.play();
       setIsPlaying(true);
     } catch (err) {
-      console.error('TTS error:', err.message);
+      // TTS playback failed
       setIsPlaying(false);
     } finally {
       setIsLoading(false);

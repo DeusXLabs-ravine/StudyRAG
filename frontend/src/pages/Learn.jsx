@@ -271,7 +271,7 @@ export default function Learn() {
     if (!moduleId) return;
     if (tutorLoading) {
       // Don't block game requests — just skip the loading guard
-      console.log('[Sage] Game request while loading, proceeding anyway');
+      // Game request while loading, proceeding anyway
     }
     setTutorLoading(true);
     try {
@@ -374,7 +374,6 @@ export default function Learn() {
         });
       }
     } catch (err) {
-      console.error('Diagram generation failed:', err.message);
       addMessage(currentModule.id, {
         role: 'tutor',
         text: `Couldn't generate the visual right now: ${err.message}. Try again in a moment!`,
@@ -611,7 +610,7 @@ export default function Learn() {
                       try {
                         await regenerateQuestions(currentModule.id);
                       } catch (err) {
-                        console.error('Failed to regenerate questions:', err.message);
+                        // regeneration failed — UI stays on current questions
                       } finally {
                         setRegeneratingQuestions(false);
                       }
@@ -1011,7 +1010,6 @@ function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded,
             msg={msg}
             isCompact={!isMobile && !isMaximized}
             onAction={(action) => {
-              console.log('[Sage] onAction:', action.type, { hasGameReq: !!onGameRequest, module: currentModule?.id });
               if (action.type === 'quiz_answer') {
                 onSend(action.answer);
               } else if (action.type === 'diagram_request') {
@@ -1022,11 +1020,8 @@ function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded,
                   if (modId) {
                     // null = AI picks a random game type (quiz, matching, fill_blank, speed_round)
                     onGameRequest(modId, null);
-                  } else {
-                    console.warn('[Sage] No currentModule for game request');
                   }
-                } else {
-                  console.warn('[Sage] onGameRequest not provided');
+                }
                 }
               } else if (action.type === 'game_complete') {
                 if (onGameComplete) onGameComplete(action);
