@@ -445,13 +445,6 @@ export default function TutorMessage({ msg, onAction, isCompact }) {
                                 </motion.div>
                             )}
 
-                            {segment.type === 'summary' && (
-                                <div className="absolute right-4 bottom-4 rotate-12 opacity-80 scale-75 sm:scale-100">
-                                    <div className="bg-blue-100 text-blue-700 border-2 border-dashed border-blue-200 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-sm">
-                                        Key Insight
-                                    </div>
-                                </div>
-                            )}
                         </div>
                     </div>
                 </motion.div>

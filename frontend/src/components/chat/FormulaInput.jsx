@@ -7,37 +7,37 @@ const FORMULA_GROUPS = [
   {
     label: 'Greek',
     items: [
-      { display: 'α', insert: '\\alpha', tex: '\\alpha' },
-      { display: 'β', insert: '\\beta', tex: '\\beta' },
-      { display: 'γ', insert: '\\gamma', tex: '\\gamma' },
-      { display: 'δ', insert: '\\delta', tex: '\\delta' },
-      { display: 'θ', insert: '\\theta', tex: '\\theta' },
-      { display: 'λ', insert: '\\lambda', tex: '\\lambda' },
-      { display: 'μ', insert: '\\mu', tex: '\\mu' },
-      { display: 'π', insert: '\\pi', tex: '\\pi' },
-      { display: 'σ', insert: '\\sigma', tex: '\\sigma' },
-      { display: 'φ', insert: '\\phi', tex: '\\phi' },
-      { display: 'ω', insert: '\\omega', tex: '\\omega' },
-      { display: 'Δ', insert: '\\Delta', tex: '\\Delta' },
-      { display: 'Σ', insert: '\\Sigma', tex: '\\Sigma' },
-      { display: 'Ω', insert: '\\Omega', tex: '\\Omega' },
+      { display: 'α', insert: 'α', tex: '\\alpha', direct: true },
+      { display: 'β', insert: 'β', tex: '\\beta', direct: true },
+      { display: 'γ', insert: 'γ', tex: '\\gamma', direct: true },
+      { display: 'δ', insert: 'δ', tex: '\\delta', direct: true },
+      { display: 'θ', insert: 'θ', tex: '\\theta', direct: true },
+      { display: 'λ', insert: 'λ', tex: '\\lambda', direct: true },
+      { display: 'μ', insert: 'μ', tex: '\\mu', direct: true },
+      { display: 'π', insert: 'π', tex: '\\pi', direct: true },
+      { display: 'σ', insert: 'σ', tex: '\\sigma', direct: true },
+      { display: 'φ', insert: 'φ', tex: '\\phi', direct: true },
+      { display: 'ω', insert: 'ω', tex: '\\omega', direct: true },
+      { display: 'Δ', insert: 'Δ', tex: '\\Delta', direct: true },
+      { display: 'Σ', insert: 'Σ', tex: '\\Sigma', direct: true },
+      { display: 'Ω', insert: 'Ω', tex: '\\Omega', direct: true },
     ]
   },
   {
     label: 'Operators',
     items: [
-      { display: '±', insert: '\\pm', tex: '\\pm' },
-      { display: '×', insert: '\\times', tex: '\\times' },
-      { display: '÷', insert: '\\div', tex: '\\div' },
-      { display: '≠', insert: '\\neq', tex: '\\neq' },
-      { display: '≤', insert: '\\leq', tex: '\\leq' },
-      { display: '≥', insert: '\\geq', tex: '\\geq' },
-      { display: '≈', insert: '\\approx', tex: '\\approx' },
-      { display: '∞', insert: '\\infty', tex: '\\infty' },
-      { display: '∝', insert: '\\propto', tex: '\\propto' },
-      { display: '→', insert: '\\rightarrow', tex: '\\rightarrow' },
-      { display: '⇒', insert: '\\Rightarrow', tex: '\\Rightarrow' },
-      { display: '∈', insert: '\\in', tex: '\\in' },
+      { display: '±', insert: '±', tex: '\\pm', direct: true },
+      { display: '×', insert: '×', tex: '\\times', direct: true },
+      { display: '÷', insert: '÷', tex: '\\div', direct: true },
+      { display: '≠', insert: '≠', tex: '\\neq', direct: true },
+      { display: '≤', insert: '≤', tex: '\\leq', direct: true },
+      { display: '≥', insert: '≥', tex: '\\geq', direct: true },
+      { display: '≈', insert: '≈', tex: '\\approx', direct: true },
+      { display: '∞', insert: '∞', tex: '\\infty', direct: true },
+      { display: '∝', insert: '∝', tex: '\\propto', direct: true },
+      { display: '→', insert: '→', tex: '\\rightarrow', direct: true },
+      { display: '⇒', insert: '⇒', tex: '\\Rightarrow', direct: true },
+      { display: '∈', insert: '∈', tex: '\\in', direct: true },
     ]
   },
   {
@@ -52,31 +52,31 @@ const FORMULA_GROUPS = [
       { display: '∏', insert: '\\prod_{i=1}^{n}', tex: '\\prod_{i=1}^{n}' },
       { display: 'lim', insert: '\\lim_{x \\to \\infty}', tex: '\\lim_{x \\to \\infty}' },
       { display: 'a/b', insert: '\\frac{}{}', tex: '\\frac{a}{b}', cursor: -1 },
-      { display: '∂', insert: '\\partial', tex: '\\partial' },
-      { display: '∇', insert: '\\nabla', tex: '\\nabla' },
-      { display: 'log', insert: '\\log', tex: '\\log' },
+      { display: '∂', insert: '∂', tex: '\\partial', direct: true },
+      { display: '∇', insert: '∇', tex: '\\nabla', direct: true },
+      { display: 'log', insert: 'log', tex: '\\log', direct: true },
     ]
   },
   {
     label: 'Trig',
     items: [
-      { display: 'sin', insert: '\\sin', tex: '\\sin' },
-      { display: 'cos', insert: '\\cos', tex: '\\cos' },
-      { display: 'tan', insert: '\\tan', tex: '\\tan' },
-      { display: 'sin⁻¹', insert: '\\arcsin', tex: '\\arcsin' },
-      { display: 'cos⁻¹', insert: '\\arccos', tex: '\\arccos' },
-      { display: 'tan⁻¹', insert: '\\arctan', tex: '\\arctan' },
+      { display: 'sin', insert: 'sin', tex: '\\sin', direct: true },
+      { display: 'cos', insert: 'cos', tex: '\\cos', direct: true },
+      { display: 'tan', insert: 'tan', tex: '\\tan', direct: true },
+      { display: 'sin⁻¹', insert: 'arcsin', tex: '\\arcsin', direct: true },
+      { display: 'cos⁻¹', insert: 'arccos', tex: '\\arccos', direct: true },
+      { display: 'tan⁻¹', insert: 'arctan', tex: '\\arctan', direct: true },
     ]
   },
   {
     label: 'Brackets',
     items: [
-      { display: '( )', insert: '\\left( \\right)', tex: '\\left( \\right)' },
-      { display: '[ ]', insert: '\\left[ \\right]', tex: '\\left[ \\right]' },
-      { display: '{ }', insert: '\\left\\{ \\right\\}', tex: '\\left\\{ \\right\\}' },
-      { display: '| |', insert: '\\left| \\right|', tex: '\\left| \\right|' },
-      { display: '⌈ ⌉', insert: '\\lceil \\rceil', tex: '\\lceil \\rceil' },
-      { display: '⌊ ⌋', insert: '\\lfloor \\rfloor', tex: '\\lfloor \\rfloor' },
+      { display: '( )', insert: '( )', tex: '\\left( \\right)', direct: true },
+      { display: '[ ]', insert: '[ ]', tex: '\\left[ \\right]', direct: true },
+      { display: '{ }', insert: '{ }', tex: '\\left\\{ \\right\\}', direct: true },
+      { display: '| |', insert: '| |', tex: '\\left| \\right|', direct: true },
+      { display: '⌈ ⌉', insert: '⌈ ⌉', tex: '\\lceil \\rceil', direct: true },
+      { display: '⌊ ⌋', insert: '⌊ ⌋', tex: '\\lfloor \\rfloor', direct: true },
     ]
   },
   {
@@ -112,10 +112,12 @@ export default function FormulaInput({ textareaRef, onInsert }) {
     const textarea = textareaRef?.current;
     if (!textarea && !onInsert) return;
 
-    const insertText = `$${item.insert}$`;
+    // Direct items (Greek, operators, trig, brackets) insert their Unicode symbol
+    // Complex items (fractions, integrals, matrices) get wrapped in $...$ for LaTeX
+    const insertText = item.direct ? item.insert : `$${item.insert}$`;
 
     if (onInsert) {
-      onInsert(insertText, item.cursor);
+      onInsert(insertText, item.direct ? undefined : item.cursor);
       return;
     }
 
@@ -132,7 +134,7 @@ export default function FormulaInput({ textareaRef, onInsert }) {
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
     // Position cursor
-    const cursorPos = item.cursor ? start + insertText.length + item.cursor : start + insertText.length;
+    const cursorPos = item.cursor && !item.direct ? start + insertText.length + item.cursor : start + insertText.length;
     setTimeout(() => {
       textarea.selectionStart = textarea.selectionEnd = cursorPos;
       textarea.focus();
@@ -146,10 +148,10 @@ export default function FormulaInput({ textareaRef, onInsert }) {
     <div className="relative">
       {/* Toggle Button */}
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
-          isOpen ? 'bg-indigo-100 text-indigo-600 border border-indigo-200' : 'text-gray-400 hover:text-indigo-500 hover:bg-indigo-50'
-        }`}
+        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${isOpen ? 'bg-indigo-100 text-indigo-600 border border-indigo-200' : 'text-gray-400 hover:text-indigo-500 hover:bg-indigo-50'
+          }`}
         title="Math formula toolbar"
       >
         <FunctionSquare className="h-3.5 w-3.5" />
@@ -180,9 +182,8 @@ export default function FormulaInput({ textareaRef, onInsert }) {
                 <button
                   key={i}
                   onClick={() => setActiveGroup(i)}
-                  className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-wider whitespace-nowrap transition-colors ${
-                    activeGroup === i ? 'text-indigo-600 border-b-2 border-indigo-500 bg-white' : 'text-gray-400 hover:text-gray-600'
-                  }`}
+                  className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-wider whitespace-nowrap transition-colors ${activeGroup === i ? 'text-indigo-600 border-b-2 border-indigo-500 bg-white' : 'text-gray-400 hover:text-gray-600'
+                    }`}
                 >
                   {group.label}
                 </button>
@@ -194,6 +195,7 @@ export default function FormulaInput({ textareaRef, onInsert }) {
               {FORMULA_GROUPS[activeGroup].items.map((item, i) => (
                 <button
                   key={i}
+                  type="button"
                   onClick={() => handleInsert(item)}
                   onMouseEnter={() => setPreviewText(`$${item.tex}$`)}
                   onMouseLeave={() => setPreviewText('')}

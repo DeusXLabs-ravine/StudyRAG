@@ -9,6 +9,7 @@ import XpBar from '../components/chat/XpBar';
 import XpPopup from '../components/chat/XpPopup';
 import AchievementToast from '../components/chat/AchievementToast';
 import FormulaInput from '../components/chat/FormulaInput';
+import InputPreview from '../components/chat/InputPreview';
 import { ChatInput } from '@/components/ui/chat-input';
 import { MorphingSquare } from '../components/ui/morphing-square';
 
@@ -16,6 +17,10 @@ import { MorphingSquare } from '../components/ui/morphing-square';
 const SidebarContent = memo(function SidebarContent({ messages, onClear, onCloseSidebar }) {
   return (
     <div className="p-6 h-full flex flex-col">
+      <div className="mb-6">
+        <XpBar />
+      </div>
+
       <button
         onClick={onClear}
         className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-white border border-[#e2e8f0] text-[#0f172a] font-bold text-sm rounded-2xl hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm active:scale-95 mb-10"
@@ -333,12 +338,7 @@ export default function Chat() {
           <Menu className="h-6 w-6" />
         </button>
 
-        {/* XP Bar */}
-        <div className="px-4 md:px-8 lg:px-24 pt-3 relative z-20">
-          <div className="max-w-4xl mx-auto">
-            <XpBar />
-          </div>
-        </div>
+
 
         {/* Net Background */}
         <div className="absolute inset-0 z-0 opacity-[0.05] pointer-events-none" style={{ backgroundImage: `linear-gradient(#0ea5e9 1px, transparent 1px), linear-gradient(90deg, #0ea5e9 1px, transparent 1px)`, backgroundSize: '32px 32px' }} />
@@ -420,6 +420,7 @@ export default function Chat() {
           <div className="max-w-4xl mx-auto w-full pointer-events-auto">
             <div className="bg-white border border-[#e2e8f0] focus-within:border-[#7dd3fc] focus-within:ring-4 focus-within:ring-[#f0f9ff] rounded-[2rem] md:rounded-[2.5rem] shadow-2xl shadow-[#e2e8f0]/40 p-1.5 transition-all">
               <form onSubmit={e => { e.preventDefault(); handleSend(); }} className="flex flex-col">
+                <InputPreview text={input} />
                 <div className="flex items-end px-3 pt-2">
                   <ChatInput
                     ref={chatTextareaRef}

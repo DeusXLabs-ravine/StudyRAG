@@ -382,6 +382,9 @@ async function insertModuleResults(docId, segmentResults, startOrderIndex, opts 
  * can start learning immediately. Returns quickly.
  */
 async function generateInitialModules(docId, documentText, userId = null) {
+  // Mark as generating from the very start so the frontend knows modules are in progress
+  _generatingDocs.add(docId);
+
   const [teachingLevel, interests, learningStyle, learningPace] = await Promise.all([
     getUserTeachingLevel(userId),
     getUserInterests(userId),
@@ -398,6 +401,12 @@ async function generateInitialModules(docId, documentText, userId = null) {
   const { moduleCount } = await insertModuleResults(docId, [firstResult], 0, { userId });
 
   console.log(`[moduleGenerator] Initial batch: ${moduleCount} modules from segment 1/${totalSegments}`);
+
+  // For single-segment documents, generation is done after initial modules
+  if (totalSegments <= 1) {
+    _generatingDocs.delete(docId);
+  }
+
   return { moduleCount, totalSegments };
 }
 
@@ -418,7 +427,7 @@ async function generateRemainingModules(docId, documentText, userId = null) {
   const segments = splitIntoSegments(documentText, SEGMENT_SIZE);
   if (segments.length <= 1) return; // nothing more to generate
 
-  _generatingDocs.add(docId);
+  // _generatingDocs.add(docId) is already called by generateInitialModules
   const remaining = segments.slice(1);
 
   try {

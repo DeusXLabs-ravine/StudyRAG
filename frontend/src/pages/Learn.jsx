@@ -18,6 +18,7 @@ import XpBar from '../components/chat/XpBar';
 import XpPopup from '../components/chat/XpPopup';
 import AchievementToast from '../components/chat/AchievementToast';
 import FormulaInput from '../components/chat/FormulaInput';
+import InputPreview from '../components/chat/InputPreview';
 import { getTutorGreeting, sendTutorMessage } from '../services/moduleService';
 import { prefetchAllChunks } from '../services/ttsService';
 import { listDiagrams, getModuleDiagrams, generateDiagramForTopic } from '../services/diagramService';
@@ -529,11 +530,23 @@ export default function Learn() {
       ) : modulesLoading ? (
         <AILoader text="Sage Building" />
       ) : (modules || []).length === 0 ? (
-        <div className="sleek-card p-20 text-center">
-          <Sparkles className="h-12 w-12 text-primary/30 mx-auto mb-4" />
-          <h3 className="text-lg font-bold text-gray-900">No modules yet</h3>
-          <p className="text-gray-500">We're still processing this document. Check back in a few moments!</p>
-        </div>
+        generating ? (
+          <div className="sleek-card p-12 md:p-20 flex flex-col items-center justify-center gap-6 text-center">
+            <AILoader text="Generating Lessons" />
+            <div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Generating your lessons...</h3>
+              <p className="text-gray-500 text-sm max-w-md mx-auto">
+                This usually takes 15-20 seconds. In the meantime, you can <a href="/chat" className="text-primary font-bold hover:underline">chat with your document</a> — it's already ready for questions!
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="sleek-card p-20 text-center">
+            <Sparkles className="h-12 w-12 text-primary/30 mx-auto mb-4" />
+            <h3 className="text-lg font-bold text-gray-900">No modules yet</h3>
+            <p className="text-gray-500">We're still processing this document. Check back in a few moments!</p>
+          </div>
+        )
       ) : (
         <div className="flex flex-col lg:flex-row gap-8 relative">
           {/* Column 1: Module Picker (Desktop Sidebar) */}
@@ -627,7 +640,7 @@ export default function Learn() {
                 exit={{ opacity: 0, x: 20 }}
                 transition={{ duration: 0.3, ease: 'easeInOut' }}
                 className={`hidden xl:block flex-shrink-0 transition-all duration-500 z-40 ${isTutorMaximized
-                  ? 'fixed bottom-6 right-6 top-32 w-[550px] shadow-2xl rounded-[2.5rem] bg-white border border-blue-100 overflow-hidden'
+                  ? 'fixed bottom-4 right-4 top-28 w-[650px] shadow-2xl rounded-[2.5rem] bg-white border border-blue-50 overflow-hidden'
                   : 'xl:w-80 relative'
                   }`}
               >
@@ -928,15 +941,17 @@ function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded,
   const showChips = greetingLoaded && messages.length <= 1;
 
   return (
-    <div className={`flex flex-col ${isMobile ? 'h-[70vh]' : 'sticky top-8 h-[calc(100vh-6rem)]'}`}>
+    <div className={`flex flex-col ${isMobile
+        ? 'h-[70vh]'
+        : isMaximized
+          ? 'h-full'
+          : 'sticky top-8 h-[calc(100vh-6rem)]'
+      }`}>
       {/* Header */}
       {!isMobile && (
         <>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-tr from-blue-400 to-cyan-300 rounded-xl flex items-center justify-center shadow-lg shadow-blue-100/50">
-                <Sparkles className="h-4 w-4 text-white group-hover:text-cyan-200 transition-colors" />
-              </div>
               <div>
                 <h3 className="text-sm font-black text-gray-900 leading-none">Sage Tutor</h3>
                 <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Topic Expert</span>
@@ -960,31 +975,16 @@ function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded,
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-4 border border-blue-100/30 mb-2 relative overflow-hidden group">
-            <div className="absolute -right-4 -top-4 w-12 h-12 bg-white/40 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700" />
-            <p className="text-xs font-bold text-blue-900 leading-relaxed relative z-10">
-              {currentModule ? (
-                <>Hey! Sage here. Ready to master <strong>{currentModule.topic}</strong>? 🚀 Let’s go!</>
-              ) : (
-                "Pick a module to start our deep learning session! ⚡"
-              )}
-            </p>
-          </div>
+
         </>
       )}
 
       {/* XP Bar */}
-      <div className="px-3 py-2">
-        <XpBar />
+      <div className="px-3 py-1">
+        <XpBar variant="compact" />
       </div>
 
-      {/* Board Controls (compact) */}
-      <div className={`px-4 py-2.5 bg-blue-50/80 border-b border-blue-100 ${isMobile ? '' : ''}`}>
-        <div className="flex items-center gap-2 text-[11px] text-blue-700/70 font-medium">
-          <Volume2 className="h-3 w-3 flex-shrink-0" />
-          <span>Use the speaker icon on the board to hear lessons narrated.</span>
-        </div>
-      </div>
+
 
       {/* Messages area */}
       <div
@@ -1069,6 +1069,7 @@ function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded,
             onSend();
           }}
         >
+          <InputPreview text={input} />
           {/* Top Row: Input and Send Button */}
           <div className="flex items-end w-full">
             <textarea

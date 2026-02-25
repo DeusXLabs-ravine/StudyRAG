@@ -99,7 +99,7 @@ export default function Auth() {
                 disabled={loading || !email.trim()}
                 className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
               >
-                {loading ? <MorphingSquare className="w-4 h-4 bg-white" /> : <Sparkles className="h-5 w-5" />}
+                {loading && <MorphingSquare className="w-4 h-4 bg-white" />}
                 {loading ? 'Sending...' : 'Continue'}
               </button>
             </form>

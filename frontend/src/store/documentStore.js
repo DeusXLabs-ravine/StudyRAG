@@ -19,9 +19,24 @@ const useDocumentStore = create((set, get) => ({
 
   uploadDocument: async (file) => {
     const fileName = file.name;
+    const tempId = `temp_${fileName}_${Date.now()}`;
 
+    // Optimistic placeholder — appears in the document list immediately
     set(state => ({
       error: null,
+      documents: [
+        {
+          id: tempId,
+          originalName: fileName,
+          status: 'uploading',
+          sourceType: 'file',
+          fileSize: file.size,
+          uploadDate: new Date().toISOString(),
+          _isOptimistic: true,
+          _uploadProgress: 0,
+        },
+        ...state.documents,
+      ],
       uploads: {
         ...state.uploads,
         [fileName]: { progress: 0, status: 'uploading' },
@@ -31,6 +46,11 @@ const useDocumentStore = create((set, get) => ({
     try {
       const result = await documentService.uploadDocument(file, (progress) => {
         set(state => ({
+          documents: state.documents.map(d =>
+            d.id === tempId
+              ? { ...d, status: progress >= 100 ? 'registering' : 'uploading', _uploadProgress: progress }
+              : d
+          ),
           uploads: {
             ...state.uploads,
             [fileName]: { progress, status: progress >= 100 ? 'registering' : 'uploading' },
@@ -38,8 +58,11 @@ const useDocumentStore = create((set, get) => ({
         }));
       });
 
+      // Replace optimistic placeholder with real document
       set(state => ({
-        documents: [...state.documents, { ...result, status: 'processing' }],
+        documents: state.documents.map(d =>
+          d.id === tempId ? { ...result, status: 'processing' } : d
+        ),
         uploads: {
           ...state.uploads,
           [fileName]: { progress: 100, status: 'done' },
@@ -55,8 +78,10 @@ const useDocumentStore = create((set, get) => ({
 
       return result;
     } catch (error) {
+      // Remove optimistic placeholder on failure
       set(state => ({
         error: error.message,
+        documents: state.documents.filter(d => d.id !== tempId),
         uploads: {
           ...state.uploads,
           [fileName]: { progress: 0, status: 'error', error: error.message },

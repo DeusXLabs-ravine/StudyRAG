@@ -12,8 +12,8 @@ export default function Logo({ className = "h-6 w-6 sm:h-12 sm:w-12", textClassN
             </div>
             {!hideText && (
                 <div className="flex flex-col -space-y-1">
-                    <span className={`${textClassName} tracking-tight leading-none transition-colors group-hover:text-blue-600`}>
-                        Study<span className="text-blue-600 font-black">RAG</span>
+                    <span className={`${textClassName} tracking-tight leading-none transition-colors group-hover:text-primary`}>
+                        Study<span className="text-primary font-black">RAG</span>
                     </span>
                     <span className="text-[10px] font-black uppercase tracking-[0.3em] text-purple-400/80 pl-0.5 transition-colors group-hover:text-purple-500">Quantum Logic</span>
                 </div>

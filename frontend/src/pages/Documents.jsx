@@ -11,6 +11,8 @@ import { MorphingSquare } from '../components/ui/morphing-square';
 import { AILoader } from '../components/ui/ai-loader';
 
 const statusConfig = {
+  uploading: { icon: Upload, color: 'text-blue-600 bg-blue-50', label: 'Uploading' },
+  registering: { icon: Clock, color: 'text-indigo-600 bg-indigo-50', label: 'Registering' },
   processing: { icon: Clock, color: 'text-yellow-600 bg-yellow-50', label: 'Processing' },
   ready: { icon: CheckCircle, color: 'text-green-600 bg-green-50', label: 'Ready' },
   failed: { icon: AlertCircle, color: 'text-red-600 bg-red-50', label: 'Failed' },
@@ -605,7 +607,12 @@ export default function Documents() {
                         <StatusIcon className="h-3 w-3" />
                         {status.label}
                       </span>
-                      {doc.status === 'processing' && (
+                      {doc._isOptimistic && (
+                        <div className="mt-1.5 w-24">
+                          <ProgressBar value={doc._uploadProgress || 0} max={100} className="h-1 rounded-full" />
+                        </div>
+                      )}
+                      {doc.status === 'processing' && !doc._isOptimistic && (
                         <div className="mt-1 h-3 overflow-hidden">
                           <TextLoop interval={3} className="text-[9px] font-bold text-amber-500">
                             {["Synthesizing...", "Reading...", "Mapping..."].map((msg) => (
@@ -619,7 +626,8 @@ export default function Documents() {
                     {/* Primary source star toggle */}
                     <button
                       onClick={() => handleTogglePrimary(doc.id, doc.isPrimarySource)}
-                      className={`w-9 h-9 md:w-10 md:h-10 flex items-center justify-center rounded-xl transition-all ${doc.isPrimarySource
+                      disabled={doc._isOptimistic}
+                      className={`w-9 h-9 md:w-10 md:h-10 flex items-center justify-center rounded-xl transition-all ${doc._isOptimistic ? 'opacity-30 cursor-not-allowed' : ''} ${doc.isPrimarySource
                         ? 'text-amber-500 bg-amber-50 hover:bg-amber-100'
                         : 'text-gray-300 hover:text-amber-400 hover:bg-amber-50'
                         }`}
@@ -630,7 +638,8 @@ export default function Documents() {
 
                     <button
                       onClick={() => handleDelete(doc.id)}
-                      className="w-9 h-9 md:w-10 md:h-10 flex items-center justify-center text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                      disabled={doc._isOptimistic}
+                      className={`w-9 h-9 md:w-10 md:h-10 flex items-center justify-center text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all ${doc._isOptimistic ? 'opacity-30 cursor-not-allowed' : ''}`}
                       title="Delete Permanently"
                     >
                       <Trash2 className="h-4 w-4 md:h-5 md:w-5" />

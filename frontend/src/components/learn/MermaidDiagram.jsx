@@ -25,11 +25,24 @@ export default function MermaidDiagram({ code, id }) {
       try {
         setError(null);
 
-        // Sanitize code by replacing literal newlines inside [], (), or {} with <br/> 
-        // as Mermaid parser breaks on literal newlines within node labels.
-        const sanitizedCode = code.replace(/(\[[^\]]+\]|\([^)]+\)|\{[^}]+\})/g, (match) => {
-          return match.replace(/\n/g, '<br/>');
-        });
+        // Preprocessing for Mermaid AI Output:
+        // 1. Replace legacy 'graph' with 'flowchart' (more resilient in mermaid v11)
+        // 2. Convert labeled-edge syntax that mermaid doesn't support:
+        //    - A -- label --> B  => A -->|label| B
+        //    - A -- label -- B   => A ---|label| B
+        // 3. Sanitize newlines inside node labels
+        let sanitizedCode = code
+          .replace(/^graph\b/m, 'flowchart')
+          // Fix labeled directed edges: A -- label text --> B  =>  A -->|label text| B
+          .replace(/^(\s*\S+(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})?)\s+--\s+([^-|][^-]*?)\s+-->\s+/gm,
+            '$1 -->|$2| ')
+          // Fix labeled undirected edges: A -- label text -- B  =>  A ---|label text| B
+          .replace(/^(\s*\S+(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})?)\s+--\s+([^-|][^-]*?)\s+--\s+/gm,
+            '$1 ---|$2| ')
+          // Sanitize literal newlines inside node labels
+          .replace(/(\[[^\]]+\]|\([^)]+\)|\{[^}]+\})/g, (match) => {
+            return match.replace(/\n/g, '<br/>');
+          });
 
         const { svg: rendered } = await mermaid.render(renderKey, sanitizedCode);
         if (!cancelled) setSvg(rendered);

@@ -11,7 +11,8 @@ async function queryChat(req, res, next) {
       return res.status(400).json({ error: 'Query is required' });
     }
 
-    // Load recent conversation context (scoped by user)
+    // Load recent conversation context in parallel with nothing blocking —
+    // start history fetch, then pass it into RAG
     const histQuery = supabase
       .from('chat_messages')
       .select('query, answer')
@@ -34,7 +35,7 @@ async function queryChat(req, res, next) {
       timestamp: new Date().toISOString(),
     };
 
-    // Persist to Supabase
+    // Persist chat message + study session in parallel, and respond immediately
     const msgRow = {
       id: message.id,
       query: message.query,
@@ -44,16 +45,18 @@ async function queryChat(req, res, next) {
       timestamp: message.timestamp,
     };
     if (userId) msgRow.user_id = userId;
-    const { error: msgErr } = await supabase.from('chat_messages').insert(msgRow);
-    if (msgErr) throw msgErr;
 
-    // Record study session
     const sessRow = { mode: 'chat', details_json: { messageId: message.id } };
     if (userId) sessRow.user_id = userId;
-    const { error: sessErr } = await supabase.from('study_sessions').insert(sessRow);
-    if (sessErr) throw sessErr;
 
+    // Send response first, persist in background (non-blocking)
     res.json(message);
+
+    // Fire-and-forget DB writes in parallel
+    Promise.all([
+      supabase.from('chat_messages').insert(msgRow),
+      supabase.from('study_sessions').insert(sessRow),
+    ]).catch(err => console.error('[Chat] Background persist error:', err));
   } catch (error) {
     next(error);
   }

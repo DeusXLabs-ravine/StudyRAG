@@ -165,48 +165,37 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
   const log = (step, startTime) =>
     console.log(`${prefix} ${step}: ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
 
-  // Phase 1: Critical path — initial modules + page index run in parallel.
-  // Only the first segment of modules is generated here so the user can start learning fast.
-  const [pageIndexResult, modulesResult] = await Promise.allSettled([
-    // Pipeline A: Build page index → store pages + tree
-    (async () => {
-      const t = Date.now();
-      const { tree, pages } = await buildPageIndex(rawPages, text, metadata);
-      console.log(`${prefix} Page index built: ${pages.length} pages`);
+  // Phase 1: Critical path — page index + initial modules run in parallel,
+  // but document becomes "ready" as soon as the page index succeeds.
+  // The page index is all the chat system needs; modules are only for Learn.
+  const pageIndexPromise = (async () => {
+    const t = Date.now();
+    const { tree, pages } = await buildPageIndex(rawPages, text, metadata);
+    console.log(`${prefix} Page index built: ${pages.length} pages`);
 
-      const pagesWithIds = pages.map(p => ({
-        id: uuidv4(),
-        pageNumber: p.pageNumber,
-        text: p.text,
-        heading: p.heading || null,
-      }));
-      await vectorStore.addPages(docId, pagesWithIds);
-      await vectorStore.addPageIndex(docId, tree, pages.length);
-      log('Page index + store', t);
-      return pages.length;
-    })(),
-    // Pipeline B: Generate initial learning modules (first segment only)
-    (async () => {
-      const t = Date.now();
-      const result = await generateInitialModules(docId, text, userId);
-      log(`Initial modules (${result.moduleCount} modules, segment 1/${result.totalSegments})`, t);
-      return result;
-    })(),
-  ]);
+    const pagesWithIds = pages.map(p => ({
+      id: uuidv4(),
+      pageNumber: p.pageNumber,
+      text: p.text,
+      heading: p.heading || null,
+    }));
+    await vectorStore.addPages(docId, pagesWithIds);
+    await vectorStore.addPageIndex(docId, tree, pages.length);
+    log('Page index + store', t);
+    return pages.length;
+  })();
 
-  // Module generation is critical — lessons can't be viewed without it
-  if (modulesResult.status === 'rejected') {
-    throw modulesResult.reason;
-  }
+  const modulesPromise = (async () => {
+    const t = Date.now();
+    const result = await generateInitialModules(docId, text, userId);
+    log(`Initial modules (${result.moduleCount} modules, segment 1/${result.totalSegments})`, t);
+    return result;
+  })();
 
-  // Page index failure is critical — search won't work
-  if (pageIndexResult.status === 'rejected') {
-    throw pageIndexResult.reason;
-  }
+  // Page index is critical — chat/search won't work without it
+  const pageCount = await pageIndexPromise;
 
-  const pageCount = pageIndexResult.status === 'fulfilled' ? pageIndexResult.value : 0;
-
-  // Mark document as ready immediately — lessons are viewable now
+  // Mark document as ready immediately — chat is available now
   await vectorStore.updateDocumentStatus(docId, {
     status: 'ready',
     processedDate: new Date().toISOString(),
@@ -214,11 +203,17 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
     extractedMetadata: metadata,
   });
 
-  log('READY (lessons available)', pipelineStart);
+  log('READY (chat available)', pipelineStart);
+
+  // Module generation continues in background — failure is non-fatal
+  // (document is still usable for chat, modules just won't appear on Learn)
+  modulesPromise.catch(err => {
+    console.error(`${prefix} Initial module generation failed (non-fatal): ${err.message}`);
+  });
 
   // Phase 2: Background — remaining modules + web research + enrichment.
-  // All fire-and-forget so the user isn't blocked.
-  (async () => {
+  // Chains off modulesPromise so remaining modules start after initial ones finish.
+  modulesPromise.then(async () => {
     try {
       const t = Date.now();
       await generateRemainingModules(docId, text, userId);
@@ -226,7 +221,7 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
     } catch (err) {
       console.error(`${prefix} Background module generation failed: ${err.message}`);
     }
-  })();
+  }).catch(() => {});
 
   (async () => {
     try {

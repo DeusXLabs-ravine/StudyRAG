@@ -173,8 +173,11 @@ async function queryMultiDocument(query, conversationHistory, userId = null) {
   }
 
   // Build context with source priority labels
+  // Keep up to 10 pages but enforce a total context budget below
+  const cappedPages = flatPages.slice(0, 10);
+
   // Sort: primary sources first, then uploaded files, then url/notes
-  const sortedPages = [...flatPages].sort((a, b) => {
+  const sortedPages = [...cappedPages].sort((a, b) => {
     const docA = docMap.get(a.docId);
     const docB = docMap.get(b.docId);
     const priorityOrder = { 'PRIMARY SOURCE ★': 0, 'UPLOADED MATERIAL': 1, 'STUDENT NOTES': 2, 'WEB-SOURCED MATERIAL': 3, 'STUDY MATERIAL': 1 };
@@ -185,10 +188,19 @@ async function queryMultiDocument(query, conversationHistory, userId = null) {
     return (priorityOrder[keyA] || 1) - (priorityOrder[keyB] || 1);
   });
 
+  // Smart context budget: full pages until ~30K chars, then truncate remaining
+  const CONTEXT_BUDGET = 30000;
+  let charsSoFar = 0;
   const context = sortedPages.map((p, i) => {
     const doc = docMap.get(p.docId);
     const priorityLabel = getSourcePriorityLabel(doc);
-    return `${priorityLabel} [Source ${i + 1}: ${p.docName} — Page ${p.pageNumber}${p.heading ? ` - ${p.heading}` : ''}]\n${p.text}`;
+    let text = p.text;
+    charsSoFar += text.length;
+    if (charsSoFar > CONTEXT_BUDGET) {
+      const remaining = Math.max(800, CONTEXT_BUDGET - (charsSoFar - text.length));
+      text = text.slice(0, remaining) + '\n[... truncated — full page available in source]';
+    }
+    return `${priorityLabel} [Source ${i + 1}: ${p.docName} — Page ${p.pageNumber}${p.heading ? ` - ${p.heading}` : ''}]\n${text}`;
   }).join('\n\n---\n\n');
 
   const { teachingHint, conversationContext, weakTopicHint, resourceContext, learningStyleHint, paceHint } =
@@ -266,12 +278,15 @@ async function queryWithPageIndex(query, docId, pageIndex, conversationHistory, 
     };
   }
 
-  const pageNumbers = relevantPageResults.map(r => r.page);
+  // Keep up to 10 pages but enforce a total context budget (see below)
+  const topResults = relevantPageResults.slice(0, 10);
+  const pageNumbers = topResults.map(r => r.page);
 
-  // Hybrid retrieval (#1): also run vector search and merge results
+  // Hybrid retrieval: skip vector search if page-index already found enough results
+  const needsVectorFallback = topResults.length < 3;
   const [pages, vectorChunks] = await Promise.all([
     vectorStore.getPages(docId, pageNumbers),
-    vectorStore.search(query, 3, docId).catch(() => []),
+    needsVectorFallback ? vectorStore.search(query, 3, docId).catch(() => []) : [],
   ]);
 
   if (pages.length === 0) {
@@ -285,10 +300,20 @@ async function queryWithPageIndex(query, docId, pageIndex, conversationHistory, 
   const docName = docMeta?.originalName || 'Unknown Document';
   const priorityLabel = getSourcePriorityLabel(docMeta);
 
-  // Build context from full pages (primary)
-  let context = pages.map((p, i) =>
-    `${priorityLabel} [Source ${i + 1}: ${docName} — Page ${p.pageNumber}${p.heading ? ` - ${p.heading}` : ''}]\n${p.text}`
-  ).join('\n\n---\n\n');
+  // Smart context budget: include full pages until we hit ~30K chars total,
+  // then truncate remaining pages so short pages are never penalized
+  const CONTEXT_BUDGET = 30000;
+  let charsSoFar = 0;
+  let context = pages.map((p, i) => {
+    let text = p.text;
+    charsSoFar += text.length;
+    if (charsSoFar > CONTEXT_BUDGET) {
+      // Over budget — truncate this page to fit remaining space, minimum 800 chars
+      const remaining = Math.max(800, CONTEXT_BUDGET - (charsSoFar - text.length));
+      text = text.slice(0, remaining) + '\n[... truncated — full page available in source]';
+    }
+    return `${priorityLabel} [Source ${i + 1}: ${docName} — Page ${p.pageNumber}${p.heading ? ` - ${p.heading}` : ''}]\n${text}`;
+  }).join('\n\n---\n\n');
 
   // Hybrid (#1): append vector-matched chunks that aren't already in page results
   if (vectorChunks.length > 0) {
@@ -394,10 +419,13 @@ async function buildPromptParts(query, docId, conversationHistory, userId = null
 
   let conversationContext = '';
   if (conversationHistory.length > 0) {
+    // Keep only last 3 exchanges and truncate long answers to keep prompt lean
+    const recentHistory = conversationHistory.slice(-3);
     conversationContext = '\nRecent conversation:\n' +
-      conversationHistory.map(msg =>
-        `Student: ${msg.query}\nTutor: ${msg.answer}`
-      ).join('\n\n') + '\n\n';
+      recentHistory.map(msg => {
+        const answer = msg.answer?.length > 500 ? msg.answer.slice(0, 500) + '...' : (msg.answer || '');
+        return `Student: ${msg.query}\nTutor: ${answer}`;
+      }).join('\n\n') + '\n\n';
   }
 
   return { teachingHint, conversationContext, weakTopicHint, resourceContext, learningStyleHint, paceHint };
