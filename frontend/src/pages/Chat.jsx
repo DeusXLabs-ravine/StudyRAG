@@ -447,10 +447,11 @@ export default function Chat() {
 
                     {/* Formula Input */}
                     <FormulaInput textareaRef={chatTextareaRef} onInsert={handleFormulaInsert} />
+                  </div>
 
-                    <div className="h-3.5 w-px bg-[#f1f5f9] mx-1 md:mx-1.5" />
-
-                    <div className="relative flex items-center group max-w-[100px] sm:max-w-[200px]">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="h-3.5 w-px bg-[#f1f5f9] mx-1" />
+                    <div className="relative flex items-center group max-w-[120px] sm:max-w-[200px] min-w-0">
                       <select
                         value={selectedDocId || ''}
                         onChange={e => setSelectedDocId(e.target.value)}

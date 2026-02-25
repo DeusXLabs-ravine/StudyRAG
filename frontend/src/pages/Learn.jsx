@@ -761,8 +761,57 @@ export default function Learn() {
 }
 
 function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSelect, getTopicIcon, generating }) {
+  const moduleCount = (modules || []).length;
   return (
     <div className="flex flex-col gap-4">
+      {/* Generating banner — Refined Premium Aesthetic */}
+      {generating && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white/80 backdrop-blur-xl rounded-2xl p-5 border border-blue-100 shadow-xl shadow-blue-500/5 relative overflow-hidden group mb-2"
+        >
+          {/* Background Shimmer Effect */}
+          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+            <motion.div
+              animate={{ x: ['-200%', '200%'] }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+              className="absolute inset-0 bg-gradient-to-r from-transparent via-blue-500/10 to-transparent skew-x-12"
+            />
+          </div>
+
+          <div className="relative z-10 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full animate-pulse" />
+                <MorphingSquare size="sm" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-0.5">Neural Synthesis</p>
+                <h4 className="text-sm font-bold text-gray-900 leading-none">
+                  Generating {moduleCount > 0 ? 'More' : ''} Modules
+                </h4>
+                <p className="text-[10px] text-gray-400 font-medium mt-1">
+                  {moduleCount} structures built • Harvesting intelligence
+                </p>
+              </div>
+            </div>
+
+            {/* Micro-activity bar */}
+            <div className="flex gap-1">
+              {[1, 2, 3].map((i) => (
+                <motion.div
+                  key={i}
+                  animate={{ height: [4, 12, 4] }}
+                  transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+                  className="w-1 bg-blue-500/40 rounded-full"
+                />
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {Object.entries(
         (modules || []).reduce((acc, mod) => {
           const topic = mod.topic || 'General';
@@ -827,11 +876,6 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
           </div>
         </div>
       ))}
-      {generating && (
-        <div className="flex items-center gap-3 px-3 py-3">
-          <MorphingSquare className="w-4 h-4" message="Generating" messagePlacement="right" />
-        </div>
-      )}
     </div>
   );
 }
