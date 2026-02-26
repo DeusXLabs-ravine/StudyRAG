@@ -10,7 +10,6 @@ export default function Pricing() {
     useEffect(() => {
         const detectLocation = async () => {
             try {
-                // Primary check: IP Geolocation
                 const response = await fetch('https://ipapi.co/json/');
                 const data = await response.json();
                 
@@ -19,7 +18,6 @@ export default function Pricing() {
                 }
             } catch (error) {
                 console.error('Geolocation fetch failed, falling back to timezone check:', error);
-                // Fallback check: Browser Timezone
                 const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
                 if (timeZone === 'Africa/Lagos') {
                     setIsNigeria(true);
