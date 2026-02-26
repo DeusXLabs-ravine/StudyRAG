@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FileText, Trash2, AlertCircle, CheckCircle, Clock, X, Brain, Sparkles, Upload, Link2, StickyNote, Star, Globe, Shield, ShieldAlert, ShieldCheck, BookOpen, Search, FolderOpen, ChevronDown, ChevronRight } from 'lucide-react';
 import useDocumentStore from '../store/documentStore';
 import useCourseStore from '../store/courseStore';
+import { listModules } from '../services/moduleService';
 
 import ProgressBar from '../components/common/ProgressBar';
 import { FileUpload } from '@/components/ui/file-upload';
@@ -92,7 +93,10 @@ export default function Documents() {
     fetchCourses();
   }, [fetchDocuments, fetchCourses]);
 
-  // Poll processing documents and auto-redirect when one becomes ready
+  // Track doc IDs that are ready but waiting for modules before redirect
+  const pendingRedirectRef = useRef(null);
+
+  // Poll processing documents and auto-redirect when modules are ready
   useEffect(() => {
     const currentProcessing = (documents || []).filter(d => d.status === 'processing');
     const currentProcessingIds = new Set(currentProcessing.map(d => d.id));
@@ -101,11 +105,9 @@ export default function Documents() {
     for (const id of processingIdsRef.current) {
       if (!currentProcessingIds.has(id)) {
         const doc = (documents || []).find(d => d.id === id);
-        if (doc && doc.status === 'ready') {
-          // This doc just finished — redirect to Learn
-          navigate(`/learn/${doc.id}`);
-          processingIdsRef.current.clear();
-          return;
+        if (doc && doc.status === 'ready' && !pendingRedirectRef.current) {
+          // Doc is ready — start polling for modules before redirecting
+          pendingRedirectRef.current = id;
         }
       }
     }
@@ -113,10 +115,25 @@ export default function Documents() {
     // Update tracking set
     processingIdsRef.current = currentProcessingIds;
 
-    if (currentProcessing.length === 0) return;
+    if (currentProcessing.length === 0 && !pendingRedirectRef.current) return;
 
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
+      // Poll processing docs for status changes
       currentProcessing.forEach(doc => refreshDocument(doc.id));
+
+      // If a doc is ready, check if modules exist before redirecting
+      if (pendingRedirectRef.current) {
+        try {
+          const { modules } = await listModules(pendingRedirectRef.current);
+          if (modules && modules.length > 0) {
+            const docId = pendingRedirectRef.current;
+            pendingRedirectRef.current = null;
+            navigate(`/learn/${docId}`);
+          }
+        } catch {
+          // module check failed — keep polling
+        }
+      }
     }, 3000);
 
     return () => clearInterval(interval);
