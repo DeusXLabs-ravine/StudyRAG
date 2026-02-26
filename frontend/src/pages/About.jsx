@@ -67,7 +67,7 @@ export default function About() {
                                                 </div>
                                             ))}
                                         </div>
-                                        <span className="text-sm font-bold text-slate-400">Trusted by over 10,000 students</span>
+                                        <span className="text-sm font-bold text-slate-400">Trusted by students around the world</span>
                                     </div>
                                 </div>
                             </motion.div>
