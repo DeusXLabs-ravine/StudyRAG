@@ -12,6 +12,7 @@ Adjust your content complexity, vocabulary, and examples accordingly:
 Given the following document content, create a set of logical learning modules that cover all the key topics.
 This content was provided by the student as their study material. It is the AUTHORITATIVE source of truth for generating modules. Do not contradict it with outside knowledge.
 If the content contains questions (with or without answers), treat them as practice/review material — generate modules that teach the concepts being tested, and provide correct answers with explanations grounded in the source material and trusted academic knowledge.
+{legal_grounding_section}
 
 Document content:
 {document_text}
@@ -206,14 +207,16 @@ Topic: {topic}
 
 The student already has their own uploaded study materials as their primary learning source. Your job is to find external resources that SUPPLEMENT and ENRICH — not replace — what they are already studying.
 
-IMPORTANT — ONLY recommend resources from trusted academic and medical sources:
+IMPORTANT — ONLY recommend resources from trusted academic, medical, and legal sources:
 - Academic databases: Google Scholar, PubMed, NCBI, Semantic Scholar, arXiv
 - Medical institutions: WHO, NIH, FDA, CDC, Cochrane Library
 - Peer-reviewed journals: NEJM, BMJ, Lancet, JAMA, Nature, Cell, Science
 - Medical references: UpToDate, AMBOSS, Merck Manual, Medscape
+- Legal sources: Official court reporters, Cornell LII, official government legislation portals, official gazettes, supreme/constitutional court websites, BAILII (UK), EUR-Lex (EU), Indian Kanoon (India), LawNigeria.com, Laws of the Federation of Nigeria (LFN), Nigerian Weekly Law Reports (NWLR), official law commission reports, recognized legal publishers (LexisNexis, Thomson Reuters/Westlaw, Hart Publishing, Oxford Law)
+- Legal case databases: Official court databases only — never unofficial case summaries. Use jurisdiction-specific official reporters (e.g., NWLR/FWLR for Nigeria, SCC/AIR for India, UKSC/EWCA for UK, U.S. Reports for US).
 - Educational platforms: Khan Academy, Coursera, edX, .edu domains
 - Publisher portals: Springer, Wiley, Elsevier/ScienceDirect, Oxford University Press
-- NEVER recommend random blogs, social media, unverified health sites, or content farms
+- NEVER recommend random blogs, social media, unverified health/legal sites, or content farms
 
 Search for resources that would help deepen understanding of this topic. Focus on:
 - Textbooks and book chapters that cover the same subject from a different angle
@@ -636,6 +639,7 @@ The student's current teaching level is: {teaching_level}
 {pace_section}
 
 Analyze the following document content and create a detailed outline of ALL topics that should be covered as individual learning modules.
+{legal_grounding_section}
 
 CRITICAL GUIDELINES:
 - This text contains approximately {word_count} words
@@ -674,6 +678,7 @@ Adjust your content complexity, vocabulary, and examples accordingly:
 You are generating specific learning modules from a pre-planned curriculum outline.
 This content was provided by the student as their study material. It is the AUTHORITATIVE source of truth. Do not contradict it.
 If the content contains questions (with or without answers), treat them as practice/review material — generate modules that teach the concepts being tested, and provide correct answers with explanations grounded in the source material and trusted academic knowledge.
+{legal_grounding_section}
 
 SOURCE MATERIAL:
 {document_text}
@@ -866,6 +871,162 @@ Adaptation rules for kinesthetic learners:
  * Build a prompt section describing the student's learning pace.
  * @param {string} pace - 'slow' | 'moderate' | 'fast'
  */
+/**
+ * Detect if document content is legal in nature and return jurisdiction-aware grounding instructions.
+ * The section is injected into module generation prompts to ensure legal content is grounded in
+ * the correct jurisdiction's laws, constitution, and official sources.
+ */
+function buildLegalGroundingSection(documentText) {
+  if (!documentText) return '';
+
+  const sample = documentText.slice(0, 5000).toLowerCase();
+  const isLegal = /\b(constitution|statute|legislation|jurisdiction|tort|contract law|criminal law|civil law|common law|precedent|case law|plaintiff|defendant|judicial|court|tribunal|arbitrat|litigat|amendment|article\s+\d|section\s+\d|act\s+of|penal code|civil code|habeas corpus|due process|mens rea|actus reus|stare decisis|jurisprudence|legal|lawyer|attorney|barrister|solicitor|regulation|ordinance)\b/i.test(sample);
+
+  if (!isLegal) return '';
+
+  // Detect specific jurisdiction for tailored grounding
+  const jurisdictionSection = detectJurisdictionSection(sample);
+
+  return `
+LEGAL CONTENT GROUNDING — CRITICAL INSTRUCTIONS:
+This document contains legal content. You MUST follow these rules:
+
+1. JURISDICTION SPECIFICITY: Identify the jurisdiction (country/state/region) from the document content. ALL legal explanations, principles, and examples must be specific to THAT jurisdiction. Do NOT default to US law unless the content is explicitly about US law.
+
+2. CONSTITUTIONAL GROUNDING: The constitution of the identified jurisdiction is the supreme ground truth. Any statute, regulation, or case law must be consistent with its constitutional framework. When explaining legal principles, reference the specific constitutional provisions where relevant (e.g., "Section 36 of the CFRN 1999" not just "right to fair hearing", "Article 21 of the Indian Constitution" not just "right to life").
+
+3. OFFICIAL SOURCES ONLY: Only reference laws, cases, and legal principles from official sources:
+   - Official legislation/statutes from government publications
+   - Official law reports and court reporters (e.g., NWLR for Nigeria, SCC for India, UKSC for UK, BVerfGE for Germany)
+   - Constitutional texts and amendments
+   - Official gazettes and government legal databases
+   - Recognized legal commentaries from authoritative publishers
+   NEVER cite Wikipedia, blog posts, or unofficial legal summaries as authoritative.
+
+4. CASE LAW: When referencing cases, use proper citation format for the jurisdiction:
+   - Include case name, year, court, and official reporter citation
+   - Only cite real, verifiable cases from official reporters
+   - NEVER invent or fabricate case names or citations
+   - Prefer landmark/leading cases that are well-established
+
+5. LEGAL TERMINOLOGY: Use the correct legal terminology for the jurisdiction:
+   - Common law: precedent, ratio decidendi, obiter dictum, stare decisis
+   - Civil law: code, doctrine, commentary
+   - Use jurisdiction-specific terms (e.g., "charge" in Nigeria, "FIR" in India, "indictment" in US, "charge sheet" in UK)
+
+6. INTERNATIONAL LAW: If the content discusses international law, clearly distinguish between:
+   - Binding treaties and conventions
+   - Customary international law
+   - Soft law (declarations, resolutions)
+   - Jus cogens (peremptory norms)
+   Reference the ICJ, ICC, or relevant international tribunals as appropriate.
+
+7. ACCURACY OVER SIMPLIFICATION: Never oversimplify legal principles to the point of inaccuracy. A wrong legal statement is worse than a complex one. Include caveats and jurisdictional limitations where necessary.${jurisdictionSection}`;
+}
+
+/**
+ * Detect specific legal jurisdictions and return tailored source hierarchy instructions.
+ */
+function detectJurisdictionSection(sampleText) {
+  const isNigeria = /\b(nigeria|nigerian|cfrn|federal republic of nigeria|national assembly|state house(s)? of assembly|federal high court|nwlr|supreme court of nigeria|court of appeal.*nigeria|lagos|abuja|federal capital territory|criminal code act|penal code.*northern|evidence act|administration of criminal justice|acja|efcc|icpc|nigerian law reports|laws of the federation)\b/i.test(sampleText);
+  const isIndia = /\b(india|indian|bharatiya|lok sabha|rajya sabha|supreme court of india|high court of|ipc|crpc|indian penal|constitution of india|article\s+\d+.*india|air\s+\d{4}|scc\s+\d|indian kanoon|fir\b|challan|advocate general)\b/i.test(sampleText);
+  const isUK = /\b(united kingdom|england and wales|english law|house of lords|uk supreme court|crown court|magistrates.?\s*court|queen.s bench|king.s bench|ewca|ewhc|uksc|bailii|solicitor general|barrister|house of commons|act of parliament.*uk|criminal law act|theft act)\b/i.test(sampleText);
+  const isUS = /\b(united states|u\.?s\.?\s+(constitution|code|supreme court)|federal register|scotus|circuit court|district court|amendment\s+(i|ii|iii|iv|v|vi|vii|viii|ix|x|xi|xii|xiii|xiv|xv)|usc\b|cfr\b|westlaw|lexisnexis.*america|due process clause|commerce clause|bill of rights)\b/i.test(sampleText);
+
+  if (isNigeria) {
+    return `
+
+NIGERIAN JURISDICTION DETECTED — APPLY THESE SPECIFIC RULES:
+
+SOURCES OF LAW (in order of hierarchy):
+1. Constitution of the Federal Republic of Nigeria 1999 (as amended) — the supreme law; any law inconsistent with it is void to the extent of the inconsistency (Section 1(3) CFRN 1999)
+2. Acts of the National Assembly — federal legislation enacted by the Senate and House of Representatives
+3. Laws of the State Houses of Assembly — state-level legislation applicable within each state
+4. Subsidiary Legislation — regulations, orders, rules, and bye-laws made under enabling Acts
+5. Received English Law — common law, doctrines of equity, and statutes of general application in force in England on 1 January 1900 (to the extent not superseded)
+6. Customary Law — applicable where not repugnant to natural justice, equity, and good conscience, and not incompatible with any written law
+7. Islamic Law (Sharia) — applicable in personal law matters in Northern states and as codified in the Sharia Penal Codes of applicable states
+8. Judicial Precedent — binding decisions from superior courts (Supreme Court > Court of Appeal > Federal/State High Courts)
+
+COURT HIERARCHY (descending authority):
+- Supreme Court of Nigeria (final appellate court)
+- Court of Appeal
+- Federal High Court / State High Courts / National Industrial Court / Sharia Court of Appeal / Customary Court of Appeal
+- Magistrate Courts / District Courts / Area Courts / Customary Courts
+
+OFFICIAL REPORTERS & CITATION FORMAT:
+- Nigerian Weekly Law Reports (NWLR) — e.g., Abacha v. Fawehinmi (2000) 6 NWLR (Pt. 660) 228
+- Supreme Court of Nigeria Law Reports (SC)
+- All Nigeria Law Reports (All NLR)
+- Federation Weekly Law Reports (FWLR)
+- Laws of the Federation of Nigeria (LFN) — e.g., Companies and Allied Matters Act, Cap C20, LFN 2004
+- Federal Republic of Nigeria Official Gazette
+
+KEY LEGISLATION TO REFERENCE ACCURATELY:
+- Constitution of the Federal Republic of Nigeria 1999 (CFRN 1999) — cite specific Sections and Chapters
+- Administration of Criminal Justice Act 2015 (ACJA) — for criminal procedure
+- Evidence Act 2011
+- Criminal Code Act (Southern Nigeria) / Penal Code (Northern Nigeria)
+- Companies and Allied Matters Act (CAMA) 2020
+- Land Use Act 1978
+- Child Rights Act 2003
+- Cite Acts with their full title and Cap/LFN number where applicable
+
+IMPORTANT: Nigerian law follows the common law tradition but has significant statutory modifications. Always check whether an English common law principle has been modified or replaced by Nigerian legislation before citing it.`;
+  }
+
+  if (isIndia) {
+    return `
+
+INDIAN JURISDICTION DETECTED — APPLY THESE SPECIFIC RULES:
+
+SOURCES OF LAW (hierarchy):
+1. Constitution of India — supreme law, with Fundamental Rights (Part III) and Directive Principles (Part IV)
+2. Parliamentary Acts / State Legislature Acts
+3. Ordinances (Article 123 / Article 213)
+4. Subordinate Legislation — rules, regulations, notifications
+5. Judicial Precedent — Supreme Court decisions binding on all courts (Article 141)
+
+COURT HIERARCHY: Supreme Court > High Courts > District Courts > Subordinate Courts
+OFFICIAL REPORTERS: AIR (All India Reporter), SCC (Supreme Court Cases), SCR (Supreme Court Reports)
+CITATION FORMAT: e.g., Maneka Gandhi v. Union of India, AIR 1978 SC 597`;
+  }
+
+  if (isUK) {
+    return `
+
+UK JURISDICTION DETECTED — APPLY THESE SPECIFIC RULES:
+
+SOURCES OF LAW (hierarchy):
+1. Acts of Parliament (primary legislation) — Parliamentary sovereignty
+2. Delegated/secondary legislation (statutory instruments)
+3. EU retained law (post-Brexit, where applicable)
+4. Common law and equity (judicial precedent)
+
+COURT HIERARCHY: UK Supreme Court > Court of Appeal > High Court > Crown/County Courts > Magistrates' Courts
+OFFICIAL REPORTERS: UKSC, EWCA, EWHC, AC (Appeal Cases), QB (Queen's/King's Bench), WLR (Weekly Law Reports)
+DATABASES: BAILII (free), Westlaw UK, LexisNexis UK`;
+  }
+
+  if (isUS) {
+    return `
+
+US JURISDICTION DETECTED — APPLY THESE SPECIFIC RULES:
+
+SOURCES OF LAW (federal hierarchy):
+1. US Constitution — supreme law of the land (Supremacy Clause, Article VI)
+2. Federal Statutes (USC — United States Code)
+3. Federal Regulations (CFR — Code of Federal Regulations)
+4. Judicial Precedent — SCOTUS decisions binding on all courts
+
+COURT HIERARCHY: US Supreme Court > Circuit Courts of Appeals > District Courts
+OFFICIAL REPORTERS: U.S. Reports (U.S.), S.Ct., L.Ed., F.2d/F.3d/F.4th
+CITATION FORMAT: e.g., Brown v. Board of Education, 347 U.S. 483 (1954)`;
+  }
+
+  return '';
+}
+
 function buildPaceSection(pace) {
   if (!pace || pace === 'auto') return '';
 
@@ -1252,5 +1413,6 @@ module.exports = {
   buildLearningStyleSection,
   buildPaceSection,
   buildDiagramInterestsSection,
+  buildLegalGroundingSection,
   GAME_GENERATION_PROMPT,
 };

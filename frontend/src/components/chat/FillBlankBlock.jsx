@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { CheckCircle2, XCircle, Trophy, Zap } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
 export default function FillBlankBlock({ block, onComplete }) {
   const items = block.items || [];
@@ -62,9 +65,11 @@ export default function FillBlankBlock({ block, onComplete }) {
                   key={idx}
                   className={`p-4 rounded-xl border-2 ${r.isCorrect ? 'border-emerald-200 bg-emerald-50/50' : 'border-red-200 bg-red-50/50'}`}
                 >
-                  <p className="text-sm font-bold text-gray-800 mb-2">
-                    {item.sentence.replace('____', r.isCorrect ? `**${r.correctAnswer}**` : `~~${r.userAnswer || '(empty)'}~~ → **${r.correctAnswer}**`)}
-                  </p>
+                  <div className="text-sm font-bold text-gray-800 mb-2 prose prose-sm max-w-none [&_p]:mb-0">
+                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                      {item.sentence.replace('____', r.isCorrect ? `**${r.correctAnswer}**` : `~~${r.userAnswer || '(empty)'}~~ → **${r.correctAnswer}**`)}
+                    </ReactMarkdown>
+                  </div>
                   <div className="flex items-center gap-1 text-xs font-bold">
                     {r.isCorrect
                       ? <><CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> <span className="text-emerald-600">Correct</span></>
@@ -105,10 +110,10 @@ export default function FillBlankBlock({ block, onComplete }) {
               transition={{ delay: idx * 0.1 }}
               className="p-4 bg-gray-50 rounded-xl border border-gray-100"
             >
-              <p className="text-sm font-bold text-gray-800 mb-3 leading-relaxed">
+              <div className="text-sm font-bold text-gray-800 mb-3 leading-relaxed [&_p]:inline">
                 {item.sentence.split('____').map((part, pIdx, arr) => (
                   <span key={pIdx}>
-                    {part}
+                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{part}</ReactMarkdown>
                     {pIdx < arr.length - 1 && (
                       <input
                         type="text"
@@ -120,9 +125,9 @@ export default function FillBlankBlock({ block, onComplete }) {
                     )}
                   </span>
                 ))}
-              </p>
+              </div>
               {item.hint && (
-                <p className="text-[11px] font-medium text-gray-400 italic">Hint: {item.hint}</p>
+                <div className="text-[11px] font-medium text-gray-400 italic [&_p]:inline">Hint: <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{item.hint}</ReactMarkdown></div>
               )}
             </motion.div>
           ))}

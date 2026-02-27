@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Layers, RotateCcw, ChevronLeft, ChevronRight, ChevronDown, Shuffle, Play, Zap, Trash2, Clock, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import * as flashcardService from '../services/flashcardService';
 import useDocumentStore from '../store/documentStore';
 import { MorphingSquare } from '../components/ui/morphing-square';
@@ -348,9 +351,9 @@ export default function Flashcards() {
                   <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400 mb-6">
                     {flipped ? 'Correct Answer' : 'Question'}
                   </p>
-                  <p className="text-xl md:text-3xl font-black text-gray-900 leading-tight">
-                    {flipped ? currentCard.back : currentCard.front}
-                  </p>
+                  <div className="text-xl md:text-3xl font-black text-gray-900 leading-tight prose prose-xl max-w-none [&_p]:mb-1 [&_ul]:text-left [&_ol]:text-left">
+                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{flipped ? currentCard.back : currentCard.front}</ReactMarkdown>
+                  </div>
                   {currentCard.topic && (
                     <div className="mt-8 flex justify-center">
                       <span className="text-[10px] font-black text-primary/50 bg-primary/5 px-3 py-1 rounded-full uppercase tracking-widest border border-primary/10">

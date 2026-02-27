@@ -1,6 +1,6 @@
 const supabase = require('../config/database');
 const { getGenerativeModel } = require('../config/gemini');
-const { MODULE_GENERATION_PROMPT, MODULE_OUTLINE_PROMPT, MODULE_BATCH_GENERATION_PROMPT, QUESTION_REGENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection } = require('../utils/prompts');
+const { MODULE_GENERATION_PROMPT, MODULE_OUTLINE_PROMPT, MODULE_BATCH_GENERATION_PROMPT, QUESTION_REGENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection, buildLegalGroundingSection } = require('../utils/prompts');
 const { getUserTeachingLevel, getUserInterests, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
 const { prepareTextForLLM } = require('./chunkingService');
 const { v4: uuidv4 } = require('uuid');
@@ -102,6 +102,7 @@ async function generateOutlineForSegment(segmentText, segmentIndex, totalSegment
     .replace('{interests_section}', buildInterestsSection(interests, teachingLevel))
     .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
     .replace('{pace_section}', buildPaceSection(learningPace))
+    .replace('{legal_grounding_section}', buildLegalGroundingSection(segmentText))
     .replace('{word_count}', String(wordCount))
     .replace('{target_modules}', String(targetModules))
     .replace('{min_modules}', String(minModules));
@@ -133,6 +134,7 @@ async function generateModuleBatch(segmentText, fullOutline, batchModules, batch
     .replace('{interests_section}', buildInterestsSection(interests, teachingLevel))
     .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
     .replace('{pace_section}', buildPaceSection(learningPace))
+    .replace('{legal_grounding_section}', buildLegalGroundingSection(segmentText))
     .replace('{full_outline}', outlineText)
     .replace('{batch_modules}', batchText);
 
@@ -156,7 +158,8 @@ async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalS
     .replace('{teaching_level}', teachingLevel)
     .replace('{interests_section}', buildInterestsSection(interests, teachingLevel))
     .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
-    .replace('{pace_section}', buildPaceSection(learningPace));
+    .replace('{pace_section}', buildPaceSection(learningPace))
+    .replace('{legal_grounding_section}', buildLegalGroundingSection(segmentText));
 
   const model = getGenerativeModel('fast');
   const result = await model.generateContent(prompt);

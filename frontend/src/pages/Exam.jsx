@@ -5,6 +5,9 @@ import {
   Upload, FileText, Trash2, ChevronDown, ChevronUp, X,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import * as examService from '../services/examService';
 import useDocumentStore from '../store/documentStore';
 import { MorphingSquare } from '../components/ui/morphing-square';
@@ -929,7 +932,9 @@ export default function Exam() {
                               {i + 1}
                             </div>
                             <div className="flex-1">
-                              <h3 className="text-sm md:text-base font-black text-gray-900 leading-relaxed mb-4">{q.question}</h3>
+                              <div className="text-sm md:text-base font-black text-gray-900 leading-relaxed mb-4 prose prose-sm max-w-none [&_p]:mb-1">
+                                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{q.question}</ReactMarkdown>
+                              </div>
                               <button
                                 onClick={() => setExpandedQs(prev => ({ ...prev, [i]: !prev[i] }))}
                                 className={`w-full text-left p-5 rounded-2xl border-2 transition-all font-bold text-sm ${expandedQs[i] ? 'bg-primary text-white border-primary shadow-xl shadow-primary/20' : 'bg-gray-50 border-gray-50 text-gray-400 hover:border-gray-200 hover:text-gray-900'}`}
@@ -942,9 +947,9 @@ export default function Exam() {
                                   <motion.div
                                     initial={{ opacity: 0 }}
                                     animate={{ opacity: 1 }}
-                                    className="mt-4 pt-4 border-t border-white/20"
+                                    className="mt-4 pt-4 border-t border-white/20 prose prose-sm max-w-none prose-invert [&_p]:mb-1"
                                   >
-                                    {q.answer}
+                                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{q.answer}</ReactMarkdown>
                                   </motion.div>
                                 )}
                               </button>
@@ -1061,7 +1066,9 @@ export default function Exam() {
 
         {/* Question */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-          <p className="text-base font-medium text-gray-900 mb-4">{question.question}</p>
+          <div className="text-base font-medium text-gray-900 mb-4 prose prose-sm max-w-none [&_p]:mb-1">
+            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{question.question}</ReactMarkdown>
+          </div>
 
           {question.type === 'multiple_choice' && question.options && (
             <div className="space-y-2">
@@ -1077,7 +1084,7 @@ export default function Exam() {
                       : 'border-gray-200 hover:border-gray-300 text-gray-700'
                       }`}
                   >
-                    {opt}
+                    <span className="[&_p]:inline"><ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{opt}</ReactMarkdown></span>
                   </button>
                 );
               })}
@@ -1163,7 +1170,9 @@ export default function Exam() {
         <div className="sleek-card p-6 md:p-10 shadow-2xl shadow-gray-100 mb-10">
           <div className="mb-10">
             <span className="text-[10px] font-black text-primary/50 uppercase tracking-[0.2em] mb-3 block">Knowledge Assessment</span>
-            <h3 className="text-xl md:text-2xl font-black text-gray-900 leading-tight">{q.question}</h3>
+            <div className="text-xl md:text-2xl font-black text-gray-900 leading-tight prose prose-xl max-w-none [&_p]:mb-1">
+              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{q.question}</ReactMarkdown>
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -1181,7 +1190,7 @@ export default function Exam() {
                   <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 font-black text-xs transition-colors ${isSelected ? 'bg-primary text-white' : 'bg-gray-200 text-gray-500'}`}>
                     {letter}
                   </div>
-                  <span className={`text-sm font-black transition-colors ${isSelected ? 'text-primary' : 'text-gray-700'}`}>{opt}</span>
+                  <span className={`text-sm font-black transition-colors [&_p]:inline ${isSelected ? 'text-primary' : 'text-gray-700'}`}><ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{opt}</ReactMarkdown></span>
                 </button>
               );
             })}
@@ -1253,14 +1262,16 @@ export default function Exam() {
                   {r.isCorrect ? <CheckCircle className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-black text-gray-900 leading-relaxed mb-3">{r.question}</p>
+                  <div className="text-sm font-black text-gray-900 leading-relaxed mb-3 prose prose-sm max-w-none [&_p]:mb-1">
+                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{r.question}</ReactMarkdown>
+                  </div>
 
                   {!r.isCorrect && (
                     <div className="mb-4 p-4 bg-red-50/50 rounded-2xl border border-red-100/50">
                       <div className="flex flex-col gap-2">
                         <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">Identified Gap</span>
-                        <p className="text-xs text-red-700 font-bold">Your answer: {r.userAnswer || 'Timed Out'}</p>
-                        <p className="text-xs text-emerald-600 font-black">Correct protocol: {r.correctAnswer}</p>
+                        <p className="text-xs text-red-700 font-bold">Your answer: <span className="[&_p]:inline"><ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{r.userAnswer || 'Timed Out'}</ReactMarkdown></span></p>
+                        <p className="text-xs text-emerald-600 font-black">Correct protocol: <span className="[&_p]:inline"><ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{r.correctAnswer}</ReactMarkdown></span></p>
                       </div>
                     </div>
                   )}
@@ -1268,7 +1279,9 @@ export default function Exam() {
                   {r.explanation && (
                     <div className="mb-3">
                       <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest block mb-1">Intelligence Insight</span>
-                      <p className="text-xs text-gray-500 font-medium leading-relaxed">{r.explanation}</p>
+                      <div className="text-xs text-gray-500 font-medium leading-relaxed prose prose-xs max-w-none [&_p]:mb-1">
+                        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{r.explanation}</ReactMarkdown>
+                      </div>
                     </div>
                   )}
 

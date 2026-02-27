@@ -142,12 +142,81 @@ async function generateD2Diagram(topic, content, teachingLevel, interests) {
 
 // ─── Generate AI Image ────────────────────────────────────────
 
-async function generateAIImage(topic, teachingLevel, interests) {
-  const imagePrompt = `Create a clean, educational illustration for a ${teachingLevel}-level student about: "${topic}".
-The image should be a clear, informative diagram or illustration suitable for a textbook or educational slide.
-Use a clean white or light background. Include labeled parts where appropriate.
-Style: professional educational illustration, clean lines, clear colors, informative.
-Do NOT include any text that is hard to read. Keep labels large and clear.`;
+function buildImagePrompt(topic, teachingLevel, moduleContent) {
+  const searchText = `${topic} ${(moduleContent || '').slice(0, 2000)}`.toLowerCase();
+
+  // Detect subject domain from both topic AND content for better matching
+  const isMedical = /\b(anatomy|organ|cell|tissue|muscle|bone|heart|lung|brain|nervous|vascular|patholog|pharmacol|receptor|enzyme|protein|dna|rna|mitosis|meiosis|synapse|neuron|artery|vein|immune|antibod|antigen|clinical|diagnos|symptom|disease|therapy|blood|plasma|platelet|hemoglobin|insulin|cortisol|dopamine|serotonin)\b/i.test(searchText);
+  const isLaw = /\b(constitution|statute|legislation|jurisdiction|tort|contract law|criminal law|civil law|common law|precedent|case law|plaintiff|defendant|appellant|respondent|judicial|court|tribunal|arbitrat|litigat|regulat|amendment|article\s+\d|section\s+\d|act\s+of|penal code|civil code|habeas corpus|due process|mens rea|actus reus|stare decisis|ratio decidendi|obiter dictum|ultra vires|writ|injunction|damages|liability|negligence|fiduciary|equity|jurisprudence|legal|lawyer|attorney|barrister|solicitor)\b/i.test(searchText);
+  const isChemistry = /\b(molecule|compound|reaction|bond|orbital|element|acid|base|catalyst|oxidat|reduct|polymer|isomer|stoichio|equilibrium|enthalp|entropy|molarity|titrat|electroly|nucleophil|electrophil)\b/i.test(searchText);
+  const isPhysics = /\b(force|velocity|momentum|wave|circuit|field|energy|thermodynamic|quantum|relativi|optic|magnet|electric|gravit|torque|frequency|amplitude|resistanc|capacit|inductan|photon|wavelength)\b/i.test(searchText);
+  const isCS = /\b(algorithm|data structure|tree|graph|stack|queue|hash|sort|search|linked list|binary|recursion|pointer|memory|cpu|network|protocol|database|sql|api|class|method|object|interface|pattern|refactor)\b/i.test(searchText);
+  const isMath = /\b(theorem|proof|integral|derivative|matrix|vector|equation|function|limit|convergence|polynomial|linear algebra|calculus|geometry|topology|probability|statistics|eigenvalue|determinant)\b/i.test(searchText);
+
+  // Extract key concepts from content for specificity
+  const contentExcerpt = (moduleContent || '').slice(0, 3000);
+
+  let subjectStyle, composition, details, accuracy;
+
+  if (isMedical) {
+    subjectStyle = 'medical textbook illustration style, precise anatomical detail, Netter-inspired color palette with warm skin tones and cool organ blues/reds';
+    composition = 'centered anatomical view with clean labeled callouts, white background, cross-section or anterior view as appropriate';
+    details = 'Include accurate anatomical labels in large bold sans-serif font. Use color-coding: arteries in red, veins in blue, nerves in yellow, muscles in reddish-brown. Show spatial relationships clearly.';
+    accuracy = 'CRITICAL: This is a medical/scientific diagram. Every structure, pathway, and label must be anatomically and physiologically accurate. Do not invent or approximate — if a specific structure is named, render it in its correct anatomical position and proportion. Incorrect medical diagrams are dangerous.';
+  } else if (isLaw) {
+    subjectStyle = 'legal textbook diagram style, formal and authoritative, dark navy and gold color scheme with clean hierarchy lines, professional serif typography for legal terms';
+    composition = 'structured hierarchical layout showing legal relationships, jurisdictional hierarchy, or procedural flow, white background, clear directional arrows';
+    // Detect Nigerian legal content for jurisdiction-specific diagram instructions
+    const isNigerianLaw = /\b(nigeria|nigerian|cfrn|national assembly|state house|federal high court|nwlr|lagos|abuja|criminal code act|penal code.*northern|acja|efcc)\b/i.test(searchText);
+    if (isNigerianLaw) {
+      details = 'Use formal Nigerian legal terminology. Court hierarchy must follow: Supreme Court of Nigeria > Court of Appeal > Federal High Court / State High Courts / National Industrial Court > Magistrate Courts. Show the correct Nigerian legislative hierarchy: CFRN 1999 > Acts of National Assembly > Laws of State Houses of Assembly > Subsidiary Legislation. Use distinct colors for branches (legislative=green, judicial=dark red, executive=blue). Label with Nigerian-specific terms.';
+      accuracy = 'CRITICAL: This is a Nigerian legal diagram. The court hierarchy, legislative structure, and constitutional framework must reflect the Nigerian legal system specifically. Use CFRN 1999 as the supreme source. Do NOT substitute with US, UK, or generic common law structures. Nigerian courts and institutions have specific names and ranks — use them exactly (e.g., "Federal High Court" not "Federal District Court", "State High Court" not "Superior Court"). Do not invent case names, statutes, or legal principles.';
+    } else {
+      details = 'Use formal legal terminology with proper citations format. Show court hierarchies with proper rank ordering. Use distinct colors for different branches (legislative=blue, judicial=dark red, executive=green). Include jurisdiction labels where applicable.';
+      accuracy = 'CRITICAL: This is a legal diagram. All court hierarchies, procedural steps, constitutional structures, and legal relationships must be jurisdictionally accurate. If the content references a specific country or jurisdiction, the diagram must reflect THAT jurisdiction\'s legal system — not a generic or US-defaulted system. Legal terminology must match the jurisdiction (e.g., "High Court" not "Supreme Court" for UK, "Tribunal" for EU). Do not invent case names, statutes, or legal principles.';
+    }
+  } else if (isChemistry) {
+    subjectStyle = 'scientific illustration style, precise molecular rendering, clean pastel color scheme with element-specific colors (O=red, N=blue, C=gray, H=white)';
+    composition = 'centered molecular or reaction diagram, white background, clear directional arrows for processes';
+    details = 'Show bond angles and molecular geometry accurately. Label key atoms, functional groups, and reaction arrows. Use standard chemistry color conventions.';
+    accuracy = 'CRITICAL: All molecular structures, bond angles, electron configurations, and reaction mechanisms must be chemically accurate. Use correct IUPAC conventions. Do not approximate molecular geometry.';
+  } else if (isPhysics) {
+    subjectStyle = 'physics textbook diagram style, vector arrows with precise directions, clean grid or coordinate system background';
+    composition = 'schematic diagram layout, muted background, force vectors and field lines clearly visible';
+    details = 'Use colored arrows for different forces/vectors. Include magnitude labels and unit indicators. Show coordinate axes where relevant.';
+    accuracy = 'CRITICAL: All force directions, field line patterns, circuit connections, and physical relationships must be physically accurate. Vector magnitudes and directions must reflect the actual physics described.';
+  } else if (isCS) {
+    subjectStyle = 'clean technical diagram style, flat design with rounded rectangles and connecting arrows, modern blue and gray palette';
+    composition = 'top-down or left-to-right flowchart layout, white background, clear hierarchy and data flow';
+    details = 'Use monospace font for code/values inside nodes. Color-code different operations (green=insert, red=delete, blue=search). Show pointer/reference arrows clearly.';
+    accuracy = 'CRITICAL: Data structure shapes, algorithm steps, pointer references, and code patterns must be technically correct. If showing a specific algorithm or data structure operation, each step must be accurate.';
+  } else if (isMath) {
+    subjectStyle = 'mathematical illustration style, clean geometric shapes, precise coordinate planes with gridlines';
+    composition = 'centered diagram with labeled axes, white background, curves and shapes in distinct colors';
+    details = 'Render equations and notation in large clear serif font. Use color to distinguish different functions or geometric elements. Include gridlines for scale.';
+    accuracy = 'CRITICAL: All mathematical notation, graph shapes, geometric relationships, and numeric values must be mathematically correct. Curves must have the right shape (e.g., parabolas are parabolic, not arbitrary curves).';
+  } else {
+    subjectStyle = 'professional educational illustration, clean infographic style, modern color palette with 3-4 distinct colors';
+    composition = 'balanced layout suitable for a presentation slide, white or light gray background, clear visual hierarchy';
+    details = 'Use icons and visual metaphors to represent abstract concepts. Group related items visually. Include concise labels in bold sans-serif font.';
+    accuracy = 'Ensure all labeled relationships, hierarchies, and categorizations are factually correct based on the source material provided below.';
+  }
+
+  return `Subject: A precise, detailed educational diagram about "${topic}" for a ${teachingLevel}-level student.
+Composition: ${composition}. Medium shot, straight-on perspective, 4:3 aspect ratio.
+Style: ${subjectStyle}. Professional quality suitable for a university textbook or educational presentation.
+Lighting: Flat, even studio lighting with no harsh shadows — optimized for readability and clarity.
+${details}
+${accuracy}
+
+SOURCE MATERIAL — base the diagram strictly on this content:
+${contentExcerpt}
+
+Important: All text labels must be large (minimum 14pt equivalent), bold, and high-contrast. The diagram must accurately represent the specific concepts from the source material above — do not generalize or substitute with generic illustrations. Every label, relationship, and structure must match what is described in the source material.`;
+}
+
+async function generateAIImage(topic, teachingLevel, interests, moduleContent) {
+  const imagePrompt = buildImagePrompt(topic, teachingLevel, moduleContent);
 
   try {
     const result = await withRetryOnRateLimit(async () => {
@@ -262,7 +331,7 @@ async function generateDiagramForTopic({
         status: 'ready',
       };
     } else if (resolvedType === 'image') {
-      const imgResult = await generateAIImage(topic, teachingLevel, interests);
+      const imgResult = await generateAIImage(topic, teachingLevel, interests, moduleContent);
       if (imgResult) {
         await ensureBucket();
         const storagePath = `generated/${moduleId || 'global'}/${id}.png`;

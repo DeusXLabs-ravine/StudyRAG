@@ -1,6 +1,9 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Zap, CheckCircle2, Shuffle } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
 function shuffle(arr) {
   const a = [...arr];
@@ -141,7 +144,7 @@ export default function MatchingGameBlock({ block, onComplete }) {
                 >
                   <div className="flex items-center gap-2">
                     {isMatched && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />}
-                    <span className="truncate">{item.term}</span>
+                    <span className="truncate [&_p]:inline"><ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{item.term}</ReactMarkdown></span>
                   </div>
                 </motion.button>
               );
@@ -172,7 +175,7 @@ export default function MatchingGameBlock({ block, onComplete }) {
                 >
                   <div className="flex items-center gap-2">
                     {isMatched && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />}
-                    <span className="line-clamp-2 text-xs">{item.definition}</span>
+                    <span className="line-clamp-2 text-xs [&_p]:inline"><ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{item.definition}</ReactMarkdown></span>
                   </div>
                 </motion.button>
               );

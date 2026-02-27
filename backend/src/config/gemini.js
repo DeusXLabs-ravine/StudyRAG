@@ -129,13 +129,13 @@ const MODELS = {
   fast: 'gemini-3-flash-preview',
   standard: 'gemini-3-flash-preview',
   advanced: 'gemini-3-pro-preview',
-  imageGen: 'gemini-2.5-flash-image',
+  imageGen: 'gemini-3-pro-image-preview',
 };
 
 const FALLBACK_MODELS = {
-  fast: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'],
-  standard: ['gemini-2.0-flash', 'gemini-1.5-flash'],
-  advanced: ['gemini-2.5-flash-preview-05-20', 'gemini-2.0-flash', 'gemini-1.5-pro'],
+  fast: ['gemini-2.5flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'],
+  standard: ['gemini-2.5-flash', 'gemini-1.5-flash'],
+  advanced: ['gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro'],
 };
 
 // ─── Model Getters ────────────────────────────────────────────

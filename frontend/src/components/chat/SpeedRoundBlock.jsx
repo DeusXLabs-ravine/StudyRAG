@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, X, Zap, Trophy, Timer } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
 export default function SpeedRoundBlock({ block, onComplete }) {
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -141,7 +144,9 @@ export default function SpeedRoundBlock({ block, onComplete }) {
             exit={{ opacity: 0, x: -20 }}
             className="text-center mb-6"
           >
-            <p className="text-lg font-bold text-gray-900 leading-relaxed">{statement.text}</p>
+            <div className="text-lg font-bold text-gray-900 leading-relaxed prose prose-lg max-w-none [&_p]:mb-0">
+              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{statement.text}</ReactMarkdown>
+            </div>
           </motion.div>
         </AnimatePresence>
 

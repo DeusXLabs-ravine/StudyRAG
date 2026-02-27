@@ -32,17 +32,29 @@ export default function MermaidDiagram({ code, id }) {
         //    - A -- label -- B   => A ---|label| B
         // 3. Sanitize newlines inside node labels
         let sanitizedCode = code
+          // 1. Replace legacy 'graph' with 'flowchart' (more resilient in mermaid v11)
           .replace(/^graph\b/m, 'flowchart')
-          // Fix labeled directed edges: A -- label text --> B  =>  A -->|label text| B
+          // 2. Fix labeled directed edges: A -- label text --> B  =>  A -->|label text| B
           .replace(/^(\s*\S+(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})?)\s+--\s+([^-|][^-]*?)\s+-->\s+/gm,
             '$1 -->|$2| ')
-          // Fix labeled undirected edges: A -- label text -- B  =>  A ---|label text| B
+          // 3. Fix labeled undirected edges: A -- label text -- B  =>  A ---|label text| B
           .replace(/^(\s*\S+(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})?)\s+--\s+([^-|][^-]*?)\s+--\s+/gm,
             '$1 ---|$2| ')
-          // Sanitize literal newlines inside node labels
+          // 4. Sanitize literal newlines inside node labels
           .replace(/(\[[^\]]+\]|\([^)]+\)|\{[^}]+\})/g, (match) => {
             return match.replace(/\n/g, '<br/>');
-          });
+          })
+          // 5. Wrap node labels containing special characters in quotes
+          //    Catches: parentheses, braces, #, &, commas, semicolons, colons, pipes, quotes
+          //    e.g. A[Origin (0,0)] → A["Origin (0,0)"]
+          .replace(/\[([^\]"]+)\]/g, (match, inner) => {
+            if (/[(){}#&,;:|'`<>]/.test(inner)) return `["${inner.replace(/"/g, '')}"]`;
+            return match;
+          })
+          // 6. Remove trailing semicolons that break parsing
+          .replace(/;\s*$/gm, '')
+          // 7. Escape HTML-like angle brackets in labels that aren't Mermaid markup
+          .replace(/\["([^"]*)<(?!br\s*\/?>)([^"]*?)>([^"]*?)"\]/g, '["$1‹$2›$3"]');
 
         const { svg: rendered } = await mermaid.render(renderKey, sanitizedCode);
         if (!cancelled) setSvg(rendered);

@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, CheckCircle, XCircle, HelpCircle, ArrowLeft } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import useModuleStore from '../../store/moduleStore';
 
 export default function QuizSection({ module, onBack, onComplete }) {
@@ -165,17 +168,19 @@ export default function QuizSection({ module, onBack, onComplete }) {
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Question {idx + 1}</span>
                       </div>
-                      <p className="text-lg font-bold text-gray-900 mb-4 leading-tight">{q.question}</p>
+                      <div className="text-lg font-bold text-gray-900 mb-4 leading-tight prose prose-lg max-w-none [&_p]:mb-1">
+                        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{q.question}</ReactMarkdown>
+                      </div>
 
                       <div className="flex flex-wrap gap-3 mb-4">
                         <div className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border ${isCorrect ? 'bg-white border-emerald-100 text-emerald-700' : 'bg-white border-red-100 text-red-700'}`}>
                           <span className="opacity-50">Your Answer:</span>
-                          <span className="bg-gray-50 px-2 py-0.5 rounded-lg">{userAnswer || 'Skipped'}</span>
+                          <span className="bg-gray-50 px-2 py-0.5 rounded-lg [&_p]:inline"><ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{userAnswer || 'Skipped'}</ReactMarkdown></span>
                         </div>
                         {!isCorrect && (
                           <div className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-white shadow-md shadow-emerald-200">
                             <span>Correct Answer:</span>
-                            <span className="bg-white/20 px-2 py-0.5 rounded-lg">{q.correct}</span>
+                            <span className="bg-white/20 px-2 py-0.5 rounded-lg [&_p]:inline"><ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{q.correct}</ReactMarkdown></span>
                           </div>
                         )}
                       </div>
@@ -184,7 +189,9 @@ export default function QuizSection({ module, onBack, onComplete }) {
                         <div className="relative p-6 bg-white rounded-2xl text-sm text-gray-600 leading-relaxed border border-gray-100 shadow-sm group-hover:shadow-md transition-shadow">
                           <div className="absolute -left-1.5 top-6 w-3 h-3 bg-white border-l border-b border-gray-100 rotate-45" />
                           <span className="font-black text-gray-900 block mb-2 text-xs uppercase tracking-widest opacity-40">Explanation</span>
-                          {q.explanation}
+                          <div className="prose prose-sm max-w-none [&_p]:mb-1">
+                            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{q.explanation}</ReactMarkdown>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -242,7 +249,9 @@ export default function QuizSection({ module, onBack, onComplete }) {
           <span className="inline-block px-3 py-1 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-[0.2em] rounded-full mb-4">
             Question {currentQ + 1} of {questions.length}
           </span>
-          <h3 className="text-xl md:text-2xl font-extrabold text-gray-900 leading-tight md:px-10">{q.question}</h3>
+          <div className="text-xl md:text-2xl font-extrabold text-gray-900 leading-tight md:px-10 prose prose-xl max-w-none [&_p]:mb-1">
+            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{q.question}</ReactMarkdown>
+          </div>
         </div>
 
         {q.type === 'multiple_choice' && q.options && (
@@ -264,8 +273,8 @@ export default function QuizSection({ module, onBack, onComplete }) {
                       }`}>
                       {letter}
                     </div>
-                    <span className={`text-sm font-bold transition-all ${isSelected ? 'text-gray-900' : 'text-gray-600 group-hover:text-gray-900'}`}>
-                      {option.substring(3)}
+                    <span className={`text-sm font-bold transition-all [&_p]:inline ${isSelected ? 'text-gray-900' : 'text-gray-600 group-hover:text-gray-900'}`}>
+                      <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{option.substring(3)}</ReactMarkdown>
                     </span>
                   </div>
                   {isSelected && (

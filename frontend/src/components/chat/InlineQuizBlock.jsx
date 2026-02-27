@@ -153,7 +153,7 @@ export default function InlineQuizBlock({ block, onComplete }) {
                   <span className="flex-shrink-0 w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-xs font-black">
                     {String.fromCharCode(65 + idx)}
                   </span>
-                  <span className="flex-1">{opt}</span>
+                  <span className="flex-1 [&_p]:inline"><ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{opt}</ReactMarkdown></span>
                   {showResult && isCorrect && <CheckCircle2 className="h-5 w-5 flex-shrink-0" />}
                   {showResult && isSelected && !isCorrect && <XCircle className="h-5 w-5 flex-shrink-0" />}
                 </div>
@@ -172,7 +172,9 @@ export default function InlineQuizBlock({ block, onComplete }) {
               className="mt-4 p-4 bg-blue-50 rounded-xl border border-blue-100"
             >
               <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">Explanation</p>
-              <p className="text-sm font-medium text-blue-900">{question.explanation}</p>
+              <div className="text-sm font-medium text-blue-900 prose prose-sm max-w-none [&_p]:mb-1">
+                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{question.explanation}</ReactMarkdown>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
