@@ -1,5 +1,6 @@
 const supabase = require('../config/database');
 const { getAllModules, getModuleById, getModulesByDocument, getModulesByCourse, regenerateQuestions: regenerateModuleQuestions, isGeneratingModules } = require('../services/moduleGenerator');
+const { shouldGenerateBridge, triggerBridgeGeneration } = require('../services/bridgeModuleService');
 
 async function getProgressForModule(moduleId) {
   const { data: row, error } = await supabase
@@ -65,7 +66,7 @@ async function getModule(req, res, next) {
 async function updateProgress(req, res, next) {
   try {
     const { id } = req.params;
-    const { score } = req.body;
+    const { score, answers } = req.body;
     const userId = req.user?.id || null;
 
     const module = await getModuleById(id);
@@ -105,8 +106,22 @@ async function updateProgress(req, res, next) {
     const { error: sessErr } = await supabase.from('study_sessions').insert(sessRow);
     if (sessErr) throw sessErr;
 
+    // Check if a bridge module should be generated (non-blocking)
+    let bridgeGenerating = false;
+    if (answers) {
+      try {
+        const needsBridge = await shouldGenerateBridge(id, score, userId);
+        if (needsBridge) {
+          triggerBridgeGeneration(id, module, score, answers, userId);
+          bridgeGenerating = true;
+        }
+      } catch (bridgeErr) {
+        console.error(`[moduleController] Bridge check failed:`, bridgeErr.message);
+      }
+    }
+
     const progress = await getProgressForModule(id);
-    res.json({ moduleId: id, progress });
+    res.json({ moduleId: id, progress, bridgeGenerating });
   } catch (error) {
     next(error);
   }

@@ -20,6 +20,7 @@ const config = {
   cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME,
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY,
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET,
+  deepseekApiKey: process.env.DEEPSEEK_API_KEY,
 };
 
 console.log(`[Config] Environment: ${config.nodeEnv}`);

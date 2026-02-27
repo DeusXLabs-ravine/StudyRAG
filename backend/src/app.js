@@ -23,6 +23,7 @@ const diagramRoutes = require('./routes/diagramRoutes');
 const courseRoutes = require('./routes/courseRoutes');
 const medicalResourceRoutes = require('./routes/medicalResourceRoutes');
 const gameRoutes = require('./routes/gameRoutes');
+const simulationRoutes = require('./routes/simulationRoutes');
 
 const app = express();
 
@@ -123,11 +124,13 @@ app.use('/api/diagrams', diagramRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/medical', medicalResourceRoutes);
 app.use('/api/games', gameRoutes);
+app.use('/api/simulations', simulationRoutes);
 
 // Apply strict rate limit to expensive generation endpoints
 app.use('/api/diagrams/generate', generationLimiter);
 app.use('/api/medical/enrich', generationLimiter);
 app.use('/api/games/generate', generationLimiter);
+app.use('/api/simulations/generate-params', generationLimiter);
 
 // ─── Static & SPA Fallback ───────────────────────────────────
 

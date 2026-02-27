@@ -10,6 +10,7 @@ import Flashcards from './pages/Flashcards';
 import Analytics from './pages/Analytics';
 import Exam from './pages/Exam';
 import Settings from './pages/Settings';
+import Simulations from './pages/Simulations';
 import About from './pages/About';
 import Features from './pages/Features';
 import Pricing from './pages/Pricing';
@@ -43,6 +44,7 @@ export default function App() {
           <Route path="/flashcards" element={<Flashcards />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/exam" element={<Exam />} />
+          <Route path="/simulations" element={<Simulations />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
       </Routes>

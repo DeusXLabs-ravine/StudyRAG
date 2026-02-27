@@ -1,6 +1,6 @@
 const supabase = require('../config/database');
 const { getGenerativeModel, selectModelTier } = require('../config/gemini');
-const { FLASHCARD_GENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection } = require('../utils/prompts');
+const { FLASHCARD_GENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection, getModuleDepthSection } = require('../utils/prompts');
 const vectorStore = require('./vectorStore');
 const { getUserTeachingLevel, getUserInterests, getWeakTopics, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
 const { v4: uuidv4 } = require('uuid');
@@ -32,13 +32,16 @@ async function generateFlashcards({ numCards = 20, docId = null, name = null, us
     getEffectiveLearningPace(userId),
   ]);
 
+  const { depthSection } = getModuleDepthSection(context);
+
   const prompt = FLASHCARD_GENERATION_PROMPT
     .replace('{num_cards}', numCards)
     .replace('{context}', context)
     .replace('{teaching_level}', teachingLevel)
     .replace('{interests_section}', buildInterestsSection(interests))
     .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
-    .replace('{pace_section}', buildPaceSection(learningPace));
+    .replace('{pace_section}', buildPaceSection(learningPace))
+    .replace('{depth_section}', depthSection);
 
   const tier = selectModelTier({});
   const model = getGenerativeModel(tier);
@@ -117,13 +120,16 @@ async function generateAdaptiveFlashcards({ numCards = 20, userId = null }) {
     getEffectiveLearningPace(userId),
   ]);
 
+  const { depthSection: adaptiveDepthSection } = getModuleDepthSection(context);
+
   const prompt = FLASHCARD_GENERATION_PROMPT
     .replace('{num_cards}', numCards)
     .replace('{context}', context)
     .replace('{teaching_level}', teachingLevel)
     .replace('{interests_section}', buildInterestsSection(interests))
     .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
-    .replace('{pace_section}', buildPaceSection(learningPace));
+    .replace('{pace_section}', buildPaceSection(learningPace))
+    .replace('{depth_section}', adaptiveDepthSection);
 
   const model = getGenerativeModel('standard');
   const result = await model.generateContent(prompt);

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Target, Lightbulb, HelpCircle, X, CheckCircle, Lock, ChevronRight, Shapes, Wand2, Loader2 } from 'lucide-react';
 import remarkMath from 'remark-math';
+import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import { explainSimply } from '../../services/moduleService';
 import { MorphingSquare } from '../ui/morphing-square';
@@ -37,11 +38,6 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
         {/* Notebook decorations (hidden by CSS var for non-notebook) */}
         <div className="board-notebook-lines" />
         <div className="board-margin-line" />
-        <div className="board-spiral hidden sm:block">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <div key={i} className="board-spiral-ring" />
-          ))}
-        </div>
 
         {/* Header */}
         <div
@@ -102,13 +98,53 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
           {/* Lesson Content */}
           <div className="max-w-none mb-12">
             <ReactMarkdown
-              remarkPlugins={[remarkMath]}
+              remarkPlugins={[remarkMath, remarkGfm]}
               rehypePlugins={[rehypeKatex]}
               components={{
-                p: ({ children }) => <p className="mb-6">{children}</p>,
-                h2: ({ children }) => <h2 className="text-xl md:text-2xl mt-12 mb-6">{children}</h2>,
-                h3: ({ children }) => <h3 className="text-lg md:text-xl mt-8 mb-4">{children}</h3>,
-                li: ({ children }) => <li className="mb-2 list-['-'] ml-4 pl-2 text-base md:text-lg">{children}</li>,
+                p: ({ children }) => <p className="mb-6 text-base md:text-lg leading-relaxed">{children}</p>,
+                h1: ({ children }) => <h1 className="text-2xl md:text-3xl font-bold mt-12 mb-6">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-xl md:text-2xl font-bold mt-12 mb-6">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-lg md:text-xl font-semibold mt-8 mb-4">{children}</h3>,
+                h4: ({ children }) => <h4 className="text-base md:text-lg font-semibold mt-6 mb-3">{children}</h4>,
+                ul: ({ children }) => <ul className="my-4 space-y-2 pl-1">{children}</ul>,
+                ol: ({ children }) => <ol className="my-4 space-y-2 pl-1 list-decimal list-inside">{children}</ol>,
+                li: ({ children }) => <li className="mb-2 list-['-'] ml-4 pl-2 text-base md:text-lg leading-relaxed">{children}</li>,
+                strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                em: ({ children }) => <em className="italic">{children}</em>,
+                a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 opacity-80 hover:opacity-100 transition-opacity">{children}</a>,
+                blockquote: ({ children }) => (
+                  <blockquote className="my-6 pl-5 border-l-4 opacity-80 italic" style={{ borderColor: 'var(--text-color, #666)' }}>
+                    {children}
+                  </blockquote>
+                ),
+                hr: () => <hr className="my-8 opacity-20" style={{ borderColor: 'var(--text-color, #666)' }} />,
+                code: ({ inline, className, children, ...props }) => {
+                  if (inline || !className) {
+                    return <code className="px-1.5 py-0.5 rounded text-[0.9em] font-mono" style={{ background: 'var(--label-bg, rgba(0,0,0,0.1))' }} {...props}>{children}</code>;
+                  }
+                  return (
+                    <code className="block p-4 my-4 rounded-xl text-sm font-mono overflow-x-auto whitespace-pre leading-relaxed" style={{ background: 'var(--label-bg, rgba(0,0,0,0.15))' }} {...props}>
+                      {children}
+                    </code>
+                  );
+                },
+                pre: ({ children }) => <pre className="my-4 overflow-x-auto">{children}</pre>,
+                table: ({ children }) => (
+                  <div className="my-6 overflow-x-auto rounded-xl" style={{ border: '1px solid var(--header-border-color, rgba(255,255,255,0.15))' }}>
+                    <table className="min-w-full border-collapse text-sm md:text-base">{children}</table>
+                  </div>
+                ),
+                thead: ({ children }) => <thead style={{ background: 'var(--label-bg, rgba(0,0,0,0.1))' }}>{children}</thead>,
+                tbody: ({ children }) => <tbody>{children}</tbody>,
+                tr: ({ children }) => <tr style={{ borderBottom: '1px solid var(--header-border-color, rgba(255,255,255,0.1))' }}>{children}</tr>,
+                th: ({ children }) => <th className="px-4 py-3 text-left font-bold text-sm uppercase tracking-wider">{children}</th>,
+                td: ({ children }) => <td className="px-4 py-3">{children}</td>,
+                img: ({ src, alt }) => (
+                  <span className="block my-6">
+                    <img src={src} alt={alt || ''} className="max-w-full rounded-xl mx-auto" style={{ maxHeight: '400px' }} />
+                    {alt && <span className="block text-center text-sm opacity-60 mt-2">{alt}</span>}
+                  </span>
+                ),
               }}
             >
               {module.content}

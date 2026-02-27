@@ -1,11 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
-import { BookOpen, FileText, MessageCircle, ClipboardCheck, Layers, Home, Menu, X, BarChart3, Timer, Settings, LogOut, User, ChevronRight } from 'lucide-react';
+import { BookOpen, FileText, MessageCircle, ClipboardCheck, Layers, Home, Menu, X, BarChart3, Settings, LogOut, User, ChevronRight, FlaskConical } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Logo from '../common/Logo';
 import useAuthStore from '../../store/authStore';
 
-const icons = { Home, FileText, BookOpen, MessageCircle, ClipboardCheck, Layers, BarChart3, Timer, Settings };
+const icons = { Home, FileText, BookOpen, MessageCircle, ClipboardCheck, Layers, BarChart3, Settings, FlaskConical };
 
 const navItems = [
   { path: '/', label: 'Home', icon: 'Home' },
@@ -14,7 +14,7 @@ const navItems = [
   { path: '/chat', label: 'Chat', icon: 'MessageCircle' },
   { path: '/quiz', label: 'Quiz', icon: 'ClipboardCheck' },
   { path: '/flashcards', label: 'Flashcards', icon: 'Layers' },
-  { path: '/exam', label: 'Exam', icon: 'Timer' },
+  { path: '/simulations', label: 'Lab', icon: 'FlaskConical' },
   { path: '/analytics', label: 'Analytics', icon: 'BarChart3' },
   { path: '/settings', label: 'Settings', icon: 'Settings' },
 ];

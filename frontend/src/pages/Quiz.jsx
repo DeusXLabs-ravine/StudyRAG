@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Play, CheckCircle, XCircle, RotateCcw, Trophy, Zap, X } from 'lucide-react';
+import { Play, CheckCircle, XCircle, RotateCcw, Trophy, Zap, X, Timer, ChevronRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as quizService from '../services/quizService';
 import useDocumentStore from '../store/documentStore';
@@ -63,15 +64,39 @@ export default function Quiz() {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8 md:py-12">
         <div className="mb-10">
-          <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">Quiz Mode</h1>
-          <p className="text-sm md:text-base text-gray-500 mt-2 font-medium">Test your knowledge with AI-generated assessments.</p>
+          <h1 className="text-2xl md:text-4xl font-black text-gray-900 tracking-tight uppercase">Assessments</h1>
+          <p className="text-sm md:text-base text-gray-500 mt-2 font-medium leading-relaxed">Validate your technical proficiency through adaptive testing protocols.</p>
         </div>
 
-        <div className="sleek-card p-6 md:p-8">
-          <h2 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-2">
-            <Zap className="h-5 w-5 text-primary" />
-            Quiz Configuration
-          </h2>
+        {/* High-Visibility Exam Mode CTA */}
+        <Link
+          to="/exam"
+          className="mb-8 w-full flex items-center justify-between p-8 bg-gray-900 rounded-[2rem] hover:bg-black transition-all group shadow-xl shadow-gray-200"
+        >
+          <div className="flex items-center gap-6">
+            <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner border border-white/5">
+              <Timer className="h-8 w-8 text-primary" />
+            </div>
+            <div>
+              <p className="text-xl font-black text-white uppercase tracking-tight">Exam Simulation</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">High-stakes performance analytics</p>
+            </div>
+          </div>
+          <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center group-hover:translate-x-2 transition-all">
+            <ChevronRight className="h-6 w-6 text-white" />
+          </div>
+        </Link>
+
+        <div className="sleek-card p-6 md:p-10 border border-gray-100 shadow-sm mb-10">
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-sm font-black text-gray-900 uppercase tracking-[0.2em] flex items-center gap-2">
+              <Zap className="h-4 w-4 text-primary" />
+              Quiz Configuration
+            </h2>
+            <div className="px-2 py-0.5 rounded bg-primary/5 text-[8px] font-black text-primary uppercase tracking-widest border border-primary/10">
+              Adaptive v2
+            </div>
+          </div>
 
           <div className="space-y-6">
             <div>

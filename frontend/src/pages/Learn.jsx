@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { BookOpen, CheckCircle, Lock, ChevronRight, Calculator, FlaskConical, Cpu, Atom, Globe, Lightbulb, Sparkles, Send, Volume2, Loader2, MessageSquareText, X, Menu, PanelLeftClose, PanelLeftOpen, Maximize2, Minimize2, Image as ImageIcon, GraduationCap, MicOff, ArrowUp, ListTodo, FolderOpen } from 'lucide-react';
+import { BookOpen, CheckCircle, Lock, ChevronRight, Calculator, FlaskConical, Cpu, Atom, Globe, Lightbulb, Sparkles, Send, Volume2, Loader2, MessageSquareText, X, Menu, PanelLeftClose, PanelLeftOpen, Maximize2, Minimize2, Image as ImageIcon, GraduationCap, MicOff, ArrowUp, ListTodo, FolderOpen, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import useModuleStore from '../store/moduleStore';
 import useDocumentStore from '../store/documentStore';
@@ -36,7 +36,7 @@ export default function Learn() {
   const { documentId: routeDocId } = useParams();
   const [searchParams] = useSearchParams();
   const routeCourseId = searchParams.get('courseId');
-  const { modules, currentModule, loading: modulesLoading, generating, fetchModules, fetchCourseModules, stopPolling, setCurrentModule, regenerateQuestions, markModuleCompleted } = useModuleStore();
+  const { modules, currentModule, loading: modulesLoading, generating, bridgeGeneratingModuleId, fetchModules, fetchCourseModules, stopPolling, setCurrentModule, regenerateQuestions, markModuleCompleted } = useModuleStore();
   const { documents, fetchDocuments } = useDocumentStore();
   const { courses, fetchCourses } = useCourseStore();
   const { settings, tutorial_completed, setTutorialCompleted, fetchSettings } = useSettingsStore();
@@ -173,6 +173,9 @@ export default function Learn() {
   }, [currentModule?.id]);
 
   const handleModuleSelect = (module) => {
+    // Clear stale visuals from previous module immediately
+    setGeneratedDiagrams([]);
+    setMedicalResources([]);
     setCurrentModule(module);
     setShowQuiz(false);
     // Track reading interaction (non-blocking)
@@ -388,6 +391,11 @@ export default function Learn() {
     if (index === 0) return true;
     // If this module was explicitly unlocked during this session, keep it accessible
     if (unlockedIdsRef.current.has(mod.id)) return true;
+    // Bridge modules are always accessible if the parent was attempted (not completion-gated)
+    if (mod.moduleType === 'bridge') {
+      const parentMod = modules.find(m => m.id === mod.parentModuleId);
+      return parentMod?.progress?.attempts > 0 || parentMod?.progress?.score != null;
+    }
     const prevMod = modules[index - 1];
     return prevMod?.progress?.completed;
   };
@@ -566,6 +574,7 @@ export default function Learn() {
                     handleModuleSelect={handleModuleSelect}
                     getTopicIcon={getTopicIcon}
                     generating={generating}
+                    bridgeGeneratingModuleId={bridgeGeneratingModuleId}
                   />
                 </div>
               </motion.div>
@@ -698,6 +707,7 @@ export default function Learn() {
                   }}
                   getTopicIcon={getTopicIcon}
                   generating={generating}
+                  bridgeGeneratingModuleId={bridgeGeneratingModuleId}
                 />
               </div>
             </motion.div>
@@ -772,7 +782,7 @@ export default function Learn() {
   );
 }
 
-function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSelect, getTopicIcon, generating }) {
+function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSelect, getTopicIcon, generating, bridgeGeneratingModuleId }) {
   const moduleCount = (modules || []).length;
   return (
     <div className="flex flex-col gap-4">
@@ -824,6 +834,19 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
         </motion.div>
       )}
 
+      {/* Bridge Generation Placeholder */}
+      {bridgeGeneratingModuleId && (
+        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 mb-2 flex items-center gap-4 shadow-sm">
+          <div className="w-8 h-8 rounded-xl bg-white border border-amber-200 flex items-center justify-center">
+            <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest leading-none mb-1">Sage is building</p>
+            <h4 className="text-sm font-bold text-amber-900 leading-none">Review Module...</h4>
+          </div>
+        </div>
+      )}
+
       {Object.entries(
         (modules || []).reduce((acc, mod) => {
           const topic = mod.topic || 'General';
@@ -858,6 +881,7 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
               const accessible = isModuleAccessible(mod, globalIndex);
               const isActive = currentModule?.id === mod.id;
               const isCompleted = mod.progress?.completed;
+              const isBridge = mod.moduleType === 'bridge';
 
               return (
                 <button
@@ -865,23 +889,32 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
                   onClick={() => accessible && handleModuleSelect(mod)}
                   disabled={!accessible}
                   className={`w-full flex items-center gap-3 px-3 py-3 md:py-2.5 rounded-xl text-left text-sm transition-all shadow-sm ${isActive
-                    ? 'bg-primary text-white font-semibold shadow-lg shadow-primary/20 scale-[1.02]'
+                    ? isBridge
+                      ? 'bg-amber-500 text-white font-semibold shadow-lg shadow-amber-500/20 scale-[1.02]'
+                      : 'bg-primary text-white font-semibold shadow-lg shadow-primary/20 scale-[1.02]'
                     : accessible
-                      ? 'text-gray-700 bg-white border border-gray-100 hover:bg-gray-50 hover:translate-x-1'
+                      ? isBridge
+                        ? 'text-amber-800 bg-amber-50 border border-amber-200 hover:bg-amber-100 hover:translate-x-1'
+                        : 'text-gray-700 bg-white border border-gray-100 hover:bg-gray-50 hover:translate-x-1'
                       : 'text-gray-400 cursor-not-allowed grayscale opacity-60 bg-gray-50 border-gray-100'
                     }`}
                 >
-                  <div className={`flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center ${isActive ? 'bg-white/20' : isCompleted ? 'bg-green-100' : accessible ? 'bg-gray-100' : 'bg-gray-50'
+                  <div className={`flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center ${isActive ? 'bg-white/20' : isCompleted ? 'bg-green-100' : isBridge && accessible ? 'bg-amber-100' : accessible ? 'bg-gray-100' : 'bg-gray-50'
                     }`}>
                     {isCompleted ? (
                       <CheckCircle className={`h-3.5 w-3.5 ${isActive ? 'text-white' : 'text-green-600'}`} />
                     ) : !accessible ? (
                       <Lock className="h-3 w-3" />
+                    ) : isBridge ? (
+                      <RotateCcw className={`h-3 w-3 ${isActive ? 'text-white' : 'text-amber-600'}`} />
                     ) : (
                       <span className={`text-[10px] font-bold ${isActive ? 'text-white' : 'text-gray-500'}`}>{globalIndex + 1}</span>
                     )}
                   </div>
                   <span className="truncate flex-1 font-medium">{mod.title}</span>
+                  {isBridge && !isActive && (
+                    <span className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-amber-200 text-amber-800 rounded-md">Review</span>
+                  )}
                 </button>
               );
             })}
@@ -941,10 +974,10 @@ function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded,
 
   return (
     <div className={`flex flex-col ${isMobile
-        ? 'h-[70vh]'
-        : isMaximized
-          ? 'h-full'
-          : 'sticky top-8 h-[calc(100vh-6rem)]'
+      ? 'h-[70vh]'
+      : isMaximized
+        ? 'h-full'
+        : 'sticky top-8 h-[calc(100vh-6rem)]'
       }`}>
       {/* Header */}
       {!isMobile && (

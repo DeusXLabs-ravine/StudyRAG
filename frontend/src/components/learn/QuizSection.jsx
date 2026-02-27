@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, CheckCircle, XCircle, HelpCircle, ArrowLeft } from 'lucide-react';
+import { Trophy, CheckCircle, XCircle, HelpCircle, ArrowLeft, RotateCcw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
@@ -32,7 +32,7 @@ export default function QuizSection({ module, onBack, onComplete }) {
 
     const score = Math.round((correct / questions.length) * 100);
     try {
-      await submitProgress(module.id, score);
+      await submitProgress(module.id, score, answers);
     } catch (err) {
       // progress save failed — non-blocking
     }
@@ -130,6 +130,18 @@ export default function QuizSection({ module, onBack, onComplete }) {
               ? 'You have successfully mastered the material in this module. Ready for the next challenge?'
               : 'You need at least 70% to pass this module. We recommend reviewing the lesson material before trying again.'}
           </motion.p>
+
+          {module.progress?.best_score < 60 && !passed && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 1 }}
+              className="mt-6 inline-flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-100 rounded-xl text-amber-700 text-xs font-bold"
+            >
+              <RotateCcw className="h-3 w-3 animate-spin-slow" />
+              <span>Sage is preparing a custom review module for you...</span>
+            </motion.div>
+          )}
         </div>
 
         <div className="p-5 md:p-10 bg-white">

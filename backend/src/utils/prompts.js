@@ -13,6 +13,7 @@ Given the following document content, create a set of logical learning modules t
 This content was provided by the student as their study material. It is the AUTHORITATIVE source of truth for generating modules. Do not contradict it with outside knowledge.
 If the content contains questions (with or without answers), treat them as practice/review material — generate modules that teach the concepts being tested, and provide correct answers with explanations grounded in the source material and trusted academic knowledge.
 {legal_grounding_section}
+{depth_section}
 
 Document content:
 {document_text}
@@ -26,7 +27,7 @@ For each module, provide:
 1. title: Clear, descriptive module name
 2. topic: A short topic label (1-3 words) for this module's subject area
 3. objectives: 2-3 specific learning goals
-4. content: Focused explanation (200-400 words) with:
+4. content: Focused explanation ({content_word_range}) with:
    - Introduction to the concept
    - Clear explanation with one or two examples
    - Key points highlighted
@@ -35,6 +36,7 @@ For each module, provide:
    - Mix of types: multiple_choice, true_false
    - Correct answers and explanations
    - Each question should have a "topic" field matching the module topic
+{quiz_depth_section}
 
 Return valid JSON in this exact format:
 {
@@ -79,6 +81,7 @@ Adjust question complexity accordingly:
 
 Based on the following study material, generate a quiz with {num_questions} questions.
 Difficulty: {difficulty}
+{quiz_depth_section}
 
 Study material:
 {context}
@@ -120,6 +123,7 @@ Adjust flashcard complexity:
 
 Study material:
 {context}
+{depth_section}
 
 Generate {num_cards} flashcards covering the key concepts, terms, and facts.
 Each flashcard should have:
@@ -325,6 +329,7 @@ Generate DIFFERENT questions from the previous ones — do NOT repeat or rephras
 
 Module content:
 {module_content}
+{quiz_depth_section}
 
 Previous questions the student already saw (do NOT reuse these):
 {previous_questions}
@@ -419,6 +424,7 @@ Study Materials:
 {analysis_section}
 
 {weak_topics_section}
+{depth_section}
 
 Create a prioritized study guide that helps the student prepare efficiently. Return valid JSON in this exact format:
 {
@@ -457,6 +463,7 @@ Study Materials:
 {analysis_section}
 
 {weak_topics_section}
+{quiz_depth_section}
 
 Generate {num_questions} predicted exam questions that cover the most important topics. Prioritize topics that are:
 1. High-weight in exam analysis (if available)
@@ -506,6 +513,7 @@ Adjust question complexity accordingly:
 - "advanced": Challenging questions requiring analysis, synthesis, and critical thinking
 
 This practice exam should simulate a real exam experience. Difficulty: {difficulty}
+{quiz_depth_section}
 
 Study Materials:
 {study_content}
@@ -640,6 +648,7 @@ The student's current teaching level is: {teaching_level}
 
 Analyze the following document content and create a detailed outline of ALL topics that should be covered as individual learning modules.
 {legal_grounding_section}
+{depth_section}
 
 CRITICAL GUIDELINES:
 - This text contains approximately {word_count} words
@@ -679,6 +688,7 @@ You are generating specific learning modules from a pre-planned curriculum outli
 This content was provided by the student as their study material. It is the AUTHORITATIVE source of truth. Do not contradict it.
 If the content contains questions (with or without answers), treat them as practice/review material — generate modules that teach the concepts being tested, and provide correct answers with explanations grounded in the source material and trusted academic knowledge.
 {legal_grounding_section}
+{depth_section}
 
 SOURCE MATERIAL:
 {document_text}
@@ -693,7 +703,7 @@ For each module listed above, provide:
 1. title: Use the title from the outline above
 2. topic: Use the topic from the outline above
 3. objectives: 2-3 specific learning goals
-4. content: Focused explanation (200-400 words) with:
+4. content: Focused explanation ({content_word_range}) with:
    - Introduction to the concept
    - Clear explanation with one or two examples
    - Key points highlighted
@@ -702,6 +712,7 @@ For each module listed above, provide:
    - Mix of types: multiple_choice, true_false
    - Correct answers and explanations
    - Each question should have a "topic" field matching the module topic
+{quiz_depth_section}
 
 Return ONLY valid JSON in this exact format:
 {
@@ -765,6 +776,7 @@ Lesson content:
 Conversation so far:
 {conversation_history}
 
+{tutor_depth_section}
 Teaching style rules:
 - Use the student's first name occasionally (not every message) to keep it personal
 - Adapt language complexity to the teaching level:
@@ -1377,6 +1389,98 @@ Based on the game type, generate the following JSON:
 - Use LaTeX notation for any mathematical expressions
 - Return ONLY the JSON object, no markdown fences, no extra text`;
 
+const SIMULATION_GENERATION_PROMPT = `You are a physics education assistant. Given a student's query and optionally their study context, select the most appropriate physics simulation and set meaningful parameter values.
+
+**Student Query:** {query}
+
+**Available Simulations:**
+{catalog}
+
+**Study Context:**
+{context}
+
+Return a JSON object with:
+- "simulationId": one of the available simulation IDs
+- "title": human-readable title for this specific scenario
+- "params": object with parameter values that create an interesting/educational scenario matching the query
+- "explanation": 1-2 sentences explaining what the simulation shows
+- "suggestedExperiment": a suggestion for what the student should try changing (e.g., "Try increasing the angle to 60 degrees to see how it affects the range")
+
+**Rules:**
+- Choose the simulation that best matches the student's query
+- Set parameter values that create a visually interesting and educational starting point
+- If the query mentions specific values (e.g., "30 m/s", "45 degrees"), use those values
+- The explanation should connect the simulation to what the student is studying
+- Keep the suggestedExperiment actionable and specific
+- Return ONLY the JSON object, no markdown fences, no extra text`;
+
+const BRIDGE_MODULE_GENERATION_PROMPT = `You are an expert remedial educator creating a focused bridge review module for a student who struggled on a quiz.
+
+The student scored {score}% on the module "{parent_title}" — they need targeted help on the specific concepts they got wrong.
+
+Teaching level: {teaching_level} (but simplify ONE level below this for the bridge module)
+{depth_section}
+
+## Parent Module Content (what they were studying):
+{parent_content}
+
+## Questions They Got WRONG (these reveal their exact misconceptions):
+{wrong_answers}
+
+## Struggled Topics:
+{struggled_topics}
+
+Your task: Create a SHORT, focused review module (300-500 words) that:
+1. Directly addresses each misconception revealed by the wrong answers
+2. Re-explains the concepts using simpler language and different examples than the parent module
+3. Uses analogies and step-by-step breakdowns to rebuild understanding
+4. Does NOT repeat the parent module verbatim — rephrase and simplify
+
+{quiz_depth_section}
+
+Return a JSON object with this EXACT structure:
+{
+  "title": "Review: [1-3 word topic summary]",
+  "topic": "[same topic as parent module]",
+  "objectives": ["objective 1", "objective 2"],
+  "content": "[300-500 word markdown content targeting the exact misconceptions]",
+  "takeaways": ["key takeaway 1", "key takeaway 2", "key takeaway 3"],
+  "questions": [
+    {
+      "type": "multiple_choice",
+      "question": "...",
+      "options": ["A) ...", "B) ...", "C) ...", "D) ..."],
+      "correct": "A",
+      "explanation": "...",
+      "topic": "..."
+    },
+    {
+      "type": "multiple_choice",
+      "question": "...",
+      "options": ["A) ...", "B) ...", "C) ...", "D) ..."],
+      "correct": "B",
+      "explanation": "...",
+      "topic": "..."
+    },
+    {
+      "type": "true_false",
+      "question": "...",
+      "correct": "true",
+      "explanation": "...",
+      "topic": "..."
+    }
+  ]
+}
+
+IMPORTANT:
+- Generate exactly 3 practice questions that test the SAME concepts the student got wrong, but phrased differently
+- The content must be 300-500 words — concise and focused
+- Use markdown formatting (headers, bold, lists) for readability
+- Return ONLY the JSON object, no markdown fences, no extra text`;
+
+// Re-export depth router for convenience
+const { getModuleDepthSection, getQuizDepthSection, getTutorDepthSection } = require('./prompts/depthRouter');
+
 module.exports = {
   MODULE_GENERATION_PROMPT,
   MODULE_OUTLINE_PROMPT,
@@ -1414,5 +1518,10 @@ module.exports = {
   buildPaceSection,
   buildDiagramInterestsSection,
   buildLegalGroundingSection,
+  getModuleDepthSection,
+  getQuizDepthSection,
+  getTutorDepthSection,
   GAME_GENERATION_PROMPT,
+  SIMULATION_GENERATION_PROMPT,
+  BRIDGE_MODULE_GENERATION_PROMPT,
 };

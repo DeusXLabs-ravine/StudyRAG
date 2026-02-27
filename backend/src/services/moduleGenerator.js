@@ -1,6 +1,6 @@
 const supabase = require('../config/database');
 const { getGenerativeModel } = require('../config/gemini');
-const { MODULE_GENERATION_PROMPT, MODULE_OUTLINE_PROMPT, MODULE_BATCH_GENERATION_PROMPT, QUESTION_REGENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection, buildLegalGroundingSection } = require('../utils/prompts');
+const { MODULE_GENERATION_PROMPT, MODULE_OUTLINE_PROMPT, MODULE_BATCH_GENERATION_PROMPT, QUESTION_REGENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection, buildLegalGroundingSection, getModuleDepthSection, getQuizDepthSection } = require('../utils/prompts');
 const { getUserTeachingLevel, getUserInterests, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
 const { prepareTextForLLM } = require('./chunkingService');
 const { v4: uuidv4 } = require('uuid');
@@ -96,6 +96,11 @@ async function generateOutlineForSegment(segmentText, segmentIndex, totalSegment
     ? `\n\nNote: This is section ${segmentIndex + 1} of ${totalSegments} from the document. Create modules only for topics in THIS section.\n`
     : '';
 
+  const { depthSection, domain } = getModuleDepthSection(segmentText);
+  if (domain) {
+    console.log(`[moduleGenerator] Detected domain: ${domain} — applying depth-enhanced generation`);
+  }
+
   const prompt = MODULE_OUTLINE_PROMPT
     .replace('{document_text}', segmentText + segmentNote)
     .replace('{teaching_level}', teachingLevel)
@@ -103,6 +108,7 @@ async function generateOutlineForSegment(segmentText, segmentIndex, totalSegment
     .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
     .replace('{pace_section}', buildPaceSection(learningPace))
     .replace('{legal_grounding_section}', buildLegalGroundingSection(segmentText))
+    .replace('{depth_section}', depthSection)
     .replace('{word_count}', String(wordCount))
     .replace('{target_modules}', String(targetModules))
     .replace('{min_modules}', String(minModules));
@@ -128,6 +134,10 @@ async function generateModuleBatch(segmentText, fullOutline, batchModules, batch
     .map((m, i) => `${batchStart + i + 1}. "${m.title}" [${m.topic}]: ${m.description}`)
     .join('\n');
 
+  const { depthSection, domain } = getModuleDepthSection(segmentText);
+  const quizDepthSection = getQuizDepthSection(segmentText);
+  const contentWordRange = domain ? '600-1200 words' : '200-400 words';
+
   const prompt = MODULE_BATCH_GENERATION_PROMPT
     .replace('{document_text}', segmentText)
     .replace('{teaching_level}', teachingLevel)
@@ -135,6 +145,9 @@ async function generateModuleBatch(segmentText, fullOutline, batchModules, batch
     .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
     .replace('{pace_section}', buildPaceSection(learningPace))
     .replace('{legal_grounding_section}', buildLegalGroundingSection(segmentText))
+    .replace('{depth_section}', depthSection)
+    .replace('{content_word_range}', contentWordRange)
+    .replace('{quiz_depth_section}', quizDepthSection)
     .replace('{full_outline}', outlineText)
     .replace('{batch_modules}', batchText);
 
@@ -153,13 +166,20 @@ async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalS
     ? `\n\nNote: This is section ${segmentIndex + 1} of ${totalSegments} from the document. Create modules only for the topics in THIS section.\n`
     : '';
 
+  const { depthSection, domain } = getModuleDepthSection(segmentText);
+  const quizDepthSection = getQuizDepthSection(segmentText);
+  const contentWordRange = domain ? '600-1200 words' : '200-400 words';
+
   const prompt = MODULE_GENERATION_PROMPT
     .replace('{document_text}', segmentText + segmentNote)
     .replace('{teaching_level}', teachingLevel)
     .replace('{interests_section}', buildInterestsSection(interests, teachingLevel))
     .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
     .replace('{pace_section}', buildPaceSection(learningPace))
-    .replace('{legal_grounding_section}', buildLegalGroundingSection(segmentText));
+    .replace('{legal_grounding_section}', buildLegalGroundingSection(segmentText))
+    .replace('{depth_section}', depthSection)
+    .replace('{content_word_range}', contentWordRange)
+    .replace('{quiz_depth_section}', quizDepthSection);
 
   const model = getGenerativeModel('fast');
   const result = await model.generateContent(prompt);
@@ -624,6 +644,8 @@ function formatModule(row, questionRows) {
     })),
     createdAt: row.created_at,
   };
+  mod.moduleType = row.module_type || 'standard';
+  mod.parentModuleId = row.parent_module_id || null;
   if (row.course_id) mod.courseId = row.course_id;
   if (row.source_documents) mod.sourceDocuments = row.source_documents;
   return mod;
@@ -680,9 +702,12 @@ async function regenerateQuestions(moduleId, userId = null) {
     .map(q => `- [${q.type}] ${q.question}`)
     .join('\n');
 
+  const quizDepthSection = getQuizDepthSection(mod.content);
+
   const prompt = QUESTION_REGENERATION_PROMPT
     .replace('{teaching_level}', teachingLevel)
     .replace('{module_content}', mod.content)
+    .replace('{quiz_depth_section}', quizDepthSection)
     .replace('{previous_questions}', prevQuestionsText)
     .replace(/\{topic\}/g, mod.topic || mod.title);
 

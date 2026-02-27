@@ -78,9 +78,11 @@ const useModuleStore = create((set, get) => ({
     }
   },
 
-  submitProgress: async (moduleId, score) => {
+  bridgeGeneratingModuleId: null,
+
+  submitProgress: async (moduleId, score, answers = null) => {
     try {
-      const result = await moduleService.updateProgress(moduleId, score);
+      const result = await moduleService.updateProgress(moduleId, score, answers);
       set(state => ({
         modules: state.modules.map(m =>
           m.id === moduleId ? { ...m, progress: result.progress } : m
@@ -88,7 +90,33 @@ const useModuleStore = create((set, get) => ({
         currentModule: state.currentModule?.id === moduleId
           ? { ...state.currentModule, progress: result.progress }
           : state.currentModule,
+        // Set bridge generating state if backend confirms
+        bridgeGeneratingModuleId: result.bridgeGenerating ? moduleId : state.bridgeGeneratingModuleId
       }));
+
+      // If a bridge module is being generated, poll for it to appear
+      if (result.bridgeGenerating) {
+        const currentModule = get().currentModule || get().modules.find(m => m.id === moduleId);
+        const docId = currentModule?.documentId || currentModule?.document_id;
+        if (docId) {
+          // Poll at intervals, clear bridgeGenerating state when bridge appears or after timeout
+          const pollIntervals = [3000, 6000, 10000, 15000];
+          pollIntervals.forEach((delay, idx) => {
+            setTimeout(async () => {
+              await get()._pollRefresh(docId);
+              // If we've reached the last poll or the modules now contain the bridge, clear state
+              if (idx === pollIntervals.length - 1) {
+                set({ bridgeGeneratingModuleId: null });
+              } else {
+                const updatedModules = get().modules;
+                const hasBridge = updatedModules.some(m => m.parentModuleId === moduleId && m.moduleType === 'bridge');
+                if (hasBridge) set({ bridgeGeneratingModuleId: null });
+              }
+            }, delay);
+          });
+        }
+      }
+
       return result;
     } catch (error) {
       set({ error: error.message });

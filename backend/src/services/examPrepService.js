@@ -8,6 +8,8 @@ const {
   buildInterestsSection,
   buildLearningStyleSection,
   buildPaceSection,
+  getModuleDepthSection,
+  getQuizDepthSection,
 } = require('../utils/prompts');
 const vectorStore = require('./vectorStore');
 const { prepareTextForLLM } = require('./chunkingService');
@@ -264,11 +266,14 @@ async function generatePrepContent(sessionId, userId = null) {
     const learningStyleSection = buildLearningStyleSection(learningStyle);
     const paceSection = buildPaceSection(learningPace);
 
+    const { depthSection: studyGuideDepth } = getModuleDepthSection(studyContent);
+
     const studyGuidePrompt = STUDY_GUIDE_GENERATION_PROMPT
       .replace('{teaching_level}', teachingLevel)
       .replace('{study_content}', studyContent)
       .replace('{analysis_section}', analysisSection)
       .replace('{weak_topics_section}', weakTopicsSection)
+      .replace('{depth_section}', studyGuideDepth)
       .replace('{interests_section}', interestsSection)
       .replace('{learning_style_section}', learningStyleSection)
       .replace('{pace_section}', paceSection);
@@ -278,6 +283,7 @@ async function generatePrepContent(sessionId, userId = null) {
       .replace('{study_content}', studyContent)
       .replace('{analysis_section}', analysisSection)
       .replace('{weak_topics_section}', weakTopicsSection)
+      .replace('{quiz_depth_section}', getQuizDepthSection(studyContent))
       .replace('{num_questions}', numRevisionQuestions);
 
     const model = getGenerativeModel(tier);
@@ -353,7 +359,8 @@ async function generatePracticeExam(sessionId, { numQuestions = 20, difficulty =
     .replace('{study_content}', studyContent)
     .replace('{analysis_section}', analysisSection)
     .replace('{weak_topics_section}', weakTopicsSection)
-    .replace('{num_questions}', numQuestions);
+    .replace('{num_questions}', numQuestions)
+    .replace('{quiz_depth_section}', getQuizDepthSection(studyContent));
 
   const tier = selectModelTier({ isComplex: true });
   const model = getGenerativeModel(tier);

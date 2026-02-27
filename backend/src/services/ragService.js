@@ -1,4 +1,7 @@
 const { getGenerativeModel, getSearchGroundedModel, selectModelTier } = require('../config/gemini');
+const { isDeepSeekAvailable, callDeepSeekChat } = require('../config/deepseek');
+const { isSTEMQuery } = require('../utils/stemDetector');
+const { getTutorDepthSection } = require('../utils/prompts/depthRouter');
 const vectorStore = require('./vectorStore');
 const { searchPageIndex, searchMultipleDocuments } = require('./pageIndexService');
 const { getUserTeachingLevel, getWeakTopics, getUserProfile, getUserInterests, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
@@ -654,6 +657,8 @@ async function tutorChat(moduleContent, moduleTitle, moduleTopic, message, conve
     ? `\n\nIMPORTANT: The student's question may benefit from current, real-time information. You have access to web search. After grounding your answer in the lesson content, you may supplement with authoritative web sources (e.g., current guidelines, recent studies, drug data). Clearly label any web-sourced information with "🌐 Web Source:" so the student knows what came from the web versus their lesson.`
     : '';
 
+  const tutorDepthSection = getTutorDepthSection(moduleContent || '');
+
   const prompt = TUTOR_CHAT_PROMPT
     .replace('{student_name}', studentName || 'there')
     .replace('{student_age}', studentAge ? `${studentAge}` : 'Not provided')
@@ -662,11 +667,25 @@ async function tutorChat(moduleContent, moduleTitle, moduleTopic, message, conve
     .replace('{learning_style_section}', learningStyleSection)
     .replace('{pace_section}', paceSection)
     .replace('{weak_topics_section}', weakTopicsSection)
+    .replace('{tutor_depth_section}', tutorDepthSection)
     .replace('{module_title}', moduleTitle || 'this lesson')
     .replace('{module_topic}', moduleTopic || 'this topic')
     .replace('{module_content}', moduleContent || '')
     .replace('{conversation_history}', historyText || '(This is the start of the conversation)')
     .replace('{student_message}', message + fetchedContentHint + webSearchHint);
+
+  // Try DeepSeek Chat for STEM queries (faster than R1, still strong at STEM)
+  // Skip when useWeb is true — web search grounding is Gemini-specific
+  const stemCheck = isSTEMQuery(message);
+  if (stemCheck.isSTEM && isDeepSeekAvailable() && !useWeb) {
+    try {
+      console.log(`[TutorChat] Using DeepSeek Chat for STEM query (subjects: ${stemCheck.subjects.join(', ')})`);
+      const reply = await callDeepSeekChat(null, prompt);
+      return { reply, webSources: fetchedSources };
+    } catch (err) {
+      console.warn('[TutorChat] DeepSeek Chat failed, falling back to Gemini:', err.message);
+    }
+  }
 
   const model = useWeb ? getSearchGroundedModel('standard') : getGenerativeModel('standard');
   const result = await model.generateContent(prompt);

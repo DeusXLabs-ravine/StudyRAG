@@ -215,6 +215,59 @@ export default function Chat() {
     }
   };
 
+  // ─── Simulation request handler ──────────────────────────────
+  const handleSimulationRequest = async (query) => {
+    setLoading(true);
+    try {
+      const { generateSimulationParams } = await import('../services/simulationService');
+      const result = await generateSimulationParams(query, null, selectedDocId || null);
+      if (result?.simulationId) {
+        addMessage({
+          role: 'tutor',
+          text: result.explanation || `Here's an interactive **${result.title || result.simulationId}** simulation:`,
+          blocks: [{
+            type: 'simulation',
+            simulationId: result.simulationId,
+            params: result.params || {},
+            suggestedExperiment: result.suggestedExperiment || null,
+          }],
+        });
+      } else {
+        // Fallback — pick a simulation based on keyword matching
+        const simMap = {
+          projectile: { id: 'projectile_motion', title: 'Projectile Motion' },
+          pendulum: { id: 'pendulum', title: 'Pendulum' },
+          spring: { id: 'spring_mass', title: 'Spring-Mass System' },
+          collision: { id: 'collision', title: '1D Collision' },
+        };
+        const match = Object.entries(simMap).find(([kw]) => query.toLowerCase().includes(kw));
+        const sim = match ? match[1] : simMap.projectile;
+        addMessage({
+          role: 'tutor',
+          text: `Here's an interactive **${sim.title}** simulation! Adjust the parameters and press Play.`,
+          blocks: [{ type: 'simulation', simulationId: sim.id, params: {} }],
+        });
+      }
+    } catch {
+      // Fallback without backend
+      const simMap = {
+        projectile: { id: 'projectile_motion', title: 'Projectile Motion' },
+        pendulum: { id: 'pendulum', title: 'Pendulum' },
+        spring: { id: 'spring_mass', title: 'Spring-Mass System' },
+        collision: { id: 'collision', title: '1D Collision' },
+      };
+      const match = Object.entries(simMap).find(([kw]) => query.toLowerCase().includes(kw));
+      const sim = match ? match[1] : simMap.projectile;
+      addMessage({
+        role: 'tutor',
+        text: `Here's an interactive **${sim.title}** simulation! Adjust the parameters and press Play.`,
+        blocks: [{ type: 'simulation', simulationId: sim.id, params: {} }],
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ─── Formula insert handler ────────────────────────────────
   const handleFormulaInsert = (text) => {
     setInput(prev => prev + text);
@@ -237,6 +290,13 @@ export default function Chat() {
     if (/\b(calculator|calc|compute|calculate)\b/i.test(query)) {
       addMessage({ role: 'student', text: query });
       addMessage({ role: 'tutor', text: 'Here\'s a scientific calculator with graphing and unit conversion!', blocks: [{ type: 'calculator' }] });
+      return;
+    }
+
+    // ── Keyword: simulation ──
+    if (/\b(simulat(?:e|ion)|physics lab|projectile|pendulum|spring[\s-]?mass|collision)\b/i.test(query)) {
+      addMessage({ role: 'student', text: query });
+      handleSimulationRequest(query);
       return;
     }
 
@@ -355,7 +415,7 @@ export default function Chat() {
                 Ask anything about your study materials, or try these:
               </p>
               <div className="flex flex-wrap gap-2 justify-center">
-                {['Quiz me', 'Calculator', 'Plot sin(x)', 'Challenge me'].map(chip => (
+                {['Quiz me', 'Calculator', 'Plot sin(x)', 'Simulate projectile', 'Challenge me'].map(chip => (
                   <button key={chip} onClick={() => handleSend(chip)} className="px-4 py-2 bg-white border border-[#e2e8f0] rounded-full text-xs font-bold text-[#475569] hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all active:scale-95 shadow-sm">
                     {chip}
                   </button>

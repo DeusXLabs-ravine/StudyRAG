@@ -1,5 +1,6 @@
 const supabase = require('../config/database');
 const { getGenerativeModel, getSearchGroundedModel } = require('../config/gemini');
+const { isDeepSeekAvailable, callDeepSeekR1 } = require('../config/deepseek');
 const { SOLVER_PROMPT, SOLVER_FOLLOWUP_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection } = require('../utils/prompts');
 const vectorStore = require('./vectorStore');
 const { searchPageIndex } = require('./pageIndexService');
@@ -66,32 +67,49 @@ async function solveProblem(problem, subject, docId, useWebSearch, userId = null
     .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
     .replace('{pace_section}', buildPaceSection(learningPace));
 
-  // Always use advanced model for problem solving; optionally with web search grounding
-  const model = useWebSearch
-    ? getSearchGroundedModel('advanced')
-    : getGenerativeModel('advanced');
-
-  const result = await model.generateContent(prompt);
-  const responseText = result.response.text();
-
+  // Try DeepSeek R1 first (better at STEM reasoning), fall back to Gemini
   let parsed;
-  try {
-    const jsonStr = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    parsed = JSON.parse(jsonStr);
-  } catch {
-    throw new Error('Failed to parse solver response');
+  let sources = null;
+  let reasoning = null;
+
+  if (isDeepSeekAvailable() && !useWebSearch) {
+    try {
+      console.log('[Solver] Using DeepSeek R1');
+      const dsResult = await callDeepSeekR1(null, prompt);
+      reasoning = dsResult.reasoning || null;
+      const jsonStr = dsResult.content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      parsed = JSON.parse(jsonStr);
+    } catch (err) {
+      console.warn('[Solver] DeepSeek R1 failed, falling back to Gemini:', err.message);
+      parsed = null;
+    }
   }
 
-  // Extract grounding sources if web search was used
-  let sources = null;
-  if (useWebSearch) {
-    const groundingChunks = result.response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    sources = groundingChunks
-      .filter(chunk => chunk.web?.uri)
-      .map(chunk => ({
-        title: chunk.web.title || '',
-        url: chunk.web.uri,
-      }));
+  if (!parsed) {
+    // Gemini fallback (also used when useWebSearch is true for grounding)
+    const model = useWebSearch
+      ? getSearchGroundedModel('advanced')
+      : getGenerativeModel('advanced');
+
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
+
+    try {
+      const jsonStr = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      parsed = JSON.parse(jsonStr);
+    } catch {
+      throw new Error('Failed to parse solver response');
+    }
+
+    if (useWebSearch) {
+      const groundingChunks = result.response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+      sources = groundingChunks
+        .filter(chunk => chunk.web?.uri)
+        .map(chunk => ({
+          title: chunk.web.title || '',
+          url: chunk.web.uri,
+        }));
+    }
   }
 
   const sessionId = uuidv4();
@@ -133,6 +151,7 @@ async function solveProblem(problem, subject, docId, useWebSearch, userId = null
     summary: parsed.summary,
     tips: parsed.tips || [],
     sources: sources || [],
+    reasoning,
     createdAt: new Date().toISOString(),
   };
 }
@@ -166,11 +185,30 @@ async function solveFollowUp(sessionId, followUpQuestion, userId = null) {
     .replace('{original_solution}', originalSolution)
     .replace('{followup_question}', followUpQuestion);
 
-  const model = getGenerativeModel('advanced');
-  const result = await model.generateContent(prompt);
+  let explanation;
+  let reasoning = null;
+
+  if (isDeepSeekAvailable()) {
+    try {
+      console.log('[Solver] Follow-up using DeepSeek R1');
+      const dsResult = await callDeepSeekR1(null, prompt);
+      explanation = dsResult.content;
+      reasoning = dsResult.reasoning || null;
+    } catch (err) {
+      console.warn('[Solver] DeepSeek R1 follow-up failed, falling back to Gemini:', err.message);
+      explanation = null;
+    }
+  }
+
+  if (!explanation) {
+    const model = getGenerativeModel('advanced');
+    const result = await model.generateContent(prompt);
+    explanation = result.response.text();
+  }
 
   return {
-    explanation: result.response.text(),
+    explanation,
+    reasoning,
     sessionId,
   };
 }
