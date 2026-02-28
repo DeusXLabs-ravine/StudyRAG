@@ -36,6 +36,7 @@ For each module, provide:
    - Mix of types: multiple_choice, true_false
    - Correct answers and explanations
    - Each question should have a "topic" field matching the module topic
+   - SELF-CONTAINED: Each question must include all necessary context within its text. If referencing a code snippet, formula, data table, or specific example — embed it directly in the question. Do NOT write "as described above", "from the passage", "in the material", or assume the student has the content visible. The question must stand completely on its own.
 {quiz_depth_section}
 
 Return valid JSON in this exact format:
@@ -89,6 +90,9 @@ Study material:
 Create questions that test understanding, not just memorization.
 Each question MUST include a "topic" field (1-3 words) identifying the subject area being tested.
 
+SELF-CONTAINED QUESTIONS — CRITICAL RULE:
+The student will NOT have the study material visible when answering these questions. Every question MUST be fully self-contained and answerable on its own. If a question involves a code snippet, formula, equation, data table, excerpt, diagram description, or any specific content from the material — you MUST embed it directly in the question text using markdown formatting (e.g. code blocks, LaTeX, tables). NEVER write phrases like "as described in the material", "the following code snippet", "according to the passage", "as discussed in the document", "in the study material", "the code above", or any wording that assumes the student can see the source. The question text alone must provide everything needed to answer it.
+
 Return valid JSON:
 {
   "questions": [
@@ -130,6 +134,8 @@ Each flashcard should have:
 - front: A question, term, or concept prompt
 - back: The answer, definition, or explanation
 - topic: A short topic label (1-3 words) for the subject area
+
+SELF-CONTAINED RULE: Each flashcard must include all necessary context directly. If the front references a code snippet, formula, equation, or specific passage — include it directly in the front text. Do NOT write "as described in the material" or assume the student has the source visible. Each card must make sense entirely on its own.
 
 Return valid JSON:
 {
@@ -338,6 +344,7 @@ Create exactly 5 NEW comprehension check questions that:
 - Test understanding of the same material but from different angles
 - Use different question structures and focus on different details
 - Include a "topic" field matching the module topic: {topic}
+- SELF-CONTAINED: Each question must include all necessary context within its text. If referencing a code snippet, formula, data table, or specific example — embed it directly in the question. Do NOT write "as described above", "from the module", "in the material", or assume the student can see the source content. The question must stand completely on its own.
 
 Return valid JSON:
 {
@@ -470,6 +477,9 @@ Generate {num_questions} predicted exam questions that cover the most important 
 2. Identified as student weak areas
 3. Core concepts from the study material
 
+SELF-CONTAINED QUESTIONS — CRITICAL RULE:
+The student will NOT have the study material visible when answering. Every question MUST be fully self-contained. If a question involves a code snippet, formula, equation, data table, excerpt, or any specific content — embed it directly in the question text using markdown formatting (e.g. code blocks, LaTeX, tables). NEVER write "as described in the material", "the following code", "according to the passage", or any phrasing that assumes access to the source. The question alone must provide everything needed to answer it.
+
 Return valid JSON in this exact format:
 {
   "questions": [
@@ -523,6 +533,9 @@ Study Materials:
 {weak_topics_section}
 
 Generate exactly {num_questions} exam questions. If exam pattern analysis is available, mimic the detected question type distribution and topic weighting. Each question MUST include a "topic" field.
+
+SELF-CONTAINED QUESTIONS — CRITICAL RULE:
+The student will NOT have the study material visible during this exam. Every question MUST be fully self-contained. If a question involves a code snippet, formula, equation, data table, excerpt, or any specific content — embed it directly in the question text using markdown formatting (e.g. code blocks, LaTeX, tables). NEVER write "as described in the material", "the following code", "according to the passage", "as shown in the document", or any phrasing that assumes access to the source. The question alone must provide everything needed to answer it.
 
 Return valid JSON:
 {
@@ -712,6 +725,7 @@ For each module listed above, provide:
    - Mix of types: multiple_choice, true_false
    - Correct answers and explanations
    - Each question should have a "topic" field matching the module topic
+   - SELF-CONTAINED: Each question must include all necessary context within its text. If referencing a code snippet, formula, data table, or specific example — embed it directly in the question. Do NOT write "as described above", "from the passage", "in the material", or assume the student has the content visible. The question must stand completely on its own.
 {quiz_depth_section}
 
 Return ONLY valid JSON in this exact format:
@@ -1165,6 +1179,7 @@ Create a unified, cohesive lesson that:
 - Cites sources by name (e.g., "As explained in [Document Name]...")
 - Resolves any contradictions by noting both perspectives
 - Follows the student's teaching level
+- SELF-CONTAINED QUESTIONS: Each comprehension question must include all necessary context within its text. If referencing a code snippet, formula, data table, or specific example — embed it directly in the question. Do NOT write "as described above", "from the passage", or assume the student can see the source content.
 
 Return ONLY valid JSON in this exact format:
 {
@@ -1383,6 +1398,7 @@ Based on the game type, generate the following JSON:
 - Difficulty scaling: "easy" = basic recall, "medium" = application/understanding, "hard" = analysis/synthesis
 - All content MUST be grounded in the provided source material
 - Questions must be unambiguous with exactly one correct answer
+- SELF-CONTAINED: The student will NOT see the source material during the game. Every question, statement, term, and prompt must include all necessary context directly in its text. If referencing code snippets, formulas, data tables, or specific content — embed it inline using markdown formatting. NEVER use phrases like "as described in the material", "the following code", or "according to the passage".
 - For matching, provide exactly {count} pairs
 - For fill_blank, use ____ as the blank marker in sentences
 - For speed_round, aim for roughly 50/50 true/false split
@@ -1476,6 +1492,7 @@ IMPORTANT:
 - Generate exactly 3 practice questions that test the SAME concepts the student got wrong, but phrased differently
 - The content must be 300-500 words — concise and focused
 - Use markdown formatting (headers, bold, lists) for readability
+- SELF-CONTAINED: Each question must include all necessary context within its text. If referencing a code snippet, formula, data table, or specific example — embed it directly in the question. Do NOT write "as described above", "from the module", or assume the student can see the source content. The question must stand completely on its own.
 - Return ONLY the JSON object, no markdown fences, no extra text`;
 
 // Re-export depth router for convenience
