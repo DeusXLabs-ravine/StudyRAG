@@ -12,6 +12,7 @@ const config = {
     process.env.GEMINI_API_KEY_5,
     process.env.GEMINI_API_KEY_6,
     process.env.GEMINI_API_KEY_7,
+    process.env.GEMINI_API_KEY_8,
   ].filter(Boolean),
   supabaseUrl: process.env.SUPABASE_URL,
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
