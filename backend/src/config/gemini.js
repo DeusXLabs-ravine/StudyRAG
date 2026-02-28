@@ -129,7 +129,11 @@ const MODELS = {
   fast: 'gemini-3-flash-preview',
   standard: 'gemini-3-flash-preview',
   advanced: 'gemini-3-pro-preview',
-  imageGen: 'gemini-3-pro-image-preview',
+  imageGen: [
+    'gemini-3-pro-image-preview',
+    'gemini-3.1-flash-image-preview',
+    'gemini-2.5-flash-image',
+  ],
 };
 
 const FALLBACK_MODELS = {
@@ -157,19 +161,142 @@ function getSearchGroundedModel(tier = 'standard') {
   });
 }
 
+function getUrlContextModel(tier = 'standard') {
+  if (!keyPool) throw new Error('Gemini API key not configured');
+  const entry = keyPool.getClient();
+  const modelName = MODELS[tier] || MODELS.standard;
+  return entry.genAI.getGenerativeModel({
+    model: modelName,
+    tools: [{ urlContext: {} }],
+  });
+}
+
+function getSearchAndUrlModel(tier = 'standard') {
+  if (!keyPool) throw new Error('Gemini API key not configured');
+  const entry = keyPool.getClient();
+  const modelName = MODELS[tier] || MODELS.standard;
+  return entry.genAI.getGenerativeModel({
+    model: modelName,
+    tools: [{ googleSearch: {} }, { urlContext: {} }],
+  });
+}
+
+/**
+ * Run Gemini Deep Research via REST API (Interactions API).
+ * Returns { text, sources } or null if unavailable/failed.
+ * This is async — it polls until complete or timeout.
+ */
+async function runDeepResearch(prompt, { timeoutMs = 600_000, pollIntervalMs = 5_000 } = {}) {
+  if (!keyPool) throw new Error('Gemini API key not configured');
+  const entry = keyPool.getClient();
+  const rawKey = geminiApiKeys?.find(k => k.slice(0, 8) === entry.key.replace('...', '')) || geminiApiKey;
+  if (!rawKey) throw new Error('Could not resolve raw API key for Deep Research');
+
+  const baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
+
+  // Step 1: Create the interaction
+  const createRes = await fetch(`${baseUrl}/interactions?key=${rawKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      agentId: 'deep-research-pro-preview-12-2025',
+      userInput: { text: prompt },
+      background: true,
+      store: true,
+    }),
+  });
+
+  if (!createRes.ok) {
+    const errBody = await createRes.text();
+    throw new Error(`Deep Research create failed (${createRes.status}): ${errBody}`);
+  }
+
+  const interaction = await createRes.json();
+  const interactionId = interaction.name || interaction.id;
+  if (!interactionId) throw new Error('Deep Research: no interaction ID returned');
+
+  console.log(`[DeepResearch] Started interaction ${interactionId}`);
+
+  // Step 2: Poll until complete
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    await new Promise(r => setTimeout(r, pollIntervalMs));
+
+    const pollRes = await fetch(`${baseUrl}/${interactionId}?key=${rawKey}`);
+    if (!pollRes.ok) {
+      console.warn(`[DeepResearch] Poll failed (${pollRes.status}), retrying...`);
+      continue;
+    }
+
+    const state = await pollRes.json();
+    const status = state.status || state.state;
+
+    if (status === 'COMPLETED' || status === 'completed') {
+      // Extract text and sources from the response
+      const outputText = state.outputText || state.response?.text || '';
+      const sources = (state.groundingMetadata?.groundingChunks || [])
+        .filter(c => c.web?.uri)
+        .map(c => ({ title: c.web.title || '', url: c.web.uri }));
+
+      console.log(`[DeepResearch] Completed in ${Math.round((Date.now() - startTime) / 1000)}s, ${sources.length} sources`);
+      return { text: outputText, sources };
+    }
+
+    if (status === 'FAILED' || status === 'failed') {
+      throw new Error(`Deep Research failed: ${state.error?.message || 'unknown error'}`);
+    }
+
+    // Still running — continue polling
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    if (elapsed % 30 === 0) {
+      console.log(`[DeepResearch] Still running... (${elapsed}s elapsed)`);
+    }
+  }
+
+  throw new Error(`Deep Research timed out after ${timeoutMs / 1000}s`);
+}
+
 function getEmbeddingModel() {
   if (!keyPool) throw new Error('Gemini API key not configured');
   const entry = keyPool.getClient();
   return entry.genAI.getGenerativeModel({ model: 'gemini-embedding-001' });
 }
 
+// Track which image model works to avoid wasting retries on unavailable models
+let _workingImageModel = null;
+let _failedImageModels = new Set();
+
 function getImageGenerationModel() {
   if (!keyPool) throw new Error('Gemini API key not configured');
   const entry = keyPool.getClient();
+
+  // If we already know a working model, use it directly
+  if (_workingImageModel) {
+    return entry.genAI.getGenerativeModel({
+      model: _workingImageModel,
+      generationConfig: { responseModalities: ['image', 'text'] },
+    });
+  }
+
+  // Return the first non-failed model in the priority list
+  const candidates = MODELS.imageGen.filter(m => !_failedImageModels.has(m));
+  const modelName = candidates[0] || MODELS.imageGen[MODELS.imageGen.length - 1];
   return entry.genAI.getGenerativeModel({
-    model: MODELS.imageGen,
+    model: modelName,
     generationConfig: { responseModalities: ['image', 'text'] },
   });
+}
+
+function markImageModelFailed(modelName) {
+  _failedImageModels.add(modelName);
+  console.warn(`[GeminiImageGen] Model "${modelName}" marked unavailable, will try next fallback`);
+}
+
+function markImageModelWorking(modelName) {
+  if (_workingImageModel !== modelName) {
+    _workingImageModel = modelName;
+    console.log(`[GeminiImageGen] Using "${modelName}" for image generation`);
+  }
 }
 
 function selectModelTier(contentHints = {}) {
@@ -288,8 +415,13 @@ module.exports = {
   requestQueue,
   getGenerativeModel,
   getSearchGroundedModel,
+  getUrlContextModel,
+  getSearchAndUrlModel,
+  runDeepResearch,
   getEmbeddingModel,
   getImageGenerationModel,
+  markImageModelFailed,
+  markImageModelWorking,
   selectModelTier,
   generateContentWithVision,
   withRetryOnRateLimit,

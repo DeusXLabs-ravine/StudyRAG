@@ -755,13 +755,33 @@ async function registerTopic(req, res, next) {
     (async () => {
       try {
         const { researchTopic } = getTopicResearchService();
-        const { text, metadata } = await researchTopic(topicTitle, userId);
+        const { text, sources, metadata } = await researchTopic(topicTitle, userId);
 
         // Store the researched text as source_content
         await supabase.from('documents').update({
           source_content: text,
           file_size: text.length,
         }).eq('id', docId);
+
+        // Store verified grounding sources as document resources
+        if (sources && sources.length > 0) {
+          const { v4: makeId } = require('uuid');
+          const resourceRows = sources
+            .filter(s => s.url)
+            .map(s => ({
+              id: makeId(),
+              document_id: docId,
+              title: s.title || topicTitle,
+              url: s.url,
+              snippet: null,
+              topic: topicTitle,
+              resource_type: 'article',
+            }));
+          if (resourceRows.length > 0) {
+            await supabase.from('document_resources').insert(resourceRows);
+            console.log(`[TopicResearch] Stored ${resourceRows.length} verified sources for "${topicTitle}"`);
+          }
+        }
 
         const rawPages = null;
         await runProcessingPipeline(docId, text, metadata, rawPages, null, null, userId);

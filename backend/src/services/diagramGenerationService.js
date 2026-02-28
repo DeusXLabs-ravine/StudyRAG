@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const supabase = require('../config/database');
-const { getGenerativeModel, getImageGenerationModel, withRetryOnRateLimit } = require('../config/gemini');
+const { getGenerativeModel, keyPool, markImageModelFailed, markImageModelWorking, withRetryOnRateLimit, MODELS } = require('../config/gemini');
 const {
   DIAGRAM_GENERATION_PROMPT,
   D2_DIAGRAM_GENERATION_PROMPT,
@@ -217,36 +217,56 @@ Important: All text labels must be large (minimum 14pt equivalent), bold, and hi
 
 async function generateAIImage(topic, teachingLevel, interests, moduleContent) {
   const imagePrompt = buildImagePrompt(topic, teachingLevel, moduleContent);
+  const imageModels = MODELS.imageGen;
 
-  try {
-    const result = await withRetryOnRateLimit(async () => {
-      const model = getImageGenerationModel();
-      return model.generateContent(imagePrompt);
-    });
+  // Try each image model in priority order (pro → 3.1 flash → 2.5 flash)
+  for (const modelName of imageModels) {
+    try {
+      const result = await withRetryOnRateLimit(async () => {
+        const entry = keyPool.getClient();
+        const model = entry.genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig: { responseModalities: ['image', 'text'] },
+        });
+        return model.generateContent(imagePrompt);
+      });
 
-    // Extract image data from response
-    const response = result.response;
-    const candidates = response.candidates || [];
+      // Extract image data from response
+      const response = result.response;
+      const candidates = response.candidates || [];
 
-    for (const candidate of candidates) {
-      for (const part of (candidate.content?.parts || [])) {
-        if (part.inlineData) {
-          return {
-            imageBuffer: Buffer.from(part.inlineData.data, 'base64'),
-            mimeType: part.inlineData.mimeType || 'image/png',
-            prompt: imagePrompt,
-            title: `${topic} — Educational Illustration`,
-            description: `AI-generated educational illustration about ${topic}`,
-          };
+      for (const candidate of candidates) {
+        for (const part of (candidate.content?.parts || [])) {
+          if (part.inlineData) {
+            markImageModelWorking(modelName);
+            return {
+              imageBuffer: Buffer.from(part.inlineData.data, 'base64'),
+              mimeType: part.inlineData.mimeType || 'image/png',
+              prompt: imagePrompt,
+              title: `${topic} — Educational Illustration`,
+              description: `AI-generated educational illustration about ${topic}`,
+            };
+          }
         }
       }
-    }
 
-    return null; // No image in response
-  } catch (err) {
-    console.warn(`[DiagramGen] AI image generation failed (may not be available on this account): ${err.message}`);
-    return null;
+      // Response had no image data — try next model
+      markImageModelFailed(modelName);
+      console.warn(`[DiagramGen] Model "${modelName}" returned no image data, trying next`);
+    } catch (err) {
+      const isQuotaZero = err.message?.includes('limit: 0') || err.message?.includes('Quota exceeded');
+      markImageModelFailed(modelName);
+      if (isQuotaZero) {
+        console.warn(`[DiagramGen] Model "${modelName}" unavailable (zero quota), trying next fallback`);
+      } else {
+        console.warn(`[DiagramGen] Model "${modelName}" failed: ${err.message}`);
+      }
+    }
   }
+
+  // All models exhausted
+  console.warn(`[DiagramGen] All image generation models failed for "${topic}"`);
+  return null;
 }
 
 // ─── Main Generation Orchestrator ─────────────────────────────

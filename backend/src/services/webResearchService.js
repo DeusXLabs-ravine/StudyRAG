@@ -23,7 +23,30 @@ async function extractTopics(documentText) {
 }
 
 /**
+ * Extract grounding metadata (real URLs) from a Gemini response.
+ * Returns { groundingUrls, groundingSupports } where:
+ * - groundingUrls: array of { title, url } from Google Search grounding chunks
+ * - groundingSupports: array of { text, sourceIndices } linking response text to sources
+ */
+function extractGroundingData(result) {
+  const metadata = result.response.candidates?.[0]?.groundingMetadata || {};
+
+  const groundingChunks = metadata.groundingChunks || [];
+  const groundingUrls = groundingChunks
+    .filter(chunk => chunk.web?.uri)
+    .map(chunk => ({ title: chunk.web.title || '', url: chunk.web.uri }));
+
+  const groundingSupports = (metadata.groundingSupports || []).map(s => ({
+    text: s.segment?.text || '',
+    sourceIndices: s.groundingChunkIndices || [],
+  }));
+
+  return { groundingUrls, groundingSupports };
+}
+
+/**
  * Use Gemini with Google Search grounding to find resources for a single topic.
+ * ONLY returns resources that have real URLs from grounding metadata — never hallucinated titles.
  */
 async function researchTopic(topic, searchQuery) {
   const prompt = WEB_RESEARCH_PROMPT
@@ -34,36 +57,59 @@ async function researchTopic(topic, searchQuery) {
   const result = await model.generateContent(prompt);
   const responseText = result.response.text();
 
-  // Extract grounding metadata (URLs from Google Search)
-  const groundingChunks = result.response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-  const groundingUrls = groundingChunks
-    .filter(chunk => chunk.web?.uri)
-    .map(chunk => ({ title: chunk.web.title || '', url: chunk.web.uri }));
+  // Extract real URLs from Google Search grounding metadata
+  const { groundingUrls } = extractGroundingData(result);
 
-  // Parse the structured resource list from the model response
-  let resources = [];
+  // Try to parse the LLM's structured JSON for snippets/descriptions
+  let llmResources = [];
   try {
     const jsonStr = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const parsed = JSON.parse(jsonStr);
-    resources = (parsed.resources || []).map((r, i) => ({
-      title: r.title,
-      url: groundingUrls[i]?.url || null,
-      snippet: r.snippet,
-      topic,
-      resource_type: r.resource_type || 'article',
-    }));
+    llmResources = parsed.resources || [];
   } catch {
-    // If JSON parsing fails, fall back to grounding URLs only
-    resources = groundingUrls.map(g => ({
-      title: g.title || topic,
-      url: g.url,
-      snippet: null,
-      topic,
-      resource_type: 'article',
-    }));
+    // JSON parse failed — we'll rely solely on grounding URLs
   }
 
-  return resources;
+  // ACCURACY-FIRST: Build resources exclusively from grounding URLs.
+  // Match LLM descriptions to grounding URLs where possible for richer metadata.
+  const resources = groundingUrls.map(gUrl => {
+    // Try to find a matching LLM resource by title similarity
+    const match = llmResources.find(r =>
+      r.title && gUrl.title &&
+      (r.title.toLowerCase().includes(gUrl.title.toLowerCase().slice(0, 20)) ||
+       gUrl.title.toLowerCase().includes(r.title.toLowerCase().slice(0, 20)))
+    );
+
+    return {
+      title: match?.title || gUrl.title || topic,
+      url: gUrl.url,
+      snippet: match?.snippet || null,
+      topic,
+      resource_type: match?.resource_type || classifyUrl(gUrl.url),
+    };
+  });
+
+  // Filter out duplicates and empty URLs
+  const seen = new Set();
+  return resources.filter(r => {
+    if (!r.url || seen.has(r.url)) return false;
+    seen.add(r.url);
+    return true;
+  });
+}
+
+/**
+ * Classify a resource URL by domain pattern.
+ */
+function classifyUrl(url) {
+  if (!url) return 'article';
+  const u = url.toLowerCase();
+  if (u.includes('youtube.com') || u.includes('youtu.be')) return 'video';
+  if (u.includes('coursera.org') || u.includes('edx.org') || u.includes('khanacademy.org')) return 'tutorial';
+  if (u.includes('ncbi.nlm.nih.gov') || u.includes('pubmed') || u.includes('scholar.google')) return 'article';
+  if (u.includes('springer.com') || u.includes('wiley.com') || u.includes('elsevier.com')) return 'textbook';
+  if (u.includes('.edu')) return 'guide';
+  return 'article';
 }
 
 /**
@@ -93,7 +139,7 @@ async function researchDocument(docId, documentText) {
   // Deduplicate by URL
   const seen = new Set();
   const unique = allResources.filter(r => {
-    if (!r.url) return true; // keep resources without URLs (book titles)
+    if (!r.url) return false; // Drop resources without verified URLs
     if (seen.has(r.url)) return false;
     seen.add(r.url);
     return true;
@@ -104,7 +150,7 @@ async function researchDocument(docId, documentText) {
     id: uuidv4(),
     document_id: docId,
     title: r.title,
-    url: r.url || null,
+    url: r.url,
     snippet: r.snippet || null,
     topic: r.topic,
     resource_type: r.resource_type || 'article',
@@ -150,4 +196,4 @@ async function deleteResourcesByDocument(docId) {
   if (error) throw error;
 }
 
-module.exports = { researchDocument, getResourcesByDocument, deleteResourcesByDocument };
+module.exports = { researchDocument, getResourcesByDocument, deleteResourcesByDocument, extractGroundingData };
