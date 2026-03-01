@@ -38,6 +38,24 @@ const useSettingsStore = create((set, get) => ({
     return get().settings.tts_voice_id || 'Kore';
   },
 
+  // ─── Accessibility ──────────────────────────────────────
+  getA11y: (key) => get().settings[`a11y_${key}`] === 'true',
+
+  applyA11yClasses: () => {
+    const s = get().settings;
+    const body = document.body;
+    const map = {
+      'a11y-dyslexia': s.a11y_dyslexia_mode === 'true',
+      'a11y-focus': s.a11y_adhd_focus_mode === 'true',
+      'a11y-bionic': s.a11y_bionic_reading === 'true',
+      'a11y-high-contrast': s.a11y_high_contrast === 'true',
+      'a11y-large-text': s.a11y_large_text === 'true',
+      'a11y-reduced-motion': s.a11y_reduced_motion === 'true',
+      'a11y-reading-ruler': s.a11y_reading_ruler === 'true',
+    };
+    Object.entries(map).forEach(([cls, on]) => body.classList.toggle(cls, on));
+  },
+
   setTutorialCompleted: async (completed) => {
     set({ tutorial_completed: completed });
     try {

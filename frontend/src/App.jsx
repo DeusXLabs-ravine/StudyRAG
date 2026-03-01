@@ -15,6 +15,9 @@ import About from './pages/About';
 import Features from './pages/Features';
 import Pricing from './pages/Pricing';
 import { Toaster } from 'sonner';
+import AccessibilityEffects from './components/accessibility/AccessibilityEffects';
+import ReadingRuler from './components/accessibility/ReadingRuler';
+import BreakReminder from './components/accessibility/BreakReminder';
 
 function ProtectedLayout() {
   return (
@@ -49,6 +52,9 @@ export default function App() {
         </Route>
       </Routes>
       <Toaster position="bottom-right" richColors />
+      <AccessibilityEffects />
+      <ReadingRuler />
+      <BreakReminder />
     </Router>
   );
 }

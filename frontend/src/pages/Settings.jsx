@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Volume2, Check, Shapes, User, GraduationCap, Heart, Save, Palette, Brain, Gauge, ChevronDown, BookOpen, Search, Eye, Headphones, MousePointer2, Turtle, Scale, Zap, Info, Flame, Trophy, Play, X, Type, Eraser } from 'lucide-react';
+import { Volume2, Check, Shapes, User, GraduationCap, Heart, Save, Palette, Brain, Gauge, ChevronDown, BookOpen, Search, Eye, Headphones, MousePointer2, Turtle, Scale, Zap, Info, Flame, Trophy, Play, X, Type, Eraser, Monitor, Mic, Ruler } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import useSettingsStore from '../store/settingsStore';
@@ -41,6 +41,17 @@ const LEARNING_STYLES = [
   { id: 'kinesthetic', label: 'Empirical', description: 'Emphasizes interactive walkthroughs, case-study simulations, and active retrieval.', icon: MousePointer2 },
 ];
 
+const A11Y_TOGGLES = [
+  { key: 'dyslexia_mode', label: 'Dyslexia Mode', desc: 'OpenDyslexic font, wider spacing, warm tint', icon: Type, bg: 'bg-violet-50', text: 'text-violet-600', active: 'bg-violet-500' },
+  { key: 'adhd_focus_mode', label: 'Focus Mode', desc: 'Hide decorations, enable break reminders', icon: Brain, bg: 'bg-indigo-50', text: 'text-indigo-600', active: 'bg-indigo-500' },
+  { key: 'bionic_reading', label: 'Bionic Reading', desc: 'Bold the first half of each word', icon: Eye, bg: 'bg-indigo-50', text: 'text-indigo-600', active: 'bg-indigo-500' },
+  { key: 'high_contrast', label: 'High Contrast', desc: 'Increase contrast for text and borders', icon: Monitor, bg: 'bg-slate-100', text: 'text-slate-700', active: 'bg-slate-700' },
+  { key: 'large_text', label: 'Large Text', desc: 'Increase base font size to 120%', icon: Type, bg: 'bg-violet-50', text: 'text-violet-600', active: 'bg-violet-500' },
+  { key: 'reduced_motion', label: 'Reduced Motion', desc: 'Disable animations and transitions', icon: Zap, bg: 'bg-indigo-50', text: 'text-indigo-600', active: 'bg-indigo-500' },
+  { key: 'voice_input', label: 'Voice Input', desc: 'Microphone button in chat for speech-to-text', icon: Mic, bg: 'bg-violet-50', text: 'text-violet-600', active: 'bg-violet-500' },
+  { key: 'reading_ruler', label: 'Reading Ruler', desc: 'Horizontal guide that follows your cursor', icon: Ruler, bg: 'bg-indigo-50', text: 'text-indigo-600', active: 'bg-indigo-500' },
+];
+
 function BoardPreview({ themeConfig, isLarge = false }) {
   const vars = useMemo(() => resolveThemeVars(themeConfig), [themeConfig]);
   return (
@@ -66,7 +77,7 @@ function BoardPreview({ themeConfig, isLarge = false }) {
 }
 
 export default function Settings() {
-  const { settings, fetchSettings, setSetting, loaded, voices, setVoices, learningProfile, learningProfileLoaded, fetchLearningProfile, setLearningStyle } = useSettingsStore();
+  const { settings, fetchSettings, setSetting, loaded, voices, setVoices, learningProfile, learningProfileLoaded, fetchLearningProfile, setLearningStyle, applyA11yClasses } = useSettingsStore();
   const { profile, updateProfile } = useAuthStore();
 
   const [displayName, setDisplayName] = useState('');
@@ -438,6 +449,56 @@ export default function Settings() {
                 </div>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Accessibility */}
+        <section className="bg-white rounded-3xl border border-gray-100 p-8 shadow-sm">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="w-10 h-10 bg-violet-50 text-violet-600 rounded-xl flex items-center justify-center border border-violet-100">
+              <Eye size={20} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Accessibility</h2>
+              <p className="text-xs text-gray-400">Adjust your experience for comfort and focus.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {A11Y_TOGGLES.map((toggle) => {
+              const Icon = toggle.icon;
+              const isOn = settings[`a11y_${toggle.key}`] === 'true';
+              return (
+                <div key={toggle.key} className="flex items-center justify-between p-4 bg-gray-50/80 rounded-2xl">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-8 h-8 ${toggle.bg} ${toggle.text} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                      <Icon size={15} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-gray-900">{toggle.label}</p>
+                      <p className="text-[10px] text-gray-400 font-medium leading-tight">{toggle.desc}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const next = !isOn;
+                      await setSetting(`a11y_${toggle.key}`, next ? 'true' : 'false');
+                      applyA11yClasses();
+                      toast.success(toggle.label + (next ? ' enabled' : ' disabled'));
+                    }}
+                    role="switch"
+                    aria-checked={isOn}
+                    className={`relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ml-3 ${isOn ? toggle.active : 'bg-gray-200'}`}
+                  >
+                    <motion.div
+                      animate={{ x: isOn ? 22 : 2 }}
+                      initial={false}
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                      className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm"
+                    />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </section>
 

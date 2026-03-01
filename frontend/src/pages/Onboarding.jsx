@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { User, Calendar, GraduationCap, Heart, ChevronRight, ChevronLeft, Check, BookOpen, Search, X } from 'lucide-react';
+import { User, Calendar, GraduationCap, Heart, ChevronRight, ChevronLeft, Check, BookOpen, Search, X, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import useAuthStore from '../store/authStore';
+import useSettingsStore from '../store/settingsStore';
 import Logo from '../components/common/Logo';
 import { MorphingSquare } from '../components/ui/morphing-square';
 
@@ -43,6 +44,13 @@ const SUGGESTED_CURRICULA = [
   'Psychology', 'Economics',
 ];
 
+const A11Y_OPTIONS = [
+  { id: 'dyslexia', label: 'Dyslexia', description: 'Difficulty reading standard fonts or dense text', enables: ['OpenDyslexic font', 'Bionic reading', 'Reading ruler'] },
+  { id: 'adhd', label: 'ADHD', description: 'Difficulty maintaining focus during study sessions', enables: ['Focus mode', 'Break reminders', 'Reduced motion'] },
+  { id: 'visual', label: 'Visual Impairment', description: 'Need for higher contrast or larger text', enables: ['High contrast', 'Large text'] },
+  { id: 'motor', label: 'Motor Disability', description: 'Difficulty using keyboard or mouse precisely', enables: ['Voice input'] },
+];
+
 export default function Onboarding() {
   const [step, setStep] = useState(0);
   const [displayName, setDisplayName] = useState('');
@@ -52,10 +60,11 @@ export default function Onboarding() {
   const [customInterest, setCustomInterest] = useState('');
   const [academicFields, setAcademicFields] = useState([]);
   const [customField, setCustomField] = useState('');
+  const [accessibilityNeeds, setAccessibilityNeeds] = useState([]);
   const [loading, setLoading] = useState(false);
   const { createProfile, user } = useAuthStore();
 
-  const totalSteps = 5;
+  const totalSteps = 6;
 
   const handleAddTag = (tag, list, setter) => {
     if (!list.includes(tag)) {
@@ -85,6 +94,21 @@ export default function Onboarding() {
         interests,
         academicFields,
       });
+
+      // Apply accessibility presets
+      const { setSetting } = useSettingsStore.getState();
+      const presets = {
+        dyslexia: ['a11y_dyslexia_mode', 'a11y_bionic_reading', 'a11y_reading_ruler'],
+        adhd: ['a11y_adhd_focus_mode', 'a11y_reduced_motion'],
+        visual: ['a11y_high_contrast', 'a11y_large_text'],
+        motor: ['a11y_voice_input'],
+      };
+      for (const need of accessibilityNeeds) {
+        for (const key of (presets[need] || [])) {
+          setSetting(key, 'true');
+        }
+      }
+
       toast.success('Welcome aboard!');
     } catch (err) {
       toast.error(err.message || 'Failed to save profile');
@@ -166,6 +190,35 @@ export default function Onboarding() {
           {step === 3 && (
             <div className="animate-in slide-in-from-bottom-4 duration-500">
               <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-violet-100 text-violet-600 rounded-xl flex items-center justify-center"><Eye className="h-5 w-5" /></div>
+                <div><h2 className="text-lg font-semibold text-gray-900">Accessibility <span className="text-xs font-normal text-gray-400">(Optional)</span></h2><p className="text-sm text-gray-500">Select any that apply and we'll optimize your experience</p></div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {A11Y_OPTIONS.map((option) => {
+                  const isSelected = accessibilityNeeds.includes(option.id);
+                  return (
+                    <button key={option.id} onClick={() => setAccessibilityNeeds(prev => prev.includes(option.id) ? prev.filter(id => id !== option.id) : [...prev, option.id])} className={`text-left p-5 rounded-2xl border-2 transition-all ${isSelected ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-gray-900">{option.label}</span>
+                        {isSelected && <span className="w-5 h-5 bg-primary text-white rounded-full flex items-center justify-center"><Check className="h-3 w-3" /></span>}
+                      </div>
+                      <p className="text-xs text-gray-500 mb-3">{option.description}</p>
+                      <div className="flex flex-wrap gap-1">
+                        {option.enables.map(tag => (
+                          <span key={tag} className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px] font-medium">{tag}</span>
+                        ))}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-gray-400 font-medium text-center mt-4">You can always change these later in Settings.</p>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className="animate-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center"><Heart className="h-5 w-5" /></div>
                 <div><h2 className="text-lg font-semibold text-gray-900">Hobbies & Interests</h2><p className="text-sm text-gray-500">Help the AI use relatable analogies from your life</p></div>
               </div>
@@ -185,7 +238,7 @@ export default function Onboarding() {
             </div>
           )}
 
-          {step === 4 && (
+          {step === 5 && (
             <div className="animate-in slide-in-from-bottom-4 duration-500">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center"><BookOpen className="h-5 w-5" /></div>

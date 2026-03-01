@@ -296,7 +296,7 @@ export default function Learn() {
       addMessage(currentModule?.id || moduleId, {
         role: 'tutor',
         text: isOverload
-          ? "The AI is a bit overloaded right now: high demand! Give it a few seconds and try again. 🔄"
+          ? "The AI is a bit overloaded right now: high demand! Give it a few seconds and try again."
           : "Couldn't generate a game right now. Let's try again in a moment!",
         timestamp: Date.now(),
       });

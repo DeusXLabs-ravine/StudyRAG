@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
-import { Trash2, FileText, Sparkles, ArrowUp, Globe, MessageSquare, Plus, ChevronDown, Menu, X, Image as ImageIcon } from 'lucide-react';
+import { Trash2, FileText, Sparkles, ArrowUp, Globe, MessageSquare, Plus, ChevronDown, Menu, X, Image as ImageIcon, Mic } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as chatService from '../services/chatService';
 import useDocumentStore from '../store/documentStore';
 import useGameStore from '../store/gameStore';
+import useSettingsStore from '../store/settingsStore';
+import useVoiceInput from '../hooks/useVoiceInput';
 import TutorMessage from '../components/chat/TutorMessage';
 import XpBar from '../components/chat/XpBar';
 import XpPopup from '../components/chat/XpPopup';
@@ -62,6 +64,10 @@ export default function Chat() {
   const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
   const [isPhotoActive, setIsPhotoActive] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const voiceInputEnabled = useSettingsStore(state => state.settings.a11y_voice_input === 'true');
+  const { isListening: isVoiceListening, isSupported: isVoiceSupported, toggle: voiceToggle } = useVoiceInput({
+    onTranscript: (text) => setInput(prev => prev + (prev ? ' ' : '') + text),
+  });
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -514,6 +520,22 @@ export default function Chat() {
 
                     {/* Formula Input */}
                     <FormulaInput textareaRef={chatTextareaRef} onInsert={handleFormulaInsert} />
+
+                    {/* Voice Input (accessibility) */}
+                    {voiceInputEnabled && isVoiceSupported && (
+                      <button
+                        type="button"
+                        onClick={voiceToggle}
+                        className={`p-1.5 rounded-lg transition-all flex items-center gap-1.5 ${isVoiceListening
+                            ? 'text-violet-600 bg-violet-50 border border-violet-200 shadow-inner'
+                            : 'text-[#94a3b8] hover:bg-[#f8fafc] hover:text-[#475569]'
+                          }`}
+                        title={isVoiceListening ? 'Stop listening' : 'Voice input'}
+                      >
+                        <Mic className="h-4 w-4 md:h-5 md:w-5" />
+                        {isVoiceListening && <span className="text-[9px] font-black uppercase tracking-wider pr-0.5">Listening</span>}
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1.5 min-w-0">
