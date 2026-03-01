@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { BookOpen, CheckCircle, Lock, ChevronRight, Calculator, FlaskConical, Cpu, Atom, Globe, Lightbulb, Sparkles, Send, Volume2, Loader2, MessageSquareText, X, Menu, PanelLeftClose, PanelLeftOpen, Maximize2, Minimize2, Image as ImageIcon, GraduationCap, Mic, MicOff, ArrowUp, ListTodo, FolderOpen, RotateCcw } from 'lucide-react';
+import { BookOpen, CheckCircle, Lock, ChevronRight, Calculator, FlaskConical, Cpu, Atom, Globe, Lightbulb, Sparkles, Send, Volume2, Loader2, MessageSquareText, X, Menu, PanelLeftClose, PanelLeftOpen, Maximize2, Minimize2, Image as ImageIcon, GraduationCap, Mic, ArrowUp, ListTodo, FolderOpen, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import useModuleStore from '../store/moduleStore';
 import useDocumentStore from '../store/documentStore';
@@ -74,7 +74,6 @@ export default function Learn() {
   }, [fetchDocuments, fetchCourses]);
 
   const getVoiceId = useSettingsStore(state => state.getVoiceId);
-  const settings_old = useSettingsStore(state => state.settings);
   const prefetchCancelRef = useRef(null);
 
   useEffect(() => {
@@ -934,12 +933,10 @@ function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded,
   const [isPhotoActive, setIsPhotoActive] = useState(false);
   const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
 
+  const voiceInputEnabled = settings?.a11y_voice_input === 'true';
   const { isListening: isVoiceListening, isSupported: isVoiceSupported, toggle: voiceToggle } = useVoiceInput({
     onTranscript: (text) => setInput(prev => prev + ' ' + text)
   });
-
-  const { settings } = useSettingsStore();
-  const voiceInputEnabled = settings?.a11y_voice_input;
 
   const handleFormulaInsert = (text, cursorOffset) => {
     const textarea = chatTextareaRef.current;
@@ -1196,11 +1193,6 @@ function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded,
                 >
                   <Mic className="h-[18px] w-[18px]" />
                   {isVoiceListening && <span className="text-[9px] font-black uppercase tracking-wider pr-0.5">Listening</span>}
-                </button>
-              )}
-              {(!voiceInputEnabled || !isVoiceSupported) && (
-                <button type="button" className="text-[#8b92a5] hover:text-gray-600 transition-colors" title="Voice Input (Muted)" disabled>
-                  <MicOff className="h-[18px] w-[18px]" />
                 </button>
               )}
             </div>
