@@ -1,5 +1,5 @@
 const supabase = require('../config/database');
-const { getGenerativeModel, selectModelTier } = require('../config/gemini');
+const { getGenerativeModel, selectModelTier, withRetryOnRateLimit } = require('../config/gemini');
 const { QUIZ_GENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection, getQuizDepthSection } = require('../utils/prompts');
 const vectorStore = require('./vectorStore');
 const { getUserTeachingLevel, getUserInterests, getWeakTopics, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
@@ -53,8 +53,10 @@ async function generateQuiz({ numQuestions = 10, difficulty = 'medium', docId = 
     .replace('{quiz_depth_section}', getQuizDepthSection(context));
 
   const tier = selectModelTier({ isComplex: difficulty === 'hard' || isExam });
-  const model = getGenerativeModel(tier);
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = getGenerativeModel(tier);
+    return model.generateContent(prompt);
+  });
   const responseText = result.response.text();
 
   let parsed;

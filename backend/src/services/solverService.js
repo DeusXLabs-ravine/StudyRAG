@@ -1,5 +1,5 @@
 const supabase = require('../config/database');
-const { getGenerativeModel, getSearchGroundedModel } = require('../config/gemini');
+const { getGenerativeModel, getSearchGroundedModel, withRetryOnRateLimit } = require('../config/gemini');
 const { isDeepSeekAvailable, callDeepSeekR1 } = require('../config/deepseek');
 const { SOLVER_PROMPT, SOLVER_FOLLOWUP_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection } = require('../utils/prompts');
 const vectorStore = require('./vectorStore');
@@ -87,11 +87,12 @@ async function solveProblem(problem, subject, docId, useWebSearch, userId = null
 
   if (!parsed) {
     // Gemini fallback (also used when useWebSearch is true for grounding)
-    const model = useWebSearch
-      ? getSearchGroundedModel('advanced')
-      : getGenerativeModel('advanced');
-
-    const result = await model.generateContent(prompt);
+    const result = await withRetryOnRateLimit(async () => {
+      const model = useWebSearch
+        ? getSearchGroundedModel('advanced')
+        : getGenerativeModel('advanced');
+      return model.generateContent(prompt);
+    }, 3, 0);
     const responseText = result.response.text();
 
     try {
@@ -201,8 +202,10 @@ async function solveFollowUp(sessionId, followUpQuestion, userId = null) {
   }
 
   if (!explanation) {
-    const model = getGenerativeModel('advanced');
-    const result = await model.generateContent(prompt);
+    const result = await withRetryOnRateLimit(async () => {
+      const model = getGenerativeModel('advanced');
+      return model.generateContent(prompt);
+    }, 3, 0);
     explanation = result.response.text();
   }
 

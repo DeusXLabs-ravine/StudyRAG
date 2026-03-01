@@ -68,7 +68,7 @@ const globalLimiter = rateLimit({
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later.' },
+  message: { error: { message: "We're experiencing high demand right now. Please try again in a minute." } },
 });
 
 // Strict rate limit for expensive endpoints (LLM generation)
@@ -77,7 +77,7 @@ const generationLimiter = rateLimit({
   max: 20, // 20 generation requests per minute per IP
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Generation rate limit reached. Please wait a moment.' },
+  message: { error: { message: "Lots of people are studying right now! Please wait a moment and try again." } },
 });
 
 app.use('/api', globalLimiter);

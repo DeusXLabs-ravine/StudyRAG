@@ -379,7 +379,7 @@ export default function Learn() {
     } catch (err) {
       addMessage(currentModule.id, {
         role: 'tutor',
-        text: `Couldn't generate the visual right now: ${err.message}. Try again in a moment!`,
+        text: "Couldn't generate the visual right now. Please try again in a moment!",
         timestamp: Date.now(),
       });
     } finally {

@@ -18,11 +18,28 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+/**
+ * Translate technical error messages into user-friendly ones.
+ * The backend error handler does this too, but this catches network-level
+ * errors (timeouts, CORS, connection refused) that never reach the backend.
+ */
+function friendlyError(raw) {
+  if (!raw) return 'Something went wrong. Please try again.';
+  const msg = raw.toLowerCase();
+  if (msg.includes('timeout') || msg.includes('econnaborted'))
+    return 'This is taking longer than expected. Please try again.';
+  if (msg.includes('network') || msg.includes('econnrefused') || msg.includes('err_connection'))
+    return "We're having trouble connecting. Please check your connection and try again.";
+  if (msg.includes('429') || msg.includes('rate') || msg.includes('too many'))
+    return "We're experiencing high demand right now. Please try again in a minute.";
+  return raw; // Already friendly (came from backend error handler)
+}
+
 api.interceptors.response.use(
   response => response,
   error => {
-    const message = error.response?.data?.error?.message || error.message || 'An error occurred';
-    return Promise.reject(new Error(message));
+    const raw = error.response?.data?.error?.message || error.message || 'An error occurred';
+    return Promise.reject(new Error(friendlyError(raw)));
   }
 );
 

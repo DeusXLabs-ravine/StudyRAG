@@ -789,10 +789,24 @@ async function registerTopic(req, res, next) {
         // Auto-create a course for the topic
         const courseId = await courseService.createCourse(topicTitle, description || `AI-researched curriculum for: ${topicTitle}`, 'topic', userId);
         await courseService.addDocumentToCourse(courseId, docId, 'source', 0);
+
+        // Link generated modules to the course so they show up on the Learn page
+        await supabase.from('modules')
+          .update({ course_id: courseId })
+          .eq('document_id', docId)
+          .is('course_id', null);
+
         await courseService.updateCourseStatus(courseId, { status: 'ready' });
+        console.log(`[TopicResearch] Course "${topicTitle}" ready with modules linked to course ${courseId.slice(0, 8)}`);
       } catch (err) {
-        console.error(`Error processing topic "${topicTitle}" for doc ${docId}:`, err);
-        await vectorStore.updateDocumentStatus(docId, { status: 'failed', error: err.message });
+        console.error(`[TopicResearch] Failed for "${topicTitle}" (doc ${docId}):`, err.message);
+        const msg = err.message || '';
+        const friendlyError = (msg.includes('429') || msg.includes('quota') || msg.includes('rate'))
+          ? "High demand right now — please try again in a minute."
+          : (msg.includes('timeout') || msg.includes('timed out'))
+          ? "Research took too long — please try again."
+          : "Something went wrong generating this course. Please try again.";
+        await vectorStore.updateDocumentStatus(docId, { status: 'failed', error: friendlyError });
       }
     })();
   } catch (error) {

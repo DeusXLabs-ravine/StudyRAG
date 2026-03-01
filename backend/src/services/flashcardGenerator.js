@@ -1,5 +1,5 @@
 const supabase = require('../config/database');
-const { getGenerativeModel, selectModelTier } = require('../config/gemini');
+const { getGenerativeModel, selectModelTier, withRetryOnRateLimit } = require('../config/gemini');
 const { FLASHCARD_GENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection, getModuleDepthSection } = require('../utils/prompts');
 const vectorStore = require('./vectorStore');
 const { getUserTeachingLevel, getUserInterests, getWeakTopics, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
@@ -44,8 +44,10 @@ async function generateFlashcards({ numCards = 20, docId = null, name = null, us
     .replace('{depth_section}', depthSection);
 
   const tier = selectModelTier({});
-  const model = getGenerativeModel(tier);
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = getGenerativeModel(tier);
+    return model.generateContent(prompt);
+  });
   const responseText = result.response.text();
 
   let parsed;
@@ -131,8 +133,10 @@ async function generateAdaptiveFlashcards({ numCards = 20, userId = null }) {
     .replace('{pace_section}', buildPaceSection(learningPace))
     .replace('{depth_section}', adaptiveDepthSection);
 
-  const model = getGenerativeModel('standard');
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = getGenerativeModel('standard');
+    return model.generateContent(prompt);
+  });
   const responseText = result.response.text();
 
   let parsed;

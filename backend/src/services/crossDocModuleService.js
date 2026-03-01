@@ -1,5 +1,5 @@
 const supabase = require('../config/database');
-const { getGenerativeModel } = require('../config/gemini');
+const { getGenerativeModel, withRetryOnRateLimit } = require('../config/gemini');
 const { CROSS_DOCUMENT_OUTLINE_PROMPT, CROSS_DOCUMENT_MODULE_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection } = require('../utils/prompts');
 const { getUserTeachingLevel, getUserInterests, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
 const courseService = require('./courseService');
@@ -89,8 +89,10 @@ async function generateUnifiedModules(courseId, userId = null) {
       .replace('{document_summaries}', summariesText)
       .replace('{syllabus_schedule}', syllabusSchedule);
 
-    const outlineModel = getGenerativeModel('standard');
-    const outlineResult = await outlineModel.generateContent(outlinePrompt);
+    const outlineResult = await withRetryOnRateLimit(async () => {
+      const outlineModel = getGenerativeModel('standard');
+      return outlineModel.generateContent(outlinePrompt);
+    }, 3, 1);
     const outlineText = outlineResult.response.text();
     const outlineJson = outlineText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const outline = JSON.parse(outlineJson);
@@ -142,8 +144,10 @@ async function generateUnifiedModules(courseId, userId = null) {
             .replace('{learning_style_section}', buildLearningStyleSection(learningStyle))
             .replace('{pace_section}', buildPaceSection(learningPace));
 
-          const model = getGenerativeModel('fast');
-          const result = await model.generateContent(prompt);
+          const result = await withRetryOnRateLimit(async () => {
+            const model = getGenerativeModel('fast');
+            return model.generateContent(prompt);
+          }, 3, 1);
           const text = result.response.text();
           const jsonStr = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
           const parsed = JSON.parse(jsonStr);

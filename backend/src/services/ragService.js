@@ -1,4 +1,4 @@
-const { getGenerativeModel, getSearchGroundedModel, selectModelTier } = require('../config/gemini');
+const { getGenerativeModel, getSearchGroundedModel, selectModelTier, withRetryOnRateLimit } = require('../config/gemini');
 const { isDeepSeekAvailable, callDeepSeekChat } = require('../config/deepseek');
 const { isSTEMQuery } = require('../utils/stemDetector');
 const { getTutorDepthSection } = require('../utils/prompts/depthRouter');
@@ -211,7 +211,6 @@ async function queryMultiDocument(query, conversationHistory, userId = null) {
 
   const useWeb = shouldUseWebSearch(query);
   const tier = selectModelTier({});
-  const model = useWeb ? getSearchGroundedModel(tier) : getGenerativeModel(tier);
 
   const webSearchNote = useWeb
     ? `\n\nYou also have access to real-time web search. After addressing the student's question using their study materials, you may supplement your answer with current, authoritative information from the web (e.g., latest guidelines, drug data, recent research). Clearly label any web-sourced information with a "🌐 Web Source:" prefix so the student can distinguish it from their own materials.`
@@ -246,7 +245,10 @@ IMPORTANT: The student's study materials above are your AUTHORITATIVE source. Ba
 - If the context doesn't contain enough information, say so honestly.${webSearchNote}
 Format your response with clear structure using markdown.`;
 
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = useWeb ? getSearchGroundedModel(tier) : getGenerativeModel(tier);
+    return model.generateContent(prompt);
+  }, 3, 0);
   const answerText = result.response.text();
 
   const sources = flatPages.map((page) => ({
@@ -336,7 +338,6 @@ async function queryWithPageIndex(query, docId, pageIndex, conversationHistory, 
 
   const useWeb = shouldUseWebSearch(query);
   const tier = selectModelTier({});
-  const model = useWeb ? getSearchGroundedModel(tier) : getGenerativeModel(tier);
 
   const webSearchNote = useWeb
     ? `\n\nYou also have access to real-time web search. After addressing the student's question using their study materials, you may supplement your answer with current, authoritative information from the web (e.g., latest guidelines, drug data, recent research). Clearly label any web-sourced information with a "🌐 Web Source:" prefix so the student can distinguish it from their own materials.`
@@ -374,7 +375,10 @@ If the context doesn't contain enough information, say so honestly.
 Format your response with clear structure using markdown.
 If the student seems confused, offer to explain in simpler terms.`;
 
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = useWeb ? getSearchGroundedModel(tier) : getGenerativeModel(tier);
+    return model.generateContent(prompt);
+  }, 3, 0);
   const answer = result.response.text();
 
   const sources = pages.map((page) => {
@@ -481,7 +485,6 @@ async function queryWithVectorRAG(query, docId, conversationHistory, userId = nu
 
   const useWeb = shouldUseWebSearch(query);
   const tier = selectModelTier({});
-  const model = useWeb ? getSearchGroundedModel(tier) : getGenerativeModel(tier);
 
   const webSearchNote = useWeb
     ? `\n\nYou also have access to real-time web search. After addressing the student's question using their study materials, you may supplement your answer with current, authoritative information from the web (e.g., latest guidelines, drug data, recent research). Clearly label any web-sourced information with a "🌐 Web Source:" prefix so the student can distinguish it from their own materials.`
@@ -505,7 +508,10 @@ If the context doesn't contain enough information, say so honestly.
 Format your response with clear structure using markdown.
 If the student seems confused, offer to explain in simpler terms.`;
 
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = useWeb ? getSearchGroundedModel(tier) : getGenerativeModel(tier);
+    return model.generateContent(prompt);
+  }, 3, 0);
   const answer = result.response.text();
 
   // Reuse the batch-fetched docMap from above (no extra queries)
@@ -534,8 +540,10 @@ async function explainSimply(lessonContent, userQuestion = '', userId = null) {
     .replace('{lesson_content}', lessonContent)
     .replace('{user_question}', userQuestion || 'No specific question provided')
     .replace('{interests_section}', buildInterestsSection(interests));
-  const model = getGenerativeModel('standard');
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = getGenerativeModel('standard');
+    return model.generateContent(prompt);
+  }, 3, 0);
   return result.response.text();
 }
 
@@ -575,8 +583,10 @@ async function tutorGreeting(moduleContent, moduleTitle, moduleTopic, userId) {
     .replace('{module_title}', moduleTitle || 'this lesson')
     .replace('{module_topic}', moduleTopic || 'this topic');
 
-  const model = getGenerativeModel('fast');
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = getGenerativeModel('fast');
+    return model.generateContent(prompt);
+  }, 3, 0);
   return result.response.text();
 }
 
@@ -687,8 +697,10 @@ async function tutorChat(moduleContent, moduleTitle, moduleTopic, message, conve
     }
   }
 
-  const model = useWeb ? getSearchGroundedModel('standard') : getGenerativeModel('standard');
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = useWeb ? getSearchGroundedModel('standard') : getGenerativeModel('standard');
+    return model.generateContent(prompt);
+  }, 3, 0);
   const replyText = result.response.text();
 
   // Extract web grounding sources when search was used

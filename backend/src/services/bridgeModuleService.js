@@ -1,5 +1,5 @@
 const supabase = require('../config/database');
-const { getGenerativeModel } = require('../config/gemini');
+const { getGenerativeModel, withRetryOnRateLimit } = require('../config/gemini');
 const { BRIDGE_MODULE_GENERATION_PROMPT, getModuleDepthSection, getQuizDepthSection } = require('../utils/prompts');
 const { getUserTeachingLevel } = require('./userProfileService');
 const { v4: uuidv4 } = require('uuid');
@@ -97,8 +97,10 @@ async function generateBridgeContent(parentModule, wrongAnswers, struggledTopics
     .replace('{struggled_topics}', struggledTopics.join(', '))
     .replace('{quiz_depth_section}', quizDepthSection);
 
-  const model = getGenerativeModel('fast');
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = getGenerativeModel('fast');
+    return model.generateContent(prompt);
+  }, 3, 0);
   const text = result.response.text();
   const jsonStr = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   return JSON.parse(jsonStr);

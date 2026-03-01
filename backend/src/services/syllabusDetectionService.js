@@ -1,4 +1,4 @@
-const { getGenerativeModel, getSearchGroundedModel } = require('../config/gemini');
+const { getGenerativeModel, getSearchGroundedModel, withRetryOnRateLimit } = require('../config/gemini');
 const { DOCUMENT_TYPE_DETECTION_PROMPT, SYLLABUS_EXTRACTION_PROMPT } = require('../utils/prompts');
 const courseService = require('./courseService');
 
@@ -11,8 +11,10 @@ async function detectDocumentType(text) {
 
   const prompt = DOCUMENT_TYPE_DETECTION_PROMPT.replace('{document_text}', excerpt);
 
-  const model = getGenerativeModel('fast');
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = getGenerativeModel('fast');
+    return model.generateContent(prompt);
+  }, 3, 1);
   const responseText = result.response.text();
 
   try {
@@ -31,8 +33,10 @@ async function detectDocumentType(text) {
 async function extractSyllabusData(text) {
   const prompt = SYLLABUS_EXTRACTION_PROMPT.replace('{document_text}', text);
 
-  const model = getSearchGroundedModel('standard');
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = getSearchGroundedModel('standard');
+    return model.generateContent(prompt);
+  }, 3, 1);
   const responseText = result.response.text();
 
   try {
@@ -83,8 +87,10 @@ Return ONLY valid JSON:
 
 IMPORTANT: Only return available: true if you find a genuinely free, legal version. Do not fabricate URLs.`;
 
-      const model = getSearchGroundedModel('fast');
-      const result = await model.generateContent(searchPrompt);
+      const result = await withRetryOnRateLimit(async () => {
+        const model = getSearchGroundedModel('fast');
+        return model.generateContent(searchPrompt);
+      }, 3, 1);
       const responseText = result.response.text();
       const jsonStr = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       const parsed = JSON.parse(jsonStr);

@@ -124,11 +124,12 @@ if (keys.length > 0) {
   console.log(`[GeminiKeyPool] ${keys.length} key(s), max ${maxConcurrent} concurrent requests`);
 }
 
-// Model tiers (with fallbacks for high-demand periods)
+// ─── Model Configuration ──────────────────────────────────────
+// Primary models per tier. 3-pro is deprecated March 9 2026 → migrated to 3.1-pro.
 const MODELS = {
   fast: 'gemini-3-flash-preview',
   standard: 'gemini-3-flash-preview',
-  advanced: 'gemini-3-pro-preview',
+  advanced: 'gemini-3.1-pro-preview',
   imageGen: [
     'gemini-3-pro-image-preview',
     'gemini-3.1-flash-image-preview',
@@ -136,25 +137,74 @@ const MODELS = {
   ],
 };
 
+// Fallback chains per tier. Includes cross-tier fallbacks so that paid-only
+// models (Pro) gracefully degrade to free-tier models (Flash) on free API keys.
 const FALLBACK_MODELS = {
-  fast: ['gemini-2.5flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'],
-  standard: ['gemini-2.5-flash', 'gemini-1.5-flash'],
-  advanced: ['gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-1.5-pro'],
+  fast: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash-lite'],
+  standard: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'],
+  advanced: [
+    'gemini-3-pro-preview',     // Previous Pro (still works until Mar 9)
+    'gemini-2.5-pro',           // Older Pro
+    'gemini-3-flash-preview',   // Cross-tier: Flash (free tier!)
+    'gemini-2.5-flash',         // Older Flash (free tier!)
+  ],
 };
 
-// ─── Model Getters ────────────────────────────────────────────
+// ─── Model Health Tracker ─────────────────────────────────────
+// Tracks which models are currently failing. When a model hits 429/quota/unavailable,
+// it's marked unhealthy for a cooldown period. Model getters auto-skip unhealthy models
+// and fall back to the next in the chain. Resets automatically after cooldown.
+
+const _modelHealth = {}; // { modelName: { failedUntil: timestamp, reason: string } }
+
+function markModelUnhealthy(modelName, cooldownMs = 60_000, reason = '') {
+  _modelHealth[modelName] = { failedUntil: Date.now() + cooldownMs, reason };
+  console.warn(`[ModelHealth] "${modelName}" marked unhealthy for ${cooldownMs / 1000}s${reason ? ': ' + reason : ''}`);
+}
+
+function isModelHealthy(modelName) {
+  const health = _modelHealth[modelName];
+  if (!health) return true;
+  if (health.failedUntil <= Date.now()) {
+    delete _modelHealth[modelName]; // Cooldown expired, give it another chance
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Resolve the best available model name for a tier, skipping unhealthy models.
+ * Falls through the entire chain: primary → fallback1 → fallback2 → ... → last resort.
+ */
+function resolveModel(tier) {
+  const primary = MODELS[tier] || MODELS.standard;
+  const fallbacks = FALLBACK_MODELS[tier] || [];
+  const chain = [primary, ...fallbacks];
+
+  for (const modelName of chain) {
+    if (isModelHealthy(modelName)) return modelName;
+  }
+
+  // All unhealthy — use the one whose cooldown expires soonest
+  const soonest = chain
+    .filter(m => _modelHealth[m])
+    .sort((a, b) => _modelHealth[a].failedUntil - _modelHealth[b].failedUntil)[0];
+  return soonest || primary;
+}
+
+// ─── Model Getters (auto-fallback) ────────────────────────────
 
 function getGenerativeModel(tier = 'standard') {
   if (!keyPool) throw new Error('Gemini API key not configured');
   const entry = keyPool.getClient();
-  const modelName = MODELS[tier] || MODELS.standard;
+  const modelName = resolveModel(tier);
   return entry.genAI.getGenerativeModel({ model: modelName });
 }
 
 function getSearchGroundedModel(tier = 'standard') {
   if (!keyPool) throw new Error('Gemini API key not configured');
   const entry = keyPool.getClient();
-  const modelName = MODELS[tier] || MODELS.standard;
+  const modelName = resolveModel(tier);
   return entry.genAI.getGenerativeModel({
     model: modelName,
     tools: [{ googleSearch: {} }],
@@ -164,7 +214,7 @@ function getSearchGroundedModel(tier = 'standard') {
 function getUrlContextModel(tier = 'standard') {
   if (!keyPool) throw new Error('Gemini API key not configured');
   const entry = keyPool.getClient();
-  const modelName = MODELS[tier] || MODELS.standard;
+  const modelName = resolveModel(tier);
   return entry.genAI.getGenerativeModel({
     model: modelName,
     tools: [{ urlContext: {} }],
@@ -174,7 +224,7 @@ function getUrlContextModel(tier = 'standard') {
 function getSearchAndUrlModel(tier = 'standard') {
   if (!keyPool) throw new Error('Gemini API key not configured');
   const entry = keyPool.getClient();
-  const modelName = MODELS[tier] || MODELS.standard;
+  const modelName = resolveModel(tier);
   return entry.genAI.getGenerativeModel({
     model: modelName,
     tools: [{ googleSearch: {} }, { urlContext: {} }],
@@ -307,18 +357,56 @@ function selectModelTier(contentHints = {}) {
 }
 
 async function generateContentWithVision(imageBuffer, mimeType, prompt, tier = 'standard') {
-  const model = getGenerativeModel(tier);
-  const result = await model.generateContent([
-    prompt,
-    { inlineData: { data: imageBuffer.toString('base64'), mimeType } },
-  ]);
-  return result.response.text();
+  return withModelFallback((modelName) => async () => {
+    if (!keyPool) throw new Error('Gemini API key not configured');
+    const entry = keyPool.getClient();
+    const model = entry.genAI.getGenerativeModel({ model: modelName });
+    const result = await model.generateContent([
+      prompt,
+      { inlineData: { data: imageBuffer.toString('base64'), mimeType } },
+    ]);
+    return result.response.text();
+  }, tier, 1);
 }
 
 // ─── Retry Wrapper with Queue Integration ─────────────────────
 
 /**
+ * Detect if an error is a rate limit / quota error.
+ */
+function isRateLimitError(err) {
+  return err?.status === 429 ||
+    err?.message?.includes('RESOURCE_EXHAUSTED') ||
+    err?.message?.includes('429') ||
+    err?.message?.includes('quota') ||
+    err?.code === 429;
+}
+
+/**
+ * Detect if an error is a server overload / unavailable error.
+ */
+function isOverloadError(err) {
+  return err?.status === 503 ||
+    err?.message?.includes('503') ||
+    err?.message?.includes('Service Unavailable') ||
+    err?.message?.includes('high demand') ||
+    err?.message?.includes('UNAVAILABLE') ||
+    err?.message?.includes('overloaded');
+}
+
+/**
+ * Extract the model name from a Gemini error message (if present).
+ * Errors typically include the model name in the URL.
+ */
+function extractModelFromError(err) {
+  const msg = err?.message || '';
+  const match = msg.match(/models\/(gemini-[^:\/\s]+)/);
+  return match ? match[1] : null;
+}
+
+/**
  * Execute an async function through the request queue with retry on 429/503.
+ * Automatically marks failing models as unhealthy so subsequent calls fall back.
  * @param {Function} fn - Async function to execute
  * @param {number} maxRetries - Max retry attempts (default 3)
  * @param {number} priority - 0 = user-facing, 1 = background
@@ -329,32 +417,39 @@ async function withRetryOnRateLimit(fn, maxRetries = 3, priority = 0) {
       try {
         return await fn();
       } catch (err) {
-        const isRateLimit = err?.status === 429 ||
-          err?.message?.includes('RESOURCE_EXHAUSTED') ||
-          err?.message?.includes('429') ||
-          err?.code === 429;
+        const rateLimited = isRateLimitError(err);
+        const overloaded = isOverloadError(err);
 
-        const isOverloaded = err?.status === 503 ||
-          err?.message?.includes('503') ||
-          err?.message?.includes('Service Unavailable') ||
-          err?.message?.includes('high demand') ||
-          err?.message?.includes('UNAVAILABLE') ||
-          err?.message?.includes('overloaded');
-
-        if ((isRateLimit || isOverloaded) && attempt < maxRetries && keyPool) {
-          // Mark all entries that are likely rate-limited for this model
-          // (we can't know which key fn() used internally, so mark the most recently
-          // rotated entry — getClient() advances the index, so the previous one was used)
-          if (isRateLimit) {
+        if ((rateLimited || overloaded) && attempt < maxRetries && keyPool) {
+          // Mark the API key as rate-limited
+          if (rateLimited) {
             const total = keyPool.entries.length;
             const usedIdx = (keyPool.index - 1 + total) % total;
             keyPool.markRateLimited(keyPool.entries[usedIdx]);
           }
-          const waitMs = isOverloaded ? 2000 * (attempt + 1) : 1000 * (attempt + 1);
-          console.warn(`[GeminiKeyPool] ${isOverloaded ? '503 overloaded' : 'Rate limited'}, retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+
+          // Mark the specific model as unhealthy so getGenerativeModel() auto-falls back
+          const failedModel = extractModelFromError(err);
+          if (failedModel) {
+            const isZeroQuota = err.message?.includes('limit: 0') || err.message?.includes('Not available');
+            const cooldown = isZeroQuota ? 300_000 : 60_000; // 5 min for zero-quota, 1 min for rate limit
+            markModelUnhealthy(failedModel, cooldown, rateLimited ? '429 rate limit' : '503 overloaded');
+          }
+
+          const waitMs = overloaded ? 2000 * (attempt + 1) : 1000 * (attempt + 1);
+          console.warn(`[GeminiRetry] ${overloaded ? '503 overloaded' : 'Rate limited'}${failedModel ? ` (${failedModel})` : ''}, retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`);
           await new Promise(r => setTimeout(r, waitMs));
           continue;
         }
+
+        // Final attempt failed — mark model unhealthy before throwing
+        if (rateLimited || overloaded) {
+          const failedModel = extractModelFromError(err);
+          if (failedModel) {
+            markModelUnhealthy(failedModel, 120_000, 'retries exhausted');
+          }
+        }
+
         throw err;
       }
     }
@@ -362,8 +457,8 @@ async function withRetryOnRateLimit(fn, maxRetries = 3, priority = 0) {
 }
 
 /**
- * Execute with automatic model fallback on 503/overload errors.
- * Tries the primary model first, then each fallback in order.
+ * Execute with explicit model fallback chain.
+ * Tries each model in the tier's chain (skipping unhealthy ones), marks failures.
  * @param {Function} fnFactory - (modelName) => async () => result
  * @param {string} tier - 'fast' | 'standard' | 'advanced'
  * @param {number} priority - 0 = user-facing, 1 = background
@@ -375,25 +470,22 @@ async function withModelFallback(fnFactory, tier = 'fast', priority = 0) {
 
   for (let i = 0; i < allModels.length; i++) {
     const modelName = allModels[i];
+
+    // Skip models we know are currently unhealthy (unless it's the last one)
+    if (!isModelHealthy(modelName) && i < allModels.length - 1) continue;
+
     try {
       return await requestQueue.execute(async () => {
         return await fnFactory(modelName)();
       }, priority);
     } catch (err) {
-      const isOverloaded = err?.status === 503 ||
-        err?.message?.includes('503') ||
-        err?.message?.includes('Service Unavailable') ||
-        err?.message?.includes('high demand') ||
-        err?.message?.includes('UNAVAILABLE') ||
-        err?.message?.includes('overloaded');
+      const rateLimited = isRateLimitError(err);
+      const overloaded = isOverloadError(err);
 
-      const isRateLimit = err?.status === 429 ||
-        err?.message?.includes('RESOURCE_EXHAUSTED') ||
-        err?.message?.includes('429');
-
-      if ((isOverloaded || isRateLimit) && i < allModels.length - 1) {
-        console.warn(`[GeminiKeyPool] Model ${modelName} unavailable (${err.status || '?'}), falling back to ${allModels[i + 1]}`);
-        await new Promise(r => setTimeout(r, 1000));
+      if ((rateLimited || overloaded) && i < allModels.length - 1) {
+        markModelUnhealthy(modelName, 60_000, rateLimited ? '429' : '503');
+        console.warn(`[ModelFallback] ${modelName} failed, trying ${allModels[i + 1]}`);
+        await new Promise(r => setTimeout(r, 500));
         continue;
       }
       throw err;
@@ -426,6 +518,8 @@ module.exports = {
   generateContentWithVision,
   withRetryOnRateLimit,
   withModelFallback,
+  markModelUnhealthy,
+  resolveModel,
   MODELS,
   FALLBACK_MODELS,
 };

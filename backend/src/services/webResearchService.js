@@ -1,5 +1,5 @@
 const supabase = require('../config/database');
-const { getGenerativeModel, getSearchGroundedModel } = require('../config/gemini');
+const { getGenerativeModel, getSearchGroundedModel, withRetryOnRateLimit } = require('../config/gemini');
 const { WEB_RESEARCH_TOPIC_EXTRACTION_PROMPT, WEB_RESEARCH_PROMPT } = require('../utils/prompts');
 const { v4: uuidv4 } = require('uuid');
 
@@ -13,8 +13,10 @@ async function extractTopics(documentText) {
   const prompt = WEB_RESEARCH_TOPIC_EXTRACTION_PROMPT
     .replace('{document_text}', excerpt);
 
-  const model = getGenerativeModel('fast');
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = getGenerativeModel('fast');
+    return model.generateContent(prompt);
+  }, 3, 1);
   const responseText = result.response.text();
 
   const jsonStr = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
@@ -53,8 +55,10 @@ async function researchTopic(topic, searchQuery) {
     .replace('{topic}', topic)
     .replace('{search_query}', searchQuery);
 
-  const model = getSearchGroundedModel('standard');
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = getSearchGroundedModel('standard');
+    return model.generateContent(prompt);
+  }, 3, 1);
   const responseText = result.response.text();
 
   // Extract real URLs from Google Search grounding metadata

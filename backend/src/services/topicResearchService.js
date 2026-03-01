@@ -1,4 +1,4 @@
-const { getSearchAndUrlModel, getUrlContextModel, runDeepResearch, withRetryOnRateLimit } = require('../config/gemini');
+const { getSearchGroundedModel, getSearchAndUrlModel, getUrlContextModel, runDeepResearch, withRetryOnRateLimit } = require('../config/gemini');
 const { TOPIC_CURRICULUM_PROMPT } = require('../utils/prompts');
 const { getUserTeachingLevel } = require('./userProfileService');
 const { extractGroundingData } = require('./webResearchService');
@@ -6,7 +6,6 @@ const { extractGroundingData } = require('./webResearchService');
 // ─── Official Documentation Registry ─────────────────────────
 // Maps programming languages, frameworks, and tools to their official doc URLs.
 // URL Context can fetch these directly (public, no paywall).
-// Each entry has: docs (main reference), tutorials (getting started), and optional api (API reference).
 
 const OFFICIAL_DOCS = {
   // Languages
@@ -217,26 +216,19 @@ const OFFICIAL_DOCS = {
 
 /**
  * Detect if a topic matches a known programming/tech subject with official docs.
- * Returns the doc entry or null. Uses word-boundary matching to avoid false positives
- * (e.g. "Organic Chemistry" should NOT match "C").
  */
 function detectOfficialDocs(topic) {
   const normalized = topic.toLowerCase().trim();
 
-  // Direct match (exact)
   for (const [key, entry] of Object.entries(OFFICIAL_DOCS)) {
     if (normalized === key || normalized === entry.name.toLowerCase()) {
       return entry;
     }
   }
 
-  // Word-boundary match — sort by key length descending so "react native" matches before "react",
-  // and "c++" matches before "c"
   const sorted = Object.entries(OFFICIAL_DOCS).sort((a, b) => b[0].length - a[0].length);
   for (const [key, entry] of sorted) {
     const name = entry.name.toLowerCase();
-    // Build regex with word boundaries — for keys with special chars like "c++",
-    // use lookahead/lookbehind instead of \b which treats + as non-word
     const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const nameEscaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const boundary = key.includes('+') || key.includes('#') || key.includes('.')
@@ -252,12 +244,37 @@ function detectOfficialDocs(topic) {
 }
 
 /**
+ * Detect if a topic is programming/tech related even without a known doc entry.
+ * Used to route the search fallback toward documentation-focused queries.
+ */
+function isProgrammingTopic(topic) {
+  const t = topic.toLowerCase();
+  const techSignals = [
+    'programming', 'code', 'coding', 'developer', 'development', 'software',
+    'api', 'framework', 'library', 'algorithm', 'data structure',
+    'web', 'frontend', 'backend', 'fullstack', 'full stack', 'devops',
+    'database', 'server', 'deploy', 'cloud', 'microservice',
+    'oop', 'functional programming', 'design pattern', 'architecture',
+    'testing', 'debugging', 'compiler', 'interpreter', 'runtime',
+    'machine learning', 'deep learning', 'neural network', 'nlp',
+    'cybersecurity', 'encryption', 'authentication',
+  ];
+  return techSignals.some(s => t.includes(s)) || detectOfficialDocs(topic) !== null;
+}
+
+// ─── Main Entry Point ─────────────────────────────────────────
+
+/**
  * Research a topic using the best available method.
  *
- * Priority order:
- * 1. Doc-grounded generation (for programming/tech with official docs) — fast + accurate
- * 2. Deep Research (async, thorough, ~5-20 min) — best for academic/non-tech topics
- * 3. Search + URL Context grounded generation (fast, ~10s) — universal fallback
+ * For programming/tech topics:
+ *   1. Doc-grounded (official docs via URL Context) — fast, most accurate
+ *   2. Search-for-docs (Google Search finds docs → URL Context reads them) — fallback
+ *   3. Search-grounded generation — final fallback
+ *
+ * For academic/general topics:
+ *   1. Deep Research (async, thorough) — best quality
+ *   2. Search-grounded generation — fast fallback
  */
 async function researchTopic(topic, userId = null) {
   const teachingLevel = await getUserTeachingLevel(userId);
@@ -266,55 +283,73 @@ async function researchTopic(topic, userId = null) {
     .replace('{topic}', topic)
     .replace('{teaching_level}', teachingLevel);
 
-  // Check if this is a programming/tech topic with official documentation
   const docEntry = detectOfficialDocs(topic);
+  const isTech = isProgrammingTopic(topic);
+
+  // ── Path A: Known official docs exist ──────────────────────
   if (docEntry) {
+    // A1: Direct doc-grounded (hardcoded URLs)
     try {
       return await researchTopicWithDocs(topic, teachingLevel, prompt, docEntry);
     } catch (err) {
-      console.warn(`[TopicResearch] Doc-grounded generation failed for "${topic}", falling back: ${err.message}`);
+      console.warn(`[TopicResearch] Doc-grounded failed for "${topic}": ${err.message}`);
+    }
+
+    // A2: Search Google for the docs + read them with URL Context
+    try {
+      return await searchAndReadDocs(topic, teachingLevel, prompt, docEntry.name);
+    } catch (err) {
+      console.warn(`[TopicResearch] Search-for-docs failed for "${topic}": ${err.message}`);
     }
   }
 
-  // Try Deep Research for non-tech/academic topics
-  try {
-    const deepResult = await runDeepResearch(
-      `Research the topic "${topic}" thoroughly for a ${teachingLevel}-level student. ` +
-      `Produce comprehensive study material covering: fundamentals, core concepts, worked examples, ` +
-      `practical applications, and advanced considerations. ` +
-      `Structure with clear headings, bullet points, and examples. Target 5000-15000 words. ` +
-      `Only cite information from trusted academic sources.`,
-      { timeoutMs: 600_000, pollIntervalMs: 8_000 }
-    );
-
-    if (deepResult?.text && deepResult.text.length >= 500) {
-      console.log(`[TopicResearch] Deep Research succeeded for "${topic}" (${deepResult.text.length} chars, ${deepResult.sources?.length || 0} sources)`);
-      return {
-        text: deepResult.text,
-        sources: deepResult.sources || [],
-        metadata: {
-          topic,
-          teachingLevel,
-          format: 'topic',
-          method: 'deep-research',
-          generatedAt: new Date().toISOString(),
-        },
-      };
+  // ── Path B: Unknown tech topic (no hardcoded docs) ─────────
+  if (isTech && !docEntry) {
+    // B1: Search for documentation and tutorials specifically
+    try {
+      return await searchAndReadDocs(topic, teachingLevel, prompt);
+    } catch (err) {
+      console.warn(`[TopicResearch] Search-for-docs failed for tech topic "${topic}": ${err.message}`);
     }
-  } catch (err) {
-    console.warn(`[TopicResearch] Deep Research unavailable for "${topic}", falling back to search grounding: ${err.message}`);
   }
 
-  // Final fallback: Search + URL Context grounded generation
+  // ── Path C: Non-tech / academic topics ─────────────────────
+  if (!isTech) {
+    // C1: Deep Research (best for academic topics — thorough, cited)
+    try {
+      const deepResult = await runDeepResearch(
+        `Research the topic "${topic}" thoroughly for a ${teachingLevel}-level student. ` +
+        `Produce comprehensive study material covering: fundamentals, core concepts, worked examples, ` +
+        `practical applications, and advanced considerations. ` +
+        `Structure with clear headings, bullet points, and examples. Target 5000-15000 words. ` +
+        `Only cite information from trusted academic sources.`,
+        { timeoutMs: 600_000, pollIntervalMs: 8_000 }
+      );
+
+      if (deepResult?.text && deepResult.text.length >= 500) {
+        console.log(`[TopicResearch] Deep Research succeeded for "${topic}" (${deepResult.text.length} chars, ${deepResult.sources?.length || 0} sources)`);
+        return {
+          text: deepResult.text,
+          sources: deepResult.sources || [],
+          metadata: { topic, teachingLevel, format: 'topic', method: 'deep-research', generatedAt: new Date().toISOString() },
+        };
+      }
+    } catch (err) {
+      console.warn(`[TopicResearch] Deep Research unavailable for "${topic}": ${err.message}`);
+    }
+  }
+
+  // ── Path D: Universal fallback — Search + URL Context ──────
+  console.log(`[TopicResearch] Using search-grounded fallback for "${topic}"`);
   return await researchTopicWithSearch(topic, teachingLevel, prompt);
 }
 
+// ─── Strategy Implementations ─────────────────────────────────
+
 /**
- * Generate curriculum for programming/tech topics using official documentation as source of truth.
- * Uses URL Context to fetch official docs, then generates content grounded in that documentation.
+ * Strategy A1: Generate curriculum from known official documentation URLs.
  */
 async function researchTopicWithDocs(topic, teachingLevel, basePrompt, docEntry) {
-  // Build the URL list — tutorials for beginners, full docs for advanced
   const urls = [];
   if (teachingLevel === 'dummy' || teachingLevel === 'beginner') {
     urls.push(...(docEntry.tutorials || []).slice(0, 3));
@@ -324,7 +359,6 @@ async function researchTopicWithDocs(topic, teachingLevel, basePrompt, docEntry)
     urls.push(...(docEntry.tutorials || []).slice(0, 1));
   }
 
-  // Limit to 5 URLs (URL Context supports up to 20 but we want speed)
   const selectedUrls = urls.slice(0, 5);
   const urlList = selectedUrls.map(u => `- ${u}`).join('\n');
 
@@ -347,43 +381,96 @@ Generate the curriculum based on the official documentation above. Include worki
   });
 
   const text = result.response.text();
+  if (!text || text.length < 200) throw new Error('Doc-grounded generation returned insufficient content');
 
-  if (!text || text.length < 200) {
-    throw new Error('Doc-grounded generation returned insufficient content');
-  }
-
-  // Build sources from the official doc URLs we provided
-  const sources = selectedUrls.map(url => ({
-    title: `${docEntry.name} Official Documentation`,
-    url,
-  }));
-
-  // Also extract any additional grounding URLs the model found
+  const sources = selectedUrls.map(url => ({ title: `${docEntry.name} Official Documentation`, url }));
   try {
     const { groundingUrls } = extractGroundingData(result);
-    const additional = groundingUrls.filter(g => g.url && !selectedUrls.includes(g.url));
-    sources.push(...additional);
-  } catch { /* URL context may not return grounding metadata */ }
+    sources.push(...groundingUrls.filter(g => g.url && !selectedUrls.includes(g.url)));
+  } catch { /* ok */ }
 
-  console.log(`[TopicResearch] Doc-grounded generation succeeded for "${topic}" (${text.length} chars, ${sources.length} sources)`);
-
+  console.log(`[TopicResearch] Doc-grounded succeeded for "${topic}" (${text.length} chars, ${sources.length} sources)`);
   return {
     text,
     sources,
-    metadata: {
-      topic,
-      teachingLevel,
-      format: 'topic',
-      method: 'doc-grounded',
-      officialDocs: docEntry.name,
-      generatedAt: new Date().toISOString(),
-    },
+    metadata: { topic, teachingLevel, format: 'topic', method: 'doc-grounded', officialDocs: docEntry.name, generatedAt: new Date().toISOString() },
   };
 }
 
 /**
- * Fallback: Generate topic curriculum using Google Search + URL Context grounding.
- * Extracts real grounding URLs as verified sources.
+ * Strategy A2/B1: Use Google Search to find documentation/tutorials, then read them with URL Context.
+ * This is the smart fallback — it searches for "[topic] official documentation tutorial",
+ * gets real URLs from grounding, then feeds those URLs back to generate content.
+ */
+async function searchAndReadDocs(topic, teachingLevel, basePrompt, techName = null) {
+  const label = techName || topic;
+
+  // Step 1: Search for documentation URLs
+  const searchPrompt = `Find the official documentation, tutorials, and getting-started guides for "${label}".
+Return a list of the most authoritative URLs for learning ${label}. Prioritize:
+- Official documentation sites (*.dev, *.org, *.io, docs.*)
+- Official tutorials and getting-started guides
+- Reputable educational resources (.edu, MDN, W3Schools for web)
+Do NOT include random blog posts, Medium articles, or unofficial sources.
+List up to 8 URLs, one per line.`;
+
+  console.log(`[TopicResearch] Searching for ${label} documentation URLs...`);
+
+  const searchResult = await withRetryOnRateLimit(async () => {
+    const model = getSearchGroundedModel('standard');
+    return model.generateContent(searchPrompt);
+  });
+
+  // Extract real URLs from grounding metadata
+  const { groundingUrls } = extractGroundingData(searchResult);
+  const docUrls = groundingUrls
+    .filter(g => g.url)
+    .map(g => g.url)
+    .slice(0, 6); // Cap at 6 URLs for URL Context
+
+  if (docUrls.length === 0) {
+    throw new Error('Search found no documentation URLs');
+  }
+
+  console.log(`[TopicResearch] Found ${docUrls.length} doc URLs for "${label}", reading them...`);
+
+  // Step 2: Generate curriculum using those discovered URLs as context
+  const urlList = docUrls.map(u => `- ${u}`).join('\n');
+  const docPrompt = `${basePrompt}
+
+DOCUMENTATION SOURCES — USE AS PRIMARY SOURCE OF TRUTH:
+The following documentation URLs were found for "${label}". Read and use them as your primary source.
+Your explanations, code examples, and references must be grounded in these sources.
+
+${urlList}
+
+Generate comprehensive curriculum based on the documentation above. Include working code examples that match the official patterns.`;
+
+  const genResult = await withRetryOnRateLimit(async () => {
+    const model = getUrlContextModel('standard');
+    return model.generateContent(docPrompt);
+  });
+
+  const text = genResult.response.text();
+  if (!text || text.length < 200) throw new Error('Doc-search generation returned insufficient content');
+
+  const sources = docUrls.map(url => ({ title: `${label} Documentation`, url }));
+  try {
+    const { groundingUrls: extraUrls } = extractGroundingData(genResult);
+    sources.push(...extraUrls.filter(g => g.url && !docUrls.includes(g.url)));
+  } catch { /* ok */ }
+
+  console.log(`[TopicResearch] Search-for-docs succeeded for "${topic}" (${text.length} chars, ${sources.length} sources)`);
+  return {
+    text,
+    sources,
+    metadata: { topic, teachingLevel, format: 'topic', method: 'search-doc-grounded', generatedAt: new Date().toISOString() },
+  };
+}
+
+/**
+ * Strategy D: Universal fallback — Google Search + URL Context grounded generation.
+ * Works for any topic. Extracts real grounding URLs as verified sources.
  */
 async function researchTopicWithSearch(topic, teachingLevel, prompt) {
   const result = await withRetryOnRateLimit(async () => {
@@ -392,27 +479,16 @@ async function researchTopicWithSearch(topic, teachingLevel, prompt) {
   });
 
   const text = result.response.text();
+  if (!text || text.length < 200) throw new Error('Topic research returned insufficient content');
 
-  if (!text || text.length < 200) {
-    throw new Error('Topic research returned insufficient content');
-  }
-
-  // Extract verified sources from grounding metadata
   const { groundingUrls } = extractGroundingData(result);
   const sources = groundingUrls.filter(s => s.url);
 
-  console.log(`[TopicResearch] Search grounding succeeded for "${topic}" (${text.length} chars, ${sources.length} grounded sources)`);
-
+  console.log(`[TopicResearch] Search-grounded succeeded for "${topic}" (${text.length} chars, ${sources.length} sources)`);
   return {
     text,
     sources,
-    metadata: {
-      topic,
-      teachingLevel,
-      format: 'topic',
-      method: 'search-grounded',
-      generatedAt: new Date().toISOString(),
-    },
+    metadata: { topic, teachingLevel, format: 'topic', method: 'search-grounded', generatedAt: new Date().toISOString() },
   };
 }
 

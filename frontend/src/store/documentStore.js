@@ -173,12 +173,52 @@ const useDocumentStore = create((set, get) => ({
       set(state => ({
         documents: [...state.documents, { ...result, status: 'processing' }],
       }));
+
+      // Poll document status until it's ready or failed (background generation)
+      get()._pollDocumentStatus(result.id);
+
       return result;
     } catch (error) {
       const msg = error.response?.data?.error || error.message;
       set({ error: msg });
       throw error;
     }
+  },
+
+  /**
+   * Poll a document's status after background processing (topic research, URL import, etc.)
+   * Updates the document in the store when status changes from 'processing'.
+   */
+  _pollDocumentStatus: (docId, intervalMs = 5000, maxAttempts = 120) => {
+    let attempts = 0;
+    const poll = async () => {
+      attempts++;
+      try {
+        const doc = await documentService.getDocument(docId);
+        const status = doc?.status;
+
+        // Update the document in the store
+        set(state => ({
+          documents: state.documents.map(d =>
+            d.id === docId ? { ...d, ...doc } : d
+          ),
+        }));
+
+        if (status === 'ready' || status === 'failed') {
+          return; // Stop polling
+        }
+
+        if (attempts < maxAttempts) {
+          setTimeout(poll, intervalMs);
+        }
+      } catch {
+        // Network error — retry silently
+        if (attempts < maxAttempts) {
+          setTimeout(poll, intervalMs * 2);
+        }
+      }
+    };
+    setTimeout(poll, intervalMs);
   },
 }));
 

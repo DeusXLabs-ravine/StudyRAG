@@ -1,5 +1,5 @@
 const cheerio = require('cheerio');
-const { getSearchGroundedModel } = require('../config/gemini');
+const { getSearchGroundedModel, withRetryOnRateLimit } = require('../config/gemini');
 const { extractTextFromUrl } = require('./fileProcessor');
 
 // Trusted academic/medical/institutional domains for source quality enforcement
@@ -398,15 +398,16 @@ async function extractContentFromUrl(url) {
  * Used when cheerio can't extract enough text (JS-rendered pages).
  */
 async function extractViaGemini(url) {
-  const model = getSearchGroundedModel('standard');
-
   const prompt = `Extract the full main content from this webpage: ${url}
 
 Return ONLY the text content of the page, preserving headings and structure.
 Do not add commentary or analysis — just extract the actual page content.
 Use markdown formatting for headings, lists, and emphasis.`;
 
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = getSearchGroundedModel('standard');
+    return model.generateContent(prompt);
+  }, 3, 1);
   return result.response.text();
 }
 

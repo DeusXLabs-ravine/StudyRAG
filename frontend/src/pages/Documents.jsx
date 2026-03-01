@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { FileText, Trash2, AlertCircle, CheckCircle, Clock, X, Brain, Sparkles, Upload, Link2, StickyNote, Star, Globe, Shield, ShieldAlert, ShieldCheck, BookOpen, Search, FolderOpen, ChevronDown, ChevronRight } from 'lucide-react';
 import useDocumentStore from '../store/documentStore';
 import useCourseStore from '../store/courseStore';
@@ -184,10 +185,11 @@ export default function Documents() {
     setTopicLoading(true);
     try {
       await addTopic(topicInput.trim(), topicDesc.trim());
+      toast.success(`Researching "${topicInput.trim()}" — your course will be ready in a minute or two.`);
       setTopicInput('');
       setTopicDesc('');
     } catch {
-      // error is set in store
+      toast.error("Couldn't start the research. Lots of people are studying right now — please try again in a moment.");
     } finally {
       setTopicLoading(false);
     }
@@ -637,6 +639,11 @@ export default function Documents() {
                             ))}
                           </TextLoop>
                         </div>
+                      )}
+                      {doc.status === 'failed' && doc.error && (
+                        <p className="mt-1 text-[9px] font-medium text-red-500 max-w-[200px] text-right">
+                          {doc.error}
+                        </p>
                       )}
                     </div>
 

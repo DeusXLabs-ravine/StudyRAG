@@ -1,4 +1,4 @@
-const { getSearchGroundedModel } = require('../config/gemini');
+const { getSearchGroundedModel, withRetryOnRateLimit } = require('../config/gemini');
 const { QA_CONTENT_PROCESSING_PROMPT } = require('../utils/prompts');
 const supabase = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
@@ -17,8 +17,10 @@ async function processQAContent(docId, text, userId = null) {
   // Use search grounding so Gemini can validate/find correct answers
   const prompt = QA_CONTENT_PROCESSING_PROMPT.replace('{document_text}', text.slice(0, 80000));
 
-  const model = getSearchGroundedModel('standard');
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = getSearchGroundedModel('standard');
+    return model.generateContent(prompt);
+  }, 3, 1);
   const responseText = result.response.text();
 
   let parsed;

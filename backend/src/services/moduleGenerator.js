@@ -1,5 +1,5 @@
 const supabase = require('../config/database');
-const { getGenerativeModel } = require('../config/gemini');
+const { getGenerativeModel, withRetryOnRateLimit } = require('../config/gemini');
 const { MODULE_GENERATION_PROMPT, MODULE_OUTLINE_PROMPT, MODULE_BATCH_GENERATION_PROMPT, QUESTION_REGENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection, buildLegalGroundingSection, getModuleDepthSection, getQuizDepthSection } = require('../utils/prompts');
 const { getUserTeachingLevel, getUserInterests, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
 const { prepareTextForLLM } = require('./chunkingService');
@@ -113,8 +113,10 @@ async function generateOutlineForSegment(segmentText, segmentIndex, totalSegment
     .replace('{target_modules}', String(targetModules))
     .replace('{min_modules}', String(minModules));
 
-  const model = getGenerativeModel('fast');
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = getGenerativeModel('fast');
+    return model.generateContent(prompt);
+  }, 3, 1);
   const text = result.response.text();
   const jsonStr = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   const parsed = JSON.parse(jsonStr);
@@ -151,8 +153,10 @@ async function generateModuleBatch(segmentText, fullOutline, batchModules, batch
     .replace('{full_outline}', outlineText)
     .replace('{batch_modules}', batchText);
 
-  const model = getGenerativeModel('fast');
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = getGenerativeModel('fast');
+    return model.generateContent(prompt);
+  }, 3, 1);
   const text = result.response.text();
   const jsonStr = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   return JSON.parse(jsonStr);
@@ -181,8 +185,10 @@ async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalS
     .replace('{content_word_range}', contentWordRange)
     .replace('{quiz_depth_section}', quizDepthSection);
 
-  const model = getGenerativeModel('fast');
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = getGenerativeModel('fast');
+    return model.generateContent(prompt);
+  }, 3, 1);
   const responseText = result.response.text();
 
   try {
@@ -712,9 +718,11 @@ async function regenerateQuestions(moduleId, userId = null) {
     .replace(/\{topic\}/g, mod.topic || mod.title);
 
   const { selectModelTier } = require('../config/gemini');
-  const tier = selectModelTier({});
-  const model = getGenerativeModel(tier);
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const tier = selectModelTier({});
+    const model = getGenerativeModel(tier);
+    return model.generateContent(prompt);
+  }, 3, 1);
   const responseText = result.response.text();
 
   let parsed;

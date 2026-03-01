@@ -209,7 +209,7 @@ export default function Chat() {
         addMessage({ role: 'tutor', text: 'Visual generated! It may take a moment to render. Check back shortly.' });
       }
     } catch (err) {
-      addMessage({ role: 'tutor', text: `Couldn't generate the visual: ${err.message}` });
+      addMessage({ role: 'tutor', text: "Couldn't generate the visual right now. Please try again in a moment!" });
     } finally {
       setLoading(false);
     }
@@ -338,7 +338,7 @@ export default function Chat() {
         _id: result.id,
       });
     } catch (err) {
-      addMessage({ role: 'tutor', text: `I encountered an error: ${err.message}` });
+      addMessage({ role: 'tutor', text: "Sorry, I'm having trouble responding right now. There's a lot of activity on our servers — please try again in a moment!" });
     } finally {
       setLoading(false);
     }

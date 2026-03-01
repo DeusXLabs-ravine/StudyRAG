@@ -1,6 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const supabase = require('../config/database');
-const { generateContentWithVision, getGenerativeModel } = require('../config/gemini');
+const { generateContentWithVision, getGenerativeModel, withRetryOnRateLimit } = require('../config/gemini');
 const { extractImagesFromBuffer } = require('./imageExtractor');
 const {
   DIAGRAM_DETECTION_PROMPT,
@@ -106,8 +106,10 @@ async function generateSimplifiedLevel(analysis, level) {
     .replace('{labels}', JSON.stringify(analysis.labels || []))
     .replace('{mermaid_section}', mermaidSection);
 
-  const model = getGenerativeModel('fast');
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const model = getGenerativeModel('fast');
+    return model.generateContent(prompt);
+  }, 3, 1);
   return parseJsonResponse(result.response.text());
 }
 

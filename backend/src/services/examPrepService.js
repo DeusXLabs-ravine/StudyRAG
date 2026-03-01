@@ -1,5 +1,5 @@
 const supabase = require('../config/database');
-const { getGenerativeModel, selectModelTier } = require('../config/gemini');
+const { getGenerativeModel, selectModelTier, withRetryOnRateLimit } = require('../config/gemini');
 const {
   EXAM_PATTERN_ANALYSIS_PROMPT,
   STUDY_GUIDE_GENERATION_PROMPT,
@@ -248,9 +248,11 @@ async function generatePrepContent(sessionId, userId = null) {
         .replace('{auxiliary_section}', `Auxiliary Materials:\n${auxiliarySection}`)
         .replace('{weak_topics_section}', weakTopicsSection);
 
-      const tier = selectModelTier({ isComplex: true });
-      const model = getGenerativeModel(tier);
-      const result = await model.generateContent(analysisPrompt);
+      const result = await withRetryOnRateLimit(async () => {
+        const tier = selectModelTier({ isComplex: true });
+        const model = getGenerativeModel(tier);
+        return model.generateContent(analysisPrompt);
+      }, 3, 1);
       const text = result.response.text();
       analysisResult = parseJsonResponse(text);
     }
@@ -260,8 +262,6 @@ async function generatePrepContent(sessionId, userId = null) {
       : 'No exam pattern analysis available (no auxiliary materials provided).';
 
     // 6. Generate study guide and revision questions in parallel
-    const tier = selectModelTier({ isComplex: true });
-
     const interestsSection = buildInterestsSection(interests);
     const learningStyleSection = buildLearningStyleSection(learningStyle);
     const paceSection = buildPaceSection(learningPace);
@@ -286,10 +286,15 @@ async function generatePrepContent(sessionId, userId = null) {
       .replace('{quiz_depth_section}', getQuizDepthSection(studyContent))
       .replace('{num_questions}', numRevisionQuestions);
 
-    const model = getGenerativeModel(tier);
     const [guideResult, questionsResult] = await Promise.all([
-      model.generateContent(studyGuidePrompt),
-      model.generateContent(revisionPrompt),
+      withRetryOnRateLimit(async () => {
+        const model = getGenerativeModel(selectModelTier({ isComplex: true }));
+        return model.generateContent(studyGuidePrompt);
+      }, 3, 1),
+      withRetryOnRateLimit(async () => {
+        const model = getGenerativeModel(selectModelTier({ isComplex: true }));
+        return model.generateContent(revisionPrompt);
+      }, 3, 1),
     ]);
 
     const studyGuide = parseJsonResponse(guideResult.response.text());
@@ -362,9 +367,11 @@ async function generatePracticeExam(sessionId, { numQuestions = 20, difficulty =
     .replace('{num_questions}', numQuestions)
     .replace('{quiz_depth_section}', getQuizDepthSection(studyContent));
 
-  const tier = selectModelTier({ isComplex: true });
-  const model = getGenerativeModel(tier);
-  const result = await model.generateContent(prompt);
+  const result = await withRetryOnRateLimit(async () => {
+    const tier = selectModelTier({ isComplex: true });
+    const model = getGenerativeModel(tier);
+    return model.generateContent(prompt);
+  }, 3, 1);
   const parsed = parseJsonResponse(result.response.text());
 
   // Store as a quiz session linked to this prep session

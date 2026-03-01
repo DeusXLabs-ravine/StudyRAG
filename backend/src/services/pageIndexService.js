@@ -1,4 +1,4 @@
-const { getGenerativeModel } = require('../config/gemini');
+const { getGenerativeModel, withRetryOnRateLimit } = require('../config/gemini');
 const { v4: uuidv4 } = require('uuid');
 
 // Constraints matching PageIndex defaults
@@ -276,11 +276,13 @@ async function summarizeBatch(batchPages) {
     return `Page ${p.pageNumber}: ${preview}`;
   }).join('\n---\n');
 
-  const model = getGenerativeModel('fast');
   try {
-    const result = await model.generateContent(
-      `Summarize each page below in ONE sentence (max 25 words each). Return ONLY a JSON array of strings, one summary per page, in order.\n\n${pagesText}\n\nReply ONLY with a JSON array like: ["summary1", "summary2", ...]`
-    );
+    const result = await withRetryOnRateLimit(async () => {
+      const model = getGenerativeModel('fast');
+      return model.generateContent(
+        `Summarize each page below in ONE sentence (max 25 words each). Return ONLY a JSON array of strings, one summary per page, in order.\n\n${pagesText}\n\nReply ONLY with a JSON array like: ["summary1", "summary2", ...]`
+      );
+    }, 3, 1);
     const text = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const summaries = JSON.parse(text);
     if (Array.isArray(summaries)) {
@@ -437,7 +439,6 @@ async function detectTOC(pages) {
   const firstPages = pages.slice(0, Math.min(10, pages.length));
   const text = firstPages.map(p => `--- Page ${p.pageNumber} ---\n${p.text}`).join('\n\n');
 
-  const model = getGenerativeModel('fast');
   const prompt = `Analyze the following text from the beginning of a document.
 Does it contain a Table of Contents (TOC)?
 
@@ -450,7 +451,10 @@ Reply ONLY with valid JSON (no markdown fencing):
 {"has_toc": true/false, "toc_text": "the exact TOC text if found, or empty string"}`;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await withRetryOnRateLimit(async () => {
+      const model = getGenerativeModel('fast');
+      return model.generateContent(prompt);
+    }, 3, 1);
     const responseText = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     return JSON.parse(responseText);
   } catch {
@@ -459,7 +463,6 @@ Reply ONLY with valid JSON (no markdown fencing):
 }
 
 async function buildTreeFromTOC(tocText, pages) {
-  const model = getGenerativeModel('fast');
   const prompt = `Given this Table of Contents and a document with ${pages.length} pages, create a hierarchical tree structure.
 
 Table of Contents:
@@ -489,7 +492,10 @@ Rules:
 - If a section spans more than ${MAX_PAGES_PER_LEAF} pages and has no sub-sections, split it into roughly equal parts`;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await withRetryOnRateLimit(async () => {
+      const model = getGenerativeModel('fast');
+      return model.generateContent(prompt);
+    }, 3, 1);
     const responseText = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const tree = JSON.parse(responseText);
     await addSummaries(tree, pages);
@@ -506,7 +512,6 @@ async function generateTreeStructure(pages) {
     return `Page ${p.pageNumber}: ${p.heading || ''} — ${summary}`;
   }).join('\n');
 
-  const model = getGenerativeModel('fast');
   const prompt = `Analyze these document pages and create a hierarchical structure (like a table of contents).
 
 Page overviews:
@@ -539,7 +544,10 @@ Rules:
 - Page ranges must not overlap and must cover all pages 1 to ${pages.length}`;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await withRetryOnRateLimit(async () => {
+      const model = getGenerativeModel('fast');
+      return model.generateContent(prompt);
+    }, 3, 1);
     const responseText = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const tree = JSON.parse(responseText);
     fixTreePageRanges(tree, 1, pages.length);
@@ -628,11 +636,13 @@ async function generateSummary(pages, startPage, endPage) {
     const combinedSummaries = pageSummaries.join('. ');
     if (combinedSummaries.length < 300) return combinedSummaries;
     // Summarize the summaries for large sections
-    const model = getGenerativeModel('fast');
     try {
-      const result = await model.generateContent(
-        `Combine these page summaries into 2-3 sentences:\n\n${combinedSummaries.slice(0, 3000)}\n\nReply with ONLY the combined summary.`
-      );
+      const result = await withRetryOnRateLimit(async () => {
+        const model = getGenerativeModel('fast');
+        return model.generateContent(
+          `Combine these page summaries into 2-3 sentences:\n\n${combinedSummaries.slice(0, 3000)}\n\nReply with ONLY the combined summary.`
+        );
+      }, 3, 1);
       return result.response.text().trim();
     } catch {
       return combinedSummaries.slice(0, 300);
@@ -642,11 +652,13 @@ async function generateSummary(pages, startPage, endPage) {
   const text = relevantPages.map(p => p.text).join('\n\n');
   const truncated = text.slice(0, 6000);
 
-  const model = getGenerativeModel('fast');
   try {
-    const result = await model.generateContent(
-      `Summarize the following content in 2-3 sentences, capturing the key concepts and topics covered:\n\n${truncated}\n\nReply with ONLY the summary text, no formatting or labels.`
-    );
+    const result = await withRetryOnRateLimit(async () => {
+      const model = getGenerativeModel('fast');
+      return model.generateContent(
+        `Summarize the following content in 2-3 sentences, capturing the key concepts and topics covered:\n\n${truncated}\n\nReply with ONLY the summary text, no formatting or labels.`
+      );
+    }, 3, 1);
     return result.response.text().trim();
   } catch {
     return '';
@@ -676,8 +688,6 @@ async function searchPageIndex(query, treeJson, options = {}) {
     const cached = getCached(cacheKey);
     if (cached) return cached;
   }
-
-  const model = getGenerativeModel('fast');
 
   const treeStr = JSON.stringify(treeJson, null, 2);
   const truncatedTree = treeStr.length > 12000 ? treeStr.slice(0, 12000) + '\n...(truncated)' : treeStr;
@@ -712,7 +722,10 @@ Return ONLY valid JSON (no markdown fencing):
 Return 3-5 most relevant pages. If the question is very broad, return up to 7 pages.`;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await withRetryOnRateLimit(async () => {
+      const model = getGenerativeModel('fast');
+      return model.generateContent(prompt);
+    }, 3, 1);
     const responseText = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const parsed = JSON.parse(responseText);
 
@@ -768,7 +781,6 @@ async function searchMultipleDocuments(query, documentIndexes, options = {}) {
     return `[${i + 1}] "${idx.docName}" — ${tree.summary || tree.title || 'No summary'}\n${childrenSummary}`;
   }).join('\n\n');
 
-  const model = getGenerativeModel('fast');
   const prompt = `You are a librarian helping a student find information across multiple documents.
 
 Available documents:
@@ -787,7 +799,10 @@ Select 1-3 most relevant documents. Use the 1-based index numbers from the list 
 
   let selectedIndices;
   try {
-    const result = await model.generateContent(prompt);
+    const result = await withRetryOnRateLimit(async () => {
+      const model = getGenerativeModel('fast');
+      return model.generateContent(prompt);
+    }, 3, 1);
     const responseText = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const parsed = JSON.parse(responseText);
     selectedIndices = (parsed.documents || [])
