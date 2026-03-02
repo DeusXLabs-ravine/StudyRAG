@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Georgia:wght@400;700&family=Calibri&display=swap');
+
+  :root {
+    --navy:   #1E2761;
+    --purple: #7B2FBE;
+    --teal:   #00C9A7;
+    --lavender: #F0EEFF;
+    --text:   #1A1A2E;
+    --muted:  #64748B;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: Calibri, "Segoe UI", Arial, sans-serif;
+    font-size: 11pt;
+    color: var(--text);
+    background: #ffffff;
+    padding: 0;
+  }
+
+  /* ── Slide separators: every h2 starts a new page ── */
+  h2 {
+    page-break-before: always;
+    background: var(--navy);
+    color: #ffffff;
+    font-family: Georgia, serif;
+    font-size: 18pt;
+    padding: 18px 24px 14px;
+    margin: 0 0 18px 0;
+    border-left: 6px solid var(--teal);
+    letter-spacing: 0.5px;
+  }
+  h2:first-of-type {
+    page-break-before: avoid;
+  }
+
+  h1 {
+    background: var(--navy);
+    color: #ffffff;
+    font-family: Georgia, serif;
+    font-size: 28pt;
+    padding: 36px 32px 10px;
+    margin: 0 0 0 0;
+    letter-spacing: 1px;
+    border-bottom: 4px solid var(--teal);
+  }
+
+  h3 {
+    font-family: Georgia, serif;
+    font-size: 14pt;
+    color: var(--purple);
+    margin: 0 24px 12px;
+    padding-top: 4px;
+  }
+
+  h4 {
+    font-size: 11pt;
+    color: var(--navy);
+    margin: 12px 24px 4px;
+    font-weight: bold;
+  }
+
+  p, li {
+    margin: 6px 24px;
+    line-height: 1.6;
+    color: #2d2d2d;
+  }
+
+  /* ── Blockquotes → callout strip ── */
+  blockquote {
+    background: var(--lavender);
+    border-left: 5px solid var(--purple);
+    margin: 14px 24px;
+    padding: 10px 16px;
+    border-radius: 4px;
+    font-style: italic;
+    color: var(--navy);
+    font-size: 10.5pt;
+  }
+  blockquote p { margin: 0; }
+
+  /* ── Tables ── */
+  table {
+    border-collapse: collapse;
+    width: calc(100% - 48px);
+    margin: 14px 24px;
+    font-size: 10pt;
+  }
+  th {
+    background: var(--navy);
+    color: #ffffff;
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: bold;
+    letter-spacing: 0.3px;
+  }
+  td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #e2e8f0;
+    color: #2d2d2d;
+  }
+  tr:nth-child(even) td { background: #f8f7ff; }
+  tr:first-child td { border-top: 2px solid var(--teal); }
+
+  /* Center-aligned columns (the boolean check/cross columns) */
+  td:nth-child(2), td:nth-child(3), td:nth-child(4), td:nth-child(5) {
+    text-align: center;
+    font-size: 13pt;
+  }
+
+  /* ── Inline code ── */
+  code {
+    background: #f1f5f9;
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-size: 9.5pt;
+    font-family: "Consolas", monospace;
+    color: var(--purple);
+  }
+
+  /* ── Lists ── */
+  ul, ol {
+    margin: 8px 24px 8px 42px;
+    line-height: 1.7;
+  }
+  ul li::marker { color: var(--teal); font-size: 14pt; }
+
+  /* ── Horizontal rules → dividers ── */
+  hr {
+    border: none;
+    border-top: 1px solid #e2e8f0;
+    margin: 16px 24px;
+  }
+
+  /* ── Strong / bold ── */
+  strong { color: var(--navy); }
+
+  /* ── Cover slide special treatment ── */
+  .cover-subtitle {
+    font-size: 13pt;
+    color: var(--muted);
+    padding: 8px 32px 32px;
+    font-style: italic;
+  }
+
+  /* ── Page footer ── */
+  @page {
+    size: A4;
+    margin: 0;
+    @bottom-center {
+      content: "StudyRAG  |  Confidential  |  2026";
+      font-size: 8pt;
+      color: #94a3b8;
+      font-family: Calibri, Arial, sans-serif;
+      padding-bottom: 4px;
+    }
+  }
+
+  /* First page: cover — no top margin squeeze */
+  @page :first {
+    margin: 0;
+  }
+
+  /* Content area padding (outside h1/h2) */
+  .content-wrap {
+    padding: 4px 0 24px;
+  }
+</style>
+</head>
+<body>
+<p>﻿# StudyRAG  Investor Pitch Deck 2026</p>
+<blockquote>
+<p><strong>Tagline:</strong> The AI Tutor That Knows Exactly What You're Studying.</p>
+</blockquote>
+<hr />
+<h2>SLIDE 1  COVER</h2>
+<p><strong>StudyRAG</strong></p>
+<p>The AI Tutor That Knows Exactly What You're Studying.</p>
+<p>Upload your course documents. Get answers, flashcards, quizzes, and a personal AI tutor  grounded in YOUR curriculum.</p>
+<p>** Launching March 2, 2026**</p>
+<p><em>Personalized Learning  RAG-Powered  Adaptive AI Tutoring</em></p>
+<hr />
+<h2>SLIDE 2  THE PROBLEM</h2>
+<h3>Students Are Drowning in Generic AI</h3>
+<p>** Static Study Materials**
+Textbooks and slides don't answer questions. Students spend hours rereading the same pages without ever knowing if they've actually mastered the content.</p>
+<p>** Generic AI Hallucinations**
+ChatGPT and other LLMs make up facts, cite wrong sources, and have no idea what subject the student is actually studying.</p>
+<p>** Zero Personalization**
+Existing AI tools treat every student the same. There's no adaptation to skill level, weak topics, or the specific course curriculum.</p>
+<hr />
+<blockquote>
+<p><strong>76% of college students report feeling overwhelmed by study material  yet only 15% use any AI study tool effectively.</strong></p>
+</blockquote>
+<hr />
+<h2>SLIDE 3  OUR SOLUTION</h2>
+<h3>Context-Aware AI, Built Around Your Documents</h3>
+<p><strong>How StudyRAG Works</strong></p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Action</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>01</td>
+<td>Upload</td>
+<td>PDFs, Docx, TXT  your notes, slides, or textbooks</td>
+</tr>
+<tr>
+<td>02</td>
+<td>Index</td>
+<td>Smart context-aware chunking + page indexing</td>
+</tr>
+<tr>
+<td>03</td>
+<td>Learn</td>
+<td>Ask Sage (our AI tutor) anything. Get cited, grounded answers</td>
+</tr>
+<tr>
+<td>04</td>
+<td>Grow</td>
+<td>Auto-generated quizzes, flashcards &amp; modules adapt as you improve</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Key Differentiators</strong></p>
+<ul>
+<li><strong>No Hallucinations</strong>  Answers grounded in your actual documents with direct citations</li>
+<li><strong>Adaptive Mastery</strong>  AI tracks your skill level from Beginner  Advanced in real-time</li>
+<li><strong>Full Study Suite</strong>  Tutor + Flashcards + Quizzes + Simulations + Exam Prep in one place</li>
+<li><strong>Your Data, Your Docs</strong>  Completely private; documents never leave your personal vault</li>
+</ul>
+<hr />
+<h2>SLIDE 4  PRODUCT FEATURES</h2>
+<h3>A Complete AI-Powered Learning Platform</h3>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Sage AI Tutor</strong></td>
+<td>Context-aware tutor with voice input, multi-doc chat, mastery tracking, and bridge modules</td>
+</tr>
+<tr>
+<td><strong>Learn Modules</strong></td>
+<td>Auto-generated structured modules with objectives, key concepts, and practice Q&amp;A</td>
+</tr>
+<tr>
+<td><strong>Smart Flashcards</strong></td>
+<td>SM-2 spaced repetition algorithm. Auto-generated from uploaded documents</td>
+</tr>
+<tr>
+<td><strong>Adaptive Quizzes</strong></td>
+<td>MCQ &amp; open-ended quizzes focused on weak topics. Full analytics included</td>
+</tr>
+<tr>
+<td><strong>STEM Simulations</strong></td>
+<td>Interactive physics/chemistry simulations (projectile, thermodynamics, waves) on-demand</td>
+</tr>
+<tr>
+<td><strong>Exam Prep Mode</strong></td>
+<td>Full mock exams, essay evaluation, step-by-step STEM problem solver with LaTeX</td>
+</tr>
+<tr>
+<td><strong>Audio Overviews</strong></td>
+<td>NotebookLM-style AI-generated conversational audio summaries of your documents</td>
+</tr>
+<tr>
+<td><strong>Analytics Dashboard</strong></td>
+<td>Study streaks, mastery scores, weak topic detection, AI-powered study recommendations</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>SLIDE 5  MARKET OPPORTUNITY</h2>
+<h3>A Massive, Fast-Growing Addressable Market</h3>
+<table>
+<thead>
+<tr>
+<th>Market</th>
+<th>Size</th>
+<th>Growth</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AI in EdTech (2024)</td>
+<td><strong>$5.1 Billion</strong></td>
+<td>38% CAGR</td>
+</tr>
+<tr>
+<td>AI in EdTech (2030 proj.)</td>
+<td><strong>$38+ Billion</strong></td>
+<td></td>
+</tr>
+<tr>
+<td>RAG Market (2024)</td>
+<td><strong>$1.2 Billion</strong></td>
+<td>49% CAGR to 2030</td>
+</tr>
+<tr>
+<td>Global Student Population</td>
+<td><strong>1.5+ Billion</strong></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Market Segments</strong></p>
+<ul>
+<li><strong>TAM</strong>  1.5B global students (university + high school)</li>
+<li><strong>SAM</strong>  220M university students globally</li>
+<li><strong>SOM</strong>  Year 1 target: 50,000 active users</li>
+</ul>
+<blockquote>
+<p>The personalized AI learning market is the fastest-growing segment of EdTech, with no dominant platform grounded in student-owned documents.</p>
+</blockquote>
+<hr />
+<h2>SLIDE 6  COMPETITIVE LANDSCAPE</h2>
+<h3>StudyRAG Leads Where Others Stop</h3>
+<table>
+<thead>
+<tr>
+<th>Platform</th>
+<th style="text-align: center;">Doc-Grounded RAG</th>
+<th style="text-align: center;">Adaptive AI</th>
+<th style="text-align: center;">STEM Simulations</th>
+<th style="text-align: center;">Private Docs</th>
+<th>Pricing</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>StudyRAG</strong></td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td>Free / $12/mo</td>
+</tr>
+<tr>
+<td>StudyFetch</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+<td>$9-$20/mo</td>
+</tr>
+<tr>
+<td>Khanmigo</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+<td>$4-$8/mo</td>
+</tr>
+<tr>
+<td>Quizlet AI</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+<td>$3-$8/mo</td>
+</tr>
+<tr>
+<td>Mindgrasp</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">✅</td>
+<td>$7-$14/mo</td>
+</tr>
+<tr>
+<td>NotebookLM</td>
+<td style="text-align: center;">✅</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">❌</td>
+<td style="text-align: center;">✅</td>
+<td>Free</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>StudyRAG is the only platform combining document-grounded RAG + adaptive AI + STEM simulations + full privacy at a competitive price.</strong></p>
+</blockquote>
+<hr />
+<h2>SLIDE 7  TECHNOLOGY</h2>
+<h3>Built on State-of-the-Art AI Infrastructure</h3>
+<p><strong>RAG Pipeline</strong></p>
+<ol>
+<li><strong>Document Upload</strong>  PDF, DOCX, TXT via Cloudinary CDN</li>
+<li><strong>Chunking &amp; Indexing</strong>  Smart context-aware chunking + page-level indexing</li>
+<li><strong>Embedding</strong>  Google Gemini <code>text-embedding-004</code></li>
+<li><strong>Vector Store</strong>  Supabase pgvector with cosine similarity search</li>
+<li><strong>Augmented Generation</strong>  Gemini 2.0 Flash + retrieved context + inline citations</li>
+<li><strong>Adaptive Response</strong>  Mastery-aware prompt engineering (Beginner  Advanced)</li>
+</ol>
+<p><strong>Tech Stack</strong></p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Technology</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Frontend</td>
+<td>React + Vite + Tailwind CSS</td>
+</tr>
+<tr>
+<td>Backend</td>
+<td>Node.js + Express REST API</td>
+</tr>
+<tr>
+<td>AI / LLM</td>
+<td>Google Gemini 2.0 Flash</td>
+</tr>
+<tr>
+<td>Database</td>
+<td>Supabase PostgreSQL + pgvector</td>
+</tr>
+<tr>
+<td>Storage</td>
+<td>Cloudinary CDN</td>
+</tr>
+<tr>
+<td>Search</td>
+<td>Semantic cosine similarity search</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>SLIDE 8  BUSINESS MODEL</h2>
+<h3>Freemium SaaS with Clear Upgrade Path</h3>
+<p><strong>FREE TIER  $0/month</strong>
+- Up to 5 library documents
+- Basic RAG retrieval
+- Auto-generated quizzes
+- 20 flashcards/day limit
+- Web link indexing (limited)
+- Community support</p>
+<p><strong>PRO TIER  $12/month</strong>  Most Popular
+- Unlimited library storage
+- Sage Pro reasoning model
+- Unlimited flashcards &amp; quizzes
+- Deep context citation engine
+- Excel &amp; STEM LaTeX support
+- Adaptive learning analytics
+- Audio overview generator
+- Priority 24/7 support</p>
+<p><strong>Future Revenue Streams</strong>
+- Institutional licensing (universities &amp; high schools)
+- API access for developers
+- White-label platform for EdTech companies
+- LMS integrations (Canvas, Blackboard, Moodle)</p>
+<hr />
+<h2>SLIDE 9  TRACTION &amp; ROADMAP</h2>
+<h3>Pre-Launch, Fully Built, Ready to Ship</h3>
+<p>** What We've Already Shipped**</p>
+<ul>
+<li>Full RAG pipeline with pgvector semantic search</li>
+<li>Sage AI Tutor with voice input &amp; adaptive mastery levels</li>
+<li>Automated module, flashcard &amp; quiz generation</li>
+<li>Interactive STEM simulations (on-demand)</li>
+<li>Audio Overview (NotebookLM-style podcast summaries)</li>
+<li>Accessibility suite (reading ruler, break reminders, dyslexia mode)</li>
+<li>Analytics dashboard with streak &amp; mastery tracking</li>
+<li>Gamification: XP, streaks, achievement system</li>
+</ul>
+<p>** Early Traction (Pre-Launch)**</p>
+<ul>
+<li><strong>20 early access users</strong> testing the platform ahead of public launch</li>
+<li>Positive qualitative feedback on Sage tutor and module generation</li>
+<li><strong>Launching publicly: March 2, 2026</strong></li>
+<li>Subscription monetisation activating at launch</li>
+</ul>
+<p>** 2026 Roadmap**</p>
+<table>
+<thead>
+<tr>
+<th>Period</th>
+<th>Milestone</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>March 2026</td>
+<td><strong>Public launch</strong>  subscription goes live</td>
+</tr>
+<tr>
+<td>Q2 2026</td>
+<td>University pilot program (23 schools), SEO content push</td>
+</tr>
+<tr>
+<td>Q3 2026</td>
+<td>Mobile app (iOS + Android), institutional dashboard</td>
+</tr>
+<tr>
+<td>Q4 2026</td>
+<td>LMS integrations (Canvas, Moodle), 5K+ active user target</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>SLIDE 10  GO-TO-MARKET</h2>
+<h3>Community-Led Growth to Institutional Scale</h3>
+<p><strong>Phase 1  Launch (MarchSept 2026 | Target: 1,0005,000 users)</strong>
+- Reddit &amp; Discord study communities (r/premed, r/learnprogramming, r/studytips)
+- University student clubs  CS, Medical, Law schools
+- TikTok / YouTube study-creator partnerships
+- Free tier as viral acquisition engine; freemium conversion to $12 Pro</p>
+<p><strong>Phase 2  Scale (Q4 20262027 | Target: 20K50K users)</strong>
+- Formal university pilot programs with learning analytics
+- SEO content marketing (study tips, RAG explainers, exam prep guides)
+- Integrations with Canvas, Blackboard, Moodle
+- B2B institutional licensing (seat-based pricing)</p>
+<p><strong>Phase 3  Enterprise (20272028 | Target: 100K+ users)</strong>
+- National higher-ed partnership agreements
+- White-label platform for corporate training
+- Mobile-first international expansion (Southeast Asia, LATAM)
+- Vertical specialization: Medical, Law, Engineering AI tutors</p>
+<hr />
+<h2>SLIDE 11  FINANCIALS &amp; THE ASK</h2>
+<h3>Lean by Design  Pre-Revenue, Near Zero Burn</h3>
+<p><strong>Current Status (March 2026)</strong>
+- <strong>Revenue:</strong> $0  subscription launches March 2, 2026
+- <strong>Active users:</strong> 20 (early access / testers)
+- <strong>Monthly burn:</strong> ~$150 (infrastructure only)</p>
+<p><strong>Monthly Operating Costs</strong></p>
+<table>
+<thead>
+<tr>
+<th>Service</th>
+<th>Est. Cost</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Google Gemini API</td>
+<td>$0$30</td>
+<td>Free tier covers ~90% of usage</td>
+</tr>
+<tr>
+<td>Supabase (Pro Plan)</td>
+<td>$25</td>
+<td>DB, Auth, Realtime, vector store</td>
+</tr>
+<tr>
+<td>Cloudinary (Plus)</td>
+<td>$89</td>
+<td>Document CDN storage</td>
+</tr>
+<tr>
+<td>Hosting (Render + Vercel)</td>
+<td>$7$20</td>
+<td>Backend + frontend</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>~$150/mo</strong></td>
+<td>Extremely lean</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Revenue Projections</strong> <em>(post-launch, conservative)</em></p>
+<table>
+<thead>
+<tr>
+<th>Period</th>
+<th>Pro Users</th>
+<th>Monthly Revenue</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Month 3 (May 2026)</td>
+<td>50100</td>
+<td>$600$1,200</td>
+</tr>
+<tr>
+<td>Month 6 (Sept 2026)</td>
+<td>200500</td>
+<td>$2,400$6,000</td>
+</tr>
+<tr>
+<td>Month 12 (Mar 2027)</td>
+<td>1,0003,000</td>
+<td>$12K$36K</td>
+</tr>
+<tr>
+<td>Year 2 (2028)</td>
+<td>5,00015,000</td>
+<td>$60K$180K</td>
+</tr>
+</tbody>
+</table>
+<p><em>Assumes 35% freemium  Pro conversion. No institutional revenue included in these figures.</em></p>
+<blockquote>
+<p><strong>Break-even: ~1,250 Pro subscribers</strong> ($15K/mo revenue vs ~$150/mo ops cost @ current scale)</p>
+</blockquote>
+<hr />
+<h3>THE ASK  Seeking $250,000 Seed Round</h3>
+<p><strong>Use of Funds</strong>
+- 40%  Infrastructure scaling &amp; cloud costs
+- 30%  Mobile app development (iOS + Android)
+- 20%  University partnership program &amp; sales
+- 10%  Marketing &amp; growth experiments</p>
+<hr />
+<h2>SLIDE 12  TEAM</h2>
+<h3>Driven by Passion for Learning &amp; Technology</h3>
+<p><strong>[Founder / CEO]</strong>  Full-Stack AI Engineer
+<em>RAG Systems, LLM Engineering, Backend Architecture, Product Vision</em></p>
+<p><strong>[Co-Founder / CTO]</strong>  ML &amp; Infrastructure
+<em>Google Gemini, Vector Databases, Supabase, DevOps, Scalability</em></p>
+<p><strong>[Head of Product]</strong>  EdTech &amp; UX Design
+<em>Learning Science, Student Experience, Pedagogy Design, Growth</em></p>
+<p><strong>[Advisor]</strong>  Education Industry
+<em>University Partnerships, Curriculum Design, Institutional Sales</em></p>
+<hr />
+<h2>SLIDE 13  CLOSING / CALL TO ACTION</h2>
+<h3>The Future of AI-Powered Learning Is Personal.</h3>
+<p>StudyRAG is not just another chatbot  it's the first AI tutor that truly understands what YOU are studying, adapts to YOUR pace, and grows smarter with every session.</p>
+<p><strong>Every student deserves a private tutor. We're making that a reality.</strong></p>
+<hr />
+<blockquote>
+<p><strong>contact@studyrag.ai</strong>
+ <strong>studyrag.ai</strong>
+ <strong>github.com/studyrag</strong></p>
+</blockquote>
+<p>*Let's Build the Future Together *</p>
+<hr />
+<h2>APPENDIX  Key Stats to Reference</h2>
+<ul>
+<li>Global AI in EdTech market: <strong>$5.1B (2024)</strong>  <strong>$38B+ (2030)</strong> at 38% CAGR <em>(Source: Research &amp; Markets)</em></li>
+<li>RAG market: <strong>$1.2B (2024)</strong>  <strong>$11B (2030)</strong> at 49% CAGR <em>(Source: Grand View Research)</em></li>
+<li>76% of students overwhelmed by study materials <em>(Education research surveys)</em></li>
+<li>1.5B+ global students represent the addressable universe</li>
+<li><strong>Current traction: 20 early access users, pre-revenue</strong></li>
+<li><strong>Public launch: March 2, 2026</strong></li>
+<li>Break-even at just <strong>~1,250 Pro subscribers</strong> ($15K/mo revenue vs ~$150/mo ops cost)</li>
+</ul>
+</body>
+</html>

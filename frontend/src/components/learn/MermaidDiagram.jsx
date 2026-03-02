@@ -25,36 +25,37 @@ export default function MermaidDiagram({ code, id }) {
       try {
         setError(null);
 
-        // Preprocessing for Mermaid AI Output:
-        // 1. Replace legacy 'graph' with 'flowchart' (more resilient in mermaid v11)
-        // 2. Convert labeled-edge syntax that mermaid doesn't support:
-        //    - A -- label --> B  => A -->|label| B
-        //    - A -- label -- B   => A ---|label| B
-        // 3. Sanitize newlines inside node labels
-        let sanitizedCode = code
-          // 1. Replace legacy 'graph' with 'flowchart' (more resilient in mermaid v11)
-          .replace(/^graph\b/m, 'flowchart')
-          // 2. Fix labeled directed edges: A -- label text --> B  =>  A -->|label text| B
-          .replace(/^(\s*\S+(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})?)\s+--\s+([^-|][^-]*?)\s+-->\s+/gm,
-            '$1 -->|$2| ')
-          // 3. Fix labeled undirected edges: A -- label text -- B  =>  A ---|label text| B
-          .replace(/^(\s*\S+(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})?)\s+--\s+([^-|][^-]*?)\s+--\s+/gm,
-            '$1 ---|$2| ')
-          // 4. Sanitize literal newlines inside node labels
-          .replace(/(\[[^\]]+\]|\([^)]+\)|\{[^}]+\})/g, (match) => {
-            return match.replace(/\n/g, '<br/>');
-          })
-          // 5. Wrap node labels containing special characters in quotes
-          //    Catches: parentheses, braces, #, &, commas, semicolons, colons, pipes, quotes
-          //    e.g. A[Origin (0,0)] → A["Origin (0,0)"]
-          .replace(/\[([^\]"]+)\]/g, (match, inner) => {
-            if (/[(){}#&,;:|'`<>]/.test(inner)) return `["${inner.replace(/"/g, '')}"]`;
-            return match;
-          })
-          // 6. Remove trailing semicolons that break parsing
-          .replace(/;\s*$/gm, '')
-          // 7. Escape HTML-like angle brackets in labels that aren't Mermaid markup
-          .replace(/\["([^"]*)<(?!br\s*\/?>)([^"]*?)>([^"]*?)"\]/g, '["$1‹$2›$3"]');
+        // Preprocessing for Mermaid AI Output.
+        // Only apply flowchart-specific sanitization to flowchart/graph types.
+        // Other types (mindmap, sequence, class, state, etc.) pass through as-is.
+        let sanitizedCode = code.trim();
+        const firstLine = sanitizedCode.split('\n')[0].trim().toLowerCase();
+        const isFlowchart = firstLine.startsWith('graph') || firstLine.startsWith('flowchart');
+
+        if (isFlowchart) {
+          sanitizedCode = sanitizedCode
+            // Replace legacy 'graph' with 'flowchart'
+            .replace(/^graph\b/m, 'flowchart')
+            // Fix labeled directed edges: A -- label --> B  =>  A -->|label| B
+            .replace(/^(\s*\S+(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})?)\s+--\s+([^-|][^-]*?)\s+-->\s+/gm,
+              '$1 -->|$2| ')
+            // Fix labeled undirected edges: A -- label -- B  =>  A ---|label| B
+            .replace(/^(\s*\S+(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})?)\s+--\s+([^-|][^-]*?)\s+--\s+/gm,
+              '$1 ---|$2| ')
+            // Sanitize literal newlines inside node labels
+            .replace(/(\[[^\]]+\]|\([^)]+\)|\{[^}]+\})/g, (match) => {
+              return match.replace(/\n/g, '<br/>');
+            })
+            // Wrap node labels containing special characters in quotes
+            .replace(/\[([^\]"]+)\]/g, (match, inner) => {
+              if (/[(){}#&,;:|'`<>]/.test(inner)) return `["${inner.replace(/"/g, '')}"]`;
+              return match;
+            })
+            // Remove trailing semicolons
+            .replace(/;\s*$/gm, '')
+            // Escape HTML-like angle brackets in labels
+            .replace(/\["([^"]*)<(?!br\s*\/?>)([^"]*?)>([^"]*?)"\]/g, '["$1‹$2›$3"]');
+        }
 
         const { svg: rendered } = await mermaid.render(renderKey, sanitizedCode);
         if (!cancelled) setSvg(rendered);

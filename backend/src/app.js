@@ -57,6 +57,9 @@ app.use(cors({
   credentials: true,
 }));
 
+// Trust proxy when behind Railway/Nginx/Cloudflare (needed for rate limiting + real IP detection)
+app.set('trust proxy', 1);
+
 app.use(express.json({ limit: '200mb' })); // Large enough for 1K+ page document uploads
 app.use(express.urlencoded({ extended: true }));
 

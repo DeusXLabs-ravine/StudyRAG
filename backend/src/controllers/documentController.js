@@ -192,10 +192,15 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
     return result;
   })();
 
-  // Page index is critical — chat/search won't work without it
-  const pageCount = await pageIndexPromise;
+  // Wait for both page index AND initial modules before marking ready.
+  // This ensures the user sees modules immediately when redirected to Learn.
+  const [pageCount] = await Promise.all([
+    pageIndexPromise,
+    modulesPromise.catch(err => {
+      console.error(`${prefix} Initial module generation failed (non-fatal): ${err.message}`);
+    }),
+  ]);
 
-  // Mark document as ready immediately — chat is available now
   await vectorStore.updateDocumentStatus(docId, {
     status: 'ready',
     processedDate: new Date().toISOString(),
@@ -203,13 +208,7 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
     extractedMetadata: metadata,
   });
 
-  log('READY (chat available)', pipelineStart);
-
-  // Module generation continues in background — failure is non-fatal
-  // (document is still usable for chat, modules just won't appear on Learn)
-  modulesPromise.catch(err => {
-    console.error(`${prefix} Initial module generation failed (non-fatal): ${err.message}`);
-  });
+  log('READY (modules + chat available)', pipelineStart);
 
   // Phase 2: Background — remaining modules + web research + enrichment.
   // Chains off modulesPromise so remaining modules start after initial ones finish.

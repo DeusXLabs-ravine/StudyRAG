@@ -2,6 +2,12 @@ const supabase = require('../config/database');
 const { generateEmbedding, TaskType } = require('./embeddingService');
 const { embeddingCache, documentCache } = require('../config/cache');
 
+/** Strip null bytes and other characters that PostgreSQL text columns reject. */
+function sanitizeForPostgres(text) {
+  if (!text) return text;
+  return text.replace(/\u0000/g, '');
+}
+
 // ─── Document CRUD ────────────────────────────────────────────
 
 async function addDocument(docId, metadata) {
@@ -23,7 +29,7 @@ async function addDocument(docId, metadata) {
   if (metadata.userId) row.user_id = metadata.userId;
   if (metadata.sourceType) row.source_type = metadata.sourceType;
   if (metadata.sourceUrl) row.source_url = metadata.sourceUrl;
-  if (metadata.sourceContent !== undefined) row.source_content = metadata.sourceContent;
+  if (metadata.sourceContent !== undefined) row.source_content = sanitizeForPostgres(metadata.sourceContent);
   if (metadata.isPrimarySource !== undefined) row.is_primary_source = metadata.isPrimarySource;
   const { error } = await supabase.from('documents').upsert(row);
   if (error) throw error;
@@ -123,8 +129,8 @@ async function addPages(docId, pages) {
     id: page.id || require('uuid').v4(),
     doc_id: docId,
     page_number: page.pageNumber,
-    text: page.text,
-    heading: page.heading || null,
+    text: sanitizeForPostgres(page.text),
+    heading: sanitizeForPostgres(page.heading) || null,
   }));
 
   const BATCH_SIZE = 50;
