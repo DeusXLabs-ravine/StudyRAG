@@ -51,8 +51,8 @@ async function addChunks(docId, chunks) {
   const rows = chunks.map(chunk => ({
     id: chunk.id,
     doc_id: docId,
-    text: chunk.text,
-    heading: chunk.heading || null,
+    text: sanitizeForPostgres(chunk.text),
+    heading: sanitizeForPostgres(chunk.heading) || null,
     embedding: JSON.stringify(chunk.embedding),
   }));
 
@@ -144,7 +144,7 @@ async function addPages(docId, pages) {
 async function addPageIndex(docId, treeJson, pageCount) {
   const { error } = await supabase
     .from('page_index')
-    .upsert({ doc_id: docId, tree_json: treeJson, page_count: pageCount });
+    .upsert({ doc_id: docId, tree_json: typeof treeJson === 'string' ? sanitizeForPostgres(treeJson) : JSON.parse(sanitizeForPostgres(JSON.stringify(treeJson))), page_count: pageCount });
   if (error) throw error;
   documentCache.del(`pageIdx:${docId}`);
   documentCache.invalidatePrefix('allPageIdx');
@@ -376,8 +376,11 @@ async function updateDocumentStatus(docId, fields) {
   if (fields.status !== undefined) update.status = fields.status;
   if (fields.processedDate !== undefined) update.processed_date = fields.processedDate;
   if (fields.chunkCount !== undefined) update.chunk_count = fields.chunkCount;
-  if (fields.extractedMetadata !== undefined) update.extracted_metadata = fields.extractedMetadata;
-  if (fields.error !== undefined) update.error_message = fields.error;
+  if (fields.extractedMetadata !== undefined) {
+    // Sanitize metadata JSON to strip null bytes that Postgres rejects
+    update.extracted_metadata = JSON.parse(sanitizeForPostgres(JSON.stringify(fields.extractedMetadata)));
+  }
+  if (fields.error !== undefined) update.error_message = sanitizeForPostgres(fields.error);
   if (fields.isPrimarySource !== undefined) update.is_primary_source = fields.isPrimarySource;
 
   const { error } = await supabase.from('documents').update(update).eq('id', docId);

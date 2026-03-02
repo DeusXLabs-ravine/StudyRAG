@@ -756,10 +756,11 @@ async function registerTopic(req, res, next) {
         const { researchTopic } = getTopicResearchService();
         const { text, sources, metadata } = await researchTopic(topicTitle, userId);
 
-        // Store the researched text as source_content
+        // Store the researched text as source_content (strip null bytes for Postgres)
+        const cleanText = text.replace(/\u0000/g, '');
         await supabase.from('documents').update({
-          source_content: text,
-          file_size: text.length,
+          source_content: cleanText,
+          file_size: cleanText.length,
         }).eq('id', docId);
 
         // Store verified grounding sources as document resources
