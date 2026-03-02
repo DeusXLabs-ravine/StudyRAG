@@ -933,7 +933,8 @@ function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded,
   const [isPhotoActive, setIsPhotoActive] = useState(false);
   const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
 
-  const voiceInputEnabled = settings?.a11y_voice_input === 'true';
+  const a11ySettings = useSettingsStore(state => state.settings);
+  const voiceInputEnabled = a11ySettings?.a11y_voice_input === 'true';
   const { isListening: isVoiceListening, isSupported: isVoiceSupported, toggle: voiceToggle } = useVoiceInput({
     onTranscript: (text) => setInput(prev => prev + ' ' + text)
   });
