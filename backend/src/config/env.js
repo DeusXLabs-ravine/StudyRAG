@@ -20,6 +20,7 @@ const config = {
   allowedFileTypes: (process.env.ALLOWED_FILE_TYPES || 'pdf,docx,pptx,txt,md,ipynb,py,js,ts,jsx,tsx,java,c,cpp,h,hpp,go,rs,rb,php,swift,kt,scala,r,html,css,scss,json,xml,csv,yaml,yml,toml,sql,sh').split(','),
   allowedOrigins: [...new Set([...(process.env.ALLOWED_ORIGINS || 'http://localhost:5173').split(','), 'https://studyrag.co', 'https://api.studyrag.co'])],
   webhookSecret: process.env.WEBHOOK_SECRET || null,
+  resendApiKey: process.env.RESEND_API_KEY || null,
   cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME,
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY,
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET,

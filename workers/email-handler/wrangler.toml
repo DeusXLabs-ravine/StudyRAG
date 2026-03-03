@@ -1,0 +1,9 @@
+name = "studyrag-email-handler"
+main = "worker.ts"
+compatibility_date = "2024-12-01"
+
+[vars]
+WEBHOOK_URL = "https://api.studyrag.co/webhooks/email"
+
+# Set WEBHOOK_SECRET via `wrangler secret put WEBHOOK_SECRET`
+# Do NOT put secrets in this file
