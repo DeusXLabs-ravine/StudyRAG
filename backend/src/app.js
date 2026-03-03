@@ -24,25 +24,24 @@ const courseRoutes = require('./routes/courseRoutes');
 const medicalResourceRoutes = require('./routes/medicalResourceRoutes');
 const gameRoutes = require('./routes/gameRoutes');
 const simulationRoutes = require('./routes/simulationRoutes');
+const webhookRoutes = require('./routes/webhookRoutes');
 
 const app = express();
 
 // ─── Performance Middleware ───────────────────────────────────
 
-// Gzip/Brotli compression — reduces response size ~80% for JSON/text
 app.use(compression({
   level: 6,
-  threshold: 1024, // Only compress responses > 1KB
+  threshold: 1024,
   filter: (req, res) => {
     if (req.headers['x-no-compression']) return false;
     return compression.filter(req, res);
   },
 }));
 
-// Request timeout — longer for document upload/processing, standard for everything else
+// Request timeout — longer for document upload/processing
 app.use((req, res, next) => {
-  // Document upload/processing endpoints get 10 minutes (1K+ page docs need time)
-  if (req.path.startsWith('/api/documents') && (req.method === 'POST' || req.method === 'PUT')) {
+  if (req.path.startsWith('/documents') && (req.method === 'POST' || req.method === 'PUT')) {
     res.setTimeout(600000); // 10 min for uploads
   } else {
     res.setTimeout(120000); // 2 min for everything else
@@ -57,15 +56,14 @@ app.use(cors({
   credentials: true,
 }));
 
-// Trust proxy when behind Railway/Nginx/Cloudflare (needed for rate limiting + real IP detection)
+// Trust proxy when behind Railway/Nginx/Cloudflare
 app.set('trust proxy', 1);
 
-app.use(express.json({ limit: '200mb' })); // Large enough for 1K+ page document uploads
+app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // ─── Rate Limiting ────────────────────────────────────────────
 
-// Global rate limit: 200 req/min per IP (generous for normal use)
 const globalLimiter = rateLimit({
   windowMs: 60_000,
   max: 200,
@@ -74,20 +72,19 @@ const globalLimiter = rateLimit({
   message: { error: { message: "We're experiencing high demand right now. Please try again in a minute." } },
 });
 
-// Strict rate limit for expensive endpoints (LLM generation)
 const generationLimiter = rateLimit({
   windowMs: 60_000,
-  max: 20, // 20 generation requests per minute per IP
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: { message: "Lots of people are studying right now! Please wait a moment and try again." } },
 });
 
-app.use('/api', globalLimiter);
+app.use(globalLimiter);
 
 // ─── Health & Monitoring ──────────────────────────────────────
 
-app.get('/api/health', (req, res) => {
+app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -96,7 +93,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-app.get('/api/cache-stats', (req, res) => {
+app.get('/cache-stats', (req, res) => {
   const { requestQueue } = require('./config/gemini');
   res.json({
     caches: getAllCacheStats(),
@@ -104,47 +101,54 @@ app.get('/api/cache-stats', (req, res) => {
   });
 });
 
+// ─── Webhooks (no auth — verified via webhook secret) ────────
+
+app.use('/webhooks', webhookRoutes);
+
 // ─── Auth routes (requireAuth applied per-route inside authRoutes) ──
 
-app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
 
-// Protect all other /api routes with auth middleware
-app.use('/api', requireAuth);
+// Protect all remaining routes with auth middleware
+app.use(requireAuth);
 
 // ─── Application Routes ───────────────────────────────────────
 
-app.use('/api/documents', documentRoutes);
-app.use('/api/modules', moduleRoutes);
-app.use('/api/chat', chatRoutes);
-app.use('/api/quiz', quizRoutes);
-app.use('/api/flashcards', flashcardRoutes);
-app.use('/api/analytics', analyticsRoutes);
-app.use('/api/aptitude', aptitudeRoutes);
-app.use('/api/exam', examRoutes);
-app.use('/api/solver', solverRoutes);
-app.use('/api/tts', ttsRoutes);
-app.use('/api/diagrams', diagramRoutes);
-app.use('/api/courses', courseRoutes);
-app.use('/api/medical', medicalResourceRoutes);
-app.use('/api/games', gameRoutes);
-app.use('/api/simulations', simulationRoutes);
+app.use('/documents', documentRoutes);
+app.use('/modules', moduleRoutes);
+app.use('/chat', chatRoutes);
+app.use('/quiz', quizRoutes);
+app.use('/flashcards', flashcardRoutes);
+app.use('/analytics', analyticsRoutes);
+app.use('/aptitude', aptitudeRoutes);
+app.use('/exam', examRoutes);
+app.use('/solver', solverRoutes);
+app.use('/tts', ttsRoutes);
+app.use('/diagrams', diagramRoutes);
+app.use('/courses', courseRoutes);
+app.use('/medical', medicalResourceRoutes);
+app.use('/games', gameRoutes);
+app.use('/simulations', simulationRoutes);
 
-// Apply strict rate limit to expensive generation endpoints
-app.use('/api/diagrams/generate', generationLimiter);
-app.use('/api/medical/enrich', generationLimiter);
-app.use('/api/games/generate', generationLimiter);
-app.use('/api/simulations/generate-params', generationLimiter);
+// Strict rate limit for expensive generation endpoints
+app.use('/diagrams/generate', generationLimiter);
+app.use('/medical/enrich', generationLimiter);
+app.use('/games/generate', generationLimiter);
+app.use('/simulations/generate-params', generationLimiter);
 
 // ─── Static & SPA Fallback ───────────────────────────────────
 
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.join(__dirname, '../../frontend/dist');
   app.use(express.static(distPath, {
-    maxAge: '1d', // Browser cache static assets for 1 day
+    maxAge: '1d',
     etag: true,
   }));
   app.get('/{*path}', (req, res, next) => {
-    if (req.path.startsWith('/api')) {
+    // Don't serve SPA for API routes
+    if (req.path.startsWith('/auth') || req.path.startsWith('/documents') ||
+        req.path.startsWith('/modules') || req.path.startsWith('/chat') ||
+        req.path.startsWith('/webhooks') || req.path.startsWith('/health')) {
       return next();
     }
     res.sendFile(path.join(distPath, 'index.html'));

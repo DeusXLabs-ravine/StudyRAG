@@ -1,8 +1,11 @@
 import axios from 'axios';
 import useAuthStore from '../store/authStore';
 
+// In production, use the api subdomain. In dev, proxy through Vite.
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE,
   timeout: 120000,
   headers: {
     'Content-Type': 'application/json',

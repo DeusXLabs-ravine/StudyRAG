@@ -48,7 +48,8 @@ export async function fetchSpeechStream(text, voiceId, signal) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const response = await fetch('/api/tts/speak/stream', {
+  const baseUrl = import.meta.env.VITE_API_URL || '/api';
+  const response = await fetch(`${baseUrl}/tts/speak/stream`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ text, voiceId }),
