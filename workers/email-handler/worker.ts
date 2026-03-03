@@ -39,13 +39,19 @@ export default {
 
     console.log(`[EmailWorker] ${from} → ${toAddr}`);
 
-    // 1. Forward to Gmail (runs in parallel with webhook POST)
+    // 1. Forward to Gmail
     const forwardDest = FORWARD_MAP[toAddr];
-    const forwardPromise = forwardDest
-      ? message.forward(forwardDest).catch(err =>
-          console.error(`[EmailWorker] Forward to ${forwardDest} failed:`, err)
-        )
-      : Promise.resolve();
+    if (forwardDest) {
+      console.log(`[EmailWorker] Forwarding ${toAddr} → ${forwardDest}`);
+      try {
+        await message.forward(forwardDest);
+        console.log(`[EmailWorker] Forward SUCCESS: ${toAddr} → ${forwardDest}`);
+      } catch (err: any) {
+        console.error(`[EmailWorker] Forward FAILED: ${toAddr} → ${forwardDest}:`, err?.message || err);
+      }
+    } else {
+      console.log(`[EmailWorker] No forward destination for ${toAddr}`);
+    }
 
     // 2. Parse and POST to backend (so everything is logged in DB)
     const webhookPromise = (async () => {
@@ -94,8 +100,8 @@ export default {
       }
     })();
 
-    // Wait for both to complete
-    await Promise.all([forwardPromise, webhookPromise]);
+    // Wait for webhook POST to complete
+    await webhookPromise;
   },
 };
 
