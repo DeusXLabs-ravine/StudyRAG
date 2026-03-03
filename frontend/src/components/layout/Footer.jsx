@@ -18,18 +18,16 @@ export default function Footer() {
         {
             title: 'Support',
             links: [
-                { label: 'Help Center', path: '#' },
-                { label: 'Community', path: '#' },
-                { label: 'Contact Us', path: '#' },
-                { label: 'Feedback', path: '#' },
+                { label: 'Contact Us', href: 'mailto:support@studyrag.co' },
+                { label: 'Feedback', href: 'mailto:feedback@studyrag.co' },
+                { label: 'Partnerships', href: 'mailto:partnerships@studyrag.co' },
             ]
         },
         {
             title: 'Legal',
             links: [
-                { label: 'Privacy Policy', path: '#' },
-                { label: 'Terms of Service', path: '#' },
-                { label: 'Cookie Policy', path: '#' },
+                { label: 'Privacy Policy', path: '/privacy' },
+                { label: 'Terms of Service', path: '/terms' },
             ]
         }
     ];
@@ -54,7 +52,7 @@ export default function Footer() {
                             <a href="#" className="p-2.5 rounded-xl bg-gray-50 text-gray-400 hover:text-primary hover:bg-primary/5 transition-all subtle-raise">
                                 <Linkedin className="h-5 w-5" />
                             </a>
-                            <a href="#" className="p-2.5 rounded-xl bg-gray-50 text-gray-400 hover:text-primary hover:bg-primary/5 transition-all subtle-raise">
+                            <a href="mailto:support@studyrag.co" className="p-2.5 rounded-xl bg-gray-50 text-gray-400 hover:text-primary hover:bg-primary/5 transition-all subtle-raise">
                                 <Mail className="h-5 w-5" />
                             </a>
                         </div>
@@ -67,12 +65,21 @@ export default function Footer() {
                             <ul className="space-y-4">
                                 {section.links.map((link) => (
                                     <li key={link.label}>
-                                        <Link
-                                            to={link.path}
-                                            className="text-gray-600 hover:text-primary transition-colors text-sm font-bold"
-                                        >
-                                            {link.label}
-                                        </Link>
+                                        {link.href ? (
+                                            <a
+                                                href={link.href}
+                                                className="text-gray-600 hover:text-primary transition-colors text-sm font-bold"
+                                            >
+                                                {link.label}
+                                            </a>
+                                        ) : (
+                                            <Link
+                                                to={link.path}
+                                                className="text-gray-600 hover:text-primary transition-colors text-sm font-bold"
+                                            >
+                                                {link.label}
+                                            </Link>
+                                        )}
                                     </li>
                                 ))}
                             </ul>

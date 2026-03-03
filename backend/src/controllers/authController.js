@@ -70,6 +70,14 @@ async function createProfile(req, res, next) {
 
     // Sync teaching_level into user_settings for backward compat (non-blocking)
     syncTeachingLevel(teachingLevel || 'intermediate');
+
+    // Send welcome email (non-blocking)
+    try {
+      const { sendWelcomeEmail } = require('../services/emailService');
+      sendWelcomeEmail(req.user.email, displayName).catch(err =>
+        console.warn('[Email] Welcome email failed (non-critical):', err.message)
+      );
+    } catch { /* email service not configured */ }
   } catch (error) {
     next(error);
   }
