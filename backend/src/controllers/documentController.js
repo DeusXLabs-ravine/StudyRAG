@@ -160,6 +160,16 @@ async function processDocumentFromStorage(docId, storagePaths, ext, oldPages = n
 }
 
 async function runProcessingPipeline(docId, text, metadata, rawPages = null, buffer = null, ext = null, userId = null) {
+  // Strip null bytes that PostgreSQL rejects — some PDFs embed \u0000 in text
+  const stripNulls = (s) => s ? s.replace(/\u0000/g, '') : s;
+  text = stripNulls(text);
+  if (rawPages) {
+    rawPages = rawPages.map(p => ({ ...p, text: stripNulls(p.text), heading: stripNulls(p.heading) }));
+  }
+  if (metadata && typeof metadata === 'object') {
+    metadata = JSON.parse(stripNulls(JSON.stringify(metadata)));
+  }
+
   const pipelineStart = Date.now();
   const prefix = `[Pipeline ${docId.slice(0, 8)}]`;
   const log = (step, startTime) =>
