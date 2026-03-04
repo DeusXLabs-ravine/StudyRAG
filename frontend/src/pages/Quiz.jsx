@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { Play, CheckCircle, XCircle, RotateCcw, Trophy, Zap, X, Timer, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import * as quizService from '../services/quizService';
 import useDocumentStore from '../store/documentStore';
 import { MorphingSquare } from '../components/ui/morphing-square';
@@ -213,7 +216,9 @@ export default function Quiz() {
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">{q.question}</h3>
+          <div className="text-lg font-medium text-gray-900 mb-4 prose prose-sm max-w-none [&_pre]:bg-gray-900 [&_pre]:text-gray-100 [&_pre]:rounded-xl [&_pre]:p-4 [&_pre]:overflow-x-auto [&_pre]:text-sm [&_code]:text-sm [&_p]:mb-2">
+            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{q.question}</ReactMarkdown>
+          </div>
 
           {q.type === 'multiple_choice' && q.options && (
             <div className="space-y-2">
@@ -229,7 +234,9 @@ export default function Quiz() {
                       : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                       }`}
                   >
-                    {option}
+                    <span className="prose prose-sm max-w-none [&_p]:mb-0 [&_p]:inline [&_code]:text-xs [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded">
+                      <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{option}</ReactMarkdown>
+                    </span>
                   </button>
                 );
               })}
@@ -382,7 +389,9 @@ export default function Quiz() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 block mb-2">Question {i + 1}</span>
-                    <p className="text-xl font-bold text-gray-900 mb-6 leading-tight">{r.question}</p>
+                    <div className="text-xl font-bold text-gray-900 mb-6 leading-tight prose prose-sm max-w-none [&_pre]:bg-gray-900 [&_pre]:text-gray-100 [&_pre]:rounded-xl [&_pre]:p-4 [&_pre]:overflow-x-auto [&_pre]:text-sm [&_table]:w-full [&_th]:border [&_th]:border-gray-300 [&_th]:px-3 [&_th]:py-2 [&_th]:bg-gray-50 [&_td]:border [&_td]:border-gray-200 [&_td]:px-3 [&_td]:py-2">
+                      <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{r.question}</ReactMarkdown>
+                    </div>
 
                     <div className="flex flex-wrap gap-4 mb-6">
                       <div className={`flex items-center gap-3 px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-wider border shadow-sm ${r.isCorrect ? 'bg-white border-emerald-100 text-emerald-700' : 'bg-white border-red-100 text-red-700'}`}>
@@ -401,7 +410,9 @@ export default function Quiz() {
                       <div className="relative p-8 bg-white rounded-3xl text-sm text-gray-600 leading-relaxed border border-gray-100 shadow-sm group-hover:shadow-md transition-shadow">
                         <div className="absolute -left-1.5 top-8 w-3 h-3 bg-white border-l border-b border-gray-100 rotate-45" />
                         <span className="font-black text-gray-900 block mb-3 text-[10px] uppercase tracking-[0.2em] opacity-30">Expert Explanation</span>
-                        {r.explanation}
+                        <div className="prose prose-sm max-w-none [&_pre]:bg-gray-900 [&_pre]:text-gray-100 [&_pre]:rounded-xl [&_pre]:p-4 [&_pre]:overflow-x-auto [&_pre]:text-sm [&_code]:text-sm">
+                          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{r.explanation}</ReactMarkdown>
+                        </div>
                       </div>
                     )}
                   </div>
