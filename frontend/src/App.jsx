@@ -51,7 +51,17 @@ export default function App() {
           <Route path="/settings" element={<Settings />} />
         </Route>
       </Routes>
-      <Toaster position="bottom-right" richColors />
+      <Toaster 
+        position="bottom-right" 
+        richColors 
+        closeButton
+        toastOptions={{
+          className: 'rounded-2xl border border-gray-100 shadow-2xl p-4',
+          style: {
+            fontFamily: 'Outfit, sans-serif',
+          },
+        }}
+      />
       <AccessibilityEffects />
       <ReadingRuler />
       <BreakReminder />

@@ -109,9 +109,14 @@ export default function Onboarding() {
         }
       }
 
-      toast.success('Welcome aboard!');
+      toast.success('Your Profile is Ready!', {
+        description: 'Explore StudyRAG with your custom settings.',
+        icon: <div className="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center"><svg className="w-3.5 h-3.5 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
+      });
     } catch (err) {
-      toast.error(err.message || 'Failed to save profile');
+      toast.error('Onboarding incomplete', {
+        description: err.message || 'Failed to save profile'
+      });
     } finally {
       setLoading(false);
     }
@@ -267,7 +272,7 @@ export default function Onboarding() {
         <div className="flex justify-between mt-6">
           <button onClick={() => setStep(step - 1)} disabled={step === 0} className="flex items-center gap-1 px-4 py-2 text-gray-600 hover:text-gray-900 font-medium transition-colors disabled:opacity-0 disabled:pointer-events-none"><ChevronLeft className="h-4 w-4" /> Back</button>
           <button onClick={handleNext} disabled={loading} className="flex items-center gap-2 px-6 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[140px] justify-center">
-            {loading ? <><MorphingSquare size="sm" /><span className="ml-3">Syncing...</span></> : step < totalSteps - 1 ? <>Next <ChevronRight className="h-4 w-4" /></> : <>Empower AI <ChevronRight className="h-4 w-4" /></>}
+            {loading ? <><MorphingSquare className="w-4 h-4 bg-white" /><span className="ml-3">Syncing...</span></> : step < totalSteps - 1 ? <>Next <ChevronRight className="h-4 w-4" /></> : <>Empower AI <ChevronRight className="h-4 w-4" /></>}
           </button>
         </div>
       </div>

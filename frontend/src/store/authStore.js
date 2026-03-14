@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { toast } from 'sonner';
 import { supabase } from '../lib/supabase';
 import api from '../services/api';
 
@@ -32,13 +33,21 @@ const useAuthStore = create((set, get) => ({
       }
       set({ loading: false });
 
-      supabase.auth.onAuthStateChange((_event, session) => {
+      supabase.auth.onAuthStateChange((event, session) => {
         set({
           user: session?.user || null,
           session: session || null,
         });
         if (session?.user) {
           get().fetchProfile();
+          if (event === 'SIGNED_IN') {
+            toast.success('Successfully Signed In', {
+              description: 'Welcome back to your personalized study dashboard.'
+            });
+            if (window.location.pathname === '/' || window.location.pathname === '') {
+              window.location.href = '/documents';
+            }
+          }
         } else {
           set({ profile: null });
         }
@@ -52,7 +61,23 @@ const useAuthStore = create((set, get) => ({
   sendMagicLink: async (email) => {
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: `${window.location.origin}/documents` },
+    });
+    if (error) throw error;
+  },
+
+  signInWithGoogle: async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/documents` },
+    });
+    if (error) throw error;
+  },
+
+  signInWithApple: async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'apple',
+      options: { redirectTo: `${window.location.origin}/documents` },
     });
     if (error) throw error;
   },
