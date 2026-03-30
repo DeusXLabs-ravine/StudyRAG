@@ -4,7 +4,7 @@ const { nodeEnv } = require('./config/env');
 
 // In production, fork workers to use all CPU cores.
 // In development, run single process for easier debugging.
-const USE_CLUSTERING = nodeEnv === 'production';
+const USE_CLUSTERING = nodeEnv === 'production' && process.env.DISABLE_CLUSTERING !== 'true';
 const WORKER_COUNT = Math.min(os.cpus().length, 8); // Cap at 8 workers
 
 if (USE_CLUSTERING && cluster.isPrimary) {
