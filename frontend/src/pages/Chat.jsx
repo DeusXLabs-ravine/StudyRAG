@@ -330,21 +330,41 @@ export default function Chat() {
       return;
     }
 
-    // ── Normal chat send ──
+    // ── Normal chat send (streaming) ──
     addMessage({ role: 'student', text: query });
+    // Add empty tutor message that fills in as tokens arrive
+    const streamingId = `stream-${Date.now()}`;
+    setMessages(prev => [...prev, { role: 'tutor', text: '', _streaming: true, _streamId: streamingId, timestamp: Date.now() }]);
     setLoading(true);
 
     try {
-      const result = await chatService.sendQuery(query, selectedDocId || null);
-      addMessage({
-        role: 'tutor',
-        text: result.answer || 'No response.',
-        webSources: result.webSources || [],
-        _sources: result.sources || [],
-        _id: result.id,
-      });
+      let accumulated = '';
+      for await (const event of chatService.streamQuery(query, selectedDocId || null)) {
+        if (event.type === 'text') {
+          accumulated += event.text;
+          setMessages(prev => prev.map(m =>
+            m._streamId === streamingId ? { ...m, text: accumulated } : m
+          ));
+        } else if (event.type === 'done') {
+          setMessages(prev => prev.map(m =>
+            m._streamId === streamingId
+              ? { ...m, _streaming: false, _streamId: undefined, webSources: event.webSources || [], _sources: event.sources || [], _id: event.id, timestamp: event.timestamp || m.timestamp }
+              : m
+          ));
+        } else if (event.type === 'error') {
+          setMessages(prev => prev.map(m =>
+            m._streamId === streamingId
+              ? { ...m, text: "Sorry, I'm having trouble responding right now. Please try again in a moment!", _streaming: false, _streamId: undefined }
+              : m
+          ));
+        }
+      }
     } catch (err) {
-      addMessage({ role: 'tutor', text: "Sorry, I'm having trouble responding right now. There's a lot of activity on our servers — please try again in a moment!" });
+      setMessages(prev => prev.map(m =>
+        m._streamId === streamingId
+          ? { ...m, text: "Sorry, I'm having trouble responding right now. There's a lot of activity on our servers — please try again in a moment!", _streaming: false, _streamId: undefined }
+          : m
+      ));
     } finally {
       setLoading(false);
     }

@@ -1,0 +1,21 @@
+{
+  "name": "studyrag-demo-video",
+  "version": "1.0.0",
+  "description": "StudyRAG product demo video",
+  "scripts": {
+    "start": "remotion studio",
+    "build": "remotion render StudyRAGDemo out/demo.mp4",
+    "render": "remotion render StudyRAGDemo out/demo.mp4"
+  },
+  "dependencies": {
+    "@remotion/transitions": "^4.0.0",
+    "remotion": "^4.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "@remotion/cli": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -35,6 +35,8 @@ app.use(compression({
   threshold: 1024,
   filter: (req, res) => {
     if (req.headers['x-no-compression']) return false;
+    // Never compress SSE streams — compression buffers output, breaking streaming
+    if (req.path === '/api/chat/stream' || req.path === '/chat/stream') return false;
     return compression.filter(req, res);
   },
 }));

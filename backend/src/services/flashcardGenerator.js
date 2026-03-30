@@ -3,11 +3,12 @@ const { getGenerativeModel, selectModelTier, withRetryOnRateLimit } = require('.
 const { FLASHCARD_GENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection, getModuleDepthSection } = require('../utils/prompts');
 const vectorStore = require('./vectorStore');
 const { getUserTeachingLevel, getUserInterests, getWeakTopics, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
+const { flashcardCache } = require('../config/cache');
 const { v4: uuidv4 } = require('uuid');
 
 async function generateFlashcards({ numCards = 20, docId = null, name = null, userId = null }) {
   // Try page-based content first, fall back to chunks
-  let contextItems = await getContentForGeneration(docId);
+  let contextItems = await getContentForGeneration(docId, userId);
 
   if (contextItems.length === 0) {
     throw new Error('No study materials found. Please upload documents first.');
@@ -92,7 +93,7 @@ async function generateFlashcards({ numCards = 20, docId = null, name = null, us
 
 async function generateAdaptiveFlashcards({ numCards = 20, userId = null }) {
   const weakTopics = await getWeakTopics(10, 0.6, userId);
-  const allItems = await vectorStore.getAllChunksWithText();
+  const allItems = await vectorStore.getAllChunksWithText(userId, 200);
 
   if (allItems.length === 0) {
     throw new Error('No study materials found. Please upload documents first.');
@@ -181,13 +182,13 @@ async function generateAdaptiveFlashcards({ numCards = 20, userId = null }) {
 /**
  * Get content for flashcard generation. Tries pages first, falls back to chunks.
  */
-async function getContentForGeneration(docId) {
+async function getContentForGeneration(docId, userId = null) {
   if (docId) {
     const pages = await vectorStore.getDocumentPages(docId);
     if (pages.length > 0) return pages;
     return await vectorStore.getDocumentChunks(docId);
   }
-  return await vectorStore.getAllChunksWithText();
+  return await vectorStore.getAllChunksWithText(userId, 200);
 }
 
 async function insertDeckWithCards(deckData, cards) {
@@ -201,71 +202,68 @@ async function insertDeckWithCards(deckData, cards) {
       throw cardErr;
     }
   }
+  // Invalidate list cache so next fetch reflects the new deck
+  flashcardCache.invalidatePrefix('decks:');
 }
 
 async function getAllFlashcards(userId = null) {
+  const cacheKey = `decks:${userId || 'all'}`;
+  const cached = flashcardCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  // Single query: fetch decks + nested cards in one round-trip (eliminates N+1)
   const query = supabase
     .from('flashcard_decks')
-    .select('*')
+    .select('*, flashcard_cards(*)')
     .order('created_at', { ascending: false });
   if (userId) query.eq('user_id', userId);
   const { data: decks, error } = await query;
   if (error) throw error;
 
-  const result = [];
-  for (const deck of (decks || [])) {
-    const { data: cards, error: cardErr } = await supabase
-      .from('flashcard_cards')
-      .select('*')
-      .eq('deck_id', deck.id);
-    if (cardErr) throw cardErr;
-    result.push(formatDeck(deck, cards || []));
-  }
+  const result = (decks || []).map(deck => formatDeck(deck, deck.flashcard_cards || []));
+  flashcardCache.set(cacheKey, result);
   return result;
 }
 
 async function getFlashcardDeck(deckId) {
+  const cacheKey = `deck:${deckId}`;
+  const cached = flashcardCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  // Single query: deck + all its cards in one round-trip
   const { data: deck, error } = await supabase
     .from('flashcard_decks')
-    .select('*')
+    .select('*, flashcard_cards(*)')
     .eq('id', deckId)
     .single();
 
-  if (error && error.code === 'PGRST116') return null;
+  if (error && error.code === 'PGRST116') {
+    flashcardCache.set(cacheKey, null);
+    return null;
+  }
   if (error) throw error;
 
-  const { data: cards, error: cardErr } = await supabase
-    .from('flashcard_cards')
-    .select('*')
-    .eq('deck_id', deckId);
-  if (cardErr) throw cardErr;
-
-  return formatDeck(deck, cards || []);
+  const result = formatDeck(deck, deck.flashcard_cards || []);
+  flashcardCache.set(cacheKey, result);
+  return result;
 }
 
 async function getStudyQueue(deckId) {
-  const { data: deck, error: deckErr } = await supabase
-    .from('flashcard_decks')
-    .select('*')
-    .eq('id', deckId)
-    .single();
+  // Run all 3 queries in parallel instead of sequentially
+  const [deckRes, cardsRes, dueCountRes] = await Promise.all([
+    supabase.from('flashcard_decks').select('*').eq('id', deckId).single(),
+    supabase.rpc('get_study_queue', { p_deck_id: deckId }),
+    supabase.rpc('get_due_count', { p_deck_id: deckId }),
+  ]);
 
-  if (deckErr && deckErr.code === 'PGRST116') return null;
-  if (deckErr) throw deckErr;
-
-  const { data: cards, error: cardErr } = await supabase.rpc('get_study_queue', {
-    p_deck_id: deckId,
-  });
-  if (cardErr) throw cardErr;
-
-  const { data: dueCount, error: dueErr } = await supabase.rpc('get_due_count', {
-    p_deck_id: deckId,
-  });
-  if (dueErr) throw dueErr;
+  if (deckRes.error?.code === 'PGRST116') return null;
+  if (deckRes.error) throw deckRes.error;
+  if (cardsRes.error) throw cardsRes.error;
+  if (dueCountRes.error) throw dueCountRes.error;
 
   return {
-    ...formatDeck(deck, cards || []),
-    dueCount: dueCount || 0,
+    ...formatDeck(deckRes.data, cardsRes.data || []),
+    dueCount: dueCountRes.data || 0,
   };
 }
 
@@ -282,56 +280,48 @@ async function reviewCard(cardId, quality, userId = null) {
   // SM-2 spaced repetition calculation
   const updated = calculateNextReview(card, quality);
 
-  const { error: updateErr } = await supabase
-    .from('flashcard_cards')
-    .update({
-      status: updated.status,
-      ease_factor: updated.ease_factor,
-      interval_days: updated.interval_days,
-      repetitions: updated.repetitions,
-      next_review_date: updated.next_review_date,
-      last_reviewed: updated.last_reviewed,
-      review_count: updated.review_count,
-    })
-    .eq('id', cardId);
-  if (updateErr) throw updateErr;
+  const updatePayload = {
+    status: updated.status,
+    ease_factor: updated.ease_factor,
+    interval_days: updated.interval_days,
+    repetitions: updated.repetitions,
+    next_review_date: updated.next_review_date,
+    last_reviewed: updated.last_reviewed,
+    review_count: updated.review_count,
+  };
 
-  // Record topic performance
-  if (card.topic) {
-    const normalizedScore = Math.max(0, (quality - 1) / 4);
-    const tpRow = {
-      topic: card.topic,
-      source_mode: 'flashcard',
-      source_id: card.id,
-      score: normalizedScore,
-    };
-    if (userId) tpRow.user_id = userId;
-    const { error: tpErr } = await supabase.from('topic_performance').insert(tpRow);
-    if (tpErr) throw tpErr;
-  }
+  // Build side-effect rows
+  const tpRow = card.topic ? {
+    topic: card.topic,
+    source_mode: 'flashcard',
+    source_id: card.id,
+    score: Math.max(0, (quality - 1) / 4),
+    ...(userId ? { user_id: userId } : {}),
+  } : null;
 
-  // Record study session
   const sessRow = {
     mode: 'flashcard',
-    details_json: {
-      cardId: card.id,
-      deckId: card.deck_id,
-      quality,
-    },
+    details_json: { cardId: card.id, deckId: card.deck_id, quality },
+    ...(userId ? { user_id: userId } : {}),
   };
-  if (userId) sessRow.user_id = userId;
-  const { error: sessErr } = await supabase.from('study_sessions').insert(sessRow);
-  if (sessErr) throw sessErr;
 
-  // Re-read the updated card
-  const { data: updatedCard, error: rereadErr } = await supabase
-    .from('flashcard_cards')
-    .select('*')
-    .eq('id', cardId)
-    .single();
-  if (rereadErr) throw rereadErr;
+  // Run DB update + side-effects in parallel — no sequential waits
+  const [updateRes, tpRes, sessRes] = await Promise.all([
+    supabase.from('flashcard_cards').update(updatePayload).eq('id', cardId),
+    tpRow ? supabase.from('topic_performance').insert(tpRow) : Promise.resolve({ error: null }),
+    supabase.from('study_sessions').insert(sessRow),
+  ]);
 
-  return formatCard(updatedCard);
+  if (updateRes.error) throw updateRes.error;
+  if (tpRes.error) throw tpRes.error;
+  if (sessRes.error) throw sessRes.error;
+
+  // Invalidate deck cache so next fetch reflects updated card state
+  flashcardCache.del(`deck:${card.deck_id}`);
+  flashcardCache.invalidatePrefix('decks:');
+
+  // Return calculated values directly — no re-read DB round-trip needed
+  return formatCard({ ...card, ...updatePayload });
 }
 
 async function deleteDeck(deckId) {
@@ -340,6 +330,8 @@ async function deleteDeck(deckId) {
     .delete()
     .eq('id', deckId);
   if (error) throw error;
+  flashcardCache.del(`deck:${deckId}`);
+  flashcardCache.invalidatePrefix('decks:');
 }
 
 // --- SM-2 Spaced Repetition Algorithm ---

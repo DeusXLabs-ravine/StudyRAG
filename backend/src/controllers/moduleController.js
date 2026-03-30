@@ -2,6 +2,16 @@ const supabase = require('../config/database');
 const { getAllModules, getModuleById, getModulesByDocument, getModulesByCourse, regenerateQuestions: regenerateModuleQuestions, isGeneratingModules } = require('../services/moduleGenerator');
 const { shouldGenerateBridge, triggerBridgeGeneration } = require('../services/bridgeModuleService');
 
+function formatProgress(row) {
+  if (!row) return { completed: false, score: null, attempts: 0 };
+  return {
+    completed: !!row.completed,
+    score: row.best_score,
+    attempts: row.attempts,
+    lastAttempt: row.last_attempt,
+  };
+}
+
 async function getProgressForModule(moduleId) {
   const { data: row, error } = await supabase
     .from('module_progress')
@@ -9,17 +19,24 @@ async function getProgressForModule(moduleId) {
     .eq('module_id', moduleId)
     .single();
 
-  if (error && error.code === 'PGRST116') {
-    return { completed: false, score: null, attempts: 0 };
-  }
+  if (error && error.code === 'PGRST116') return formatProgress(null);
   if (error) throw error;
+  return formatProgress(row);
+}
 
-  return {
-    completed: !!row.completed,
-    score: row.best_score,
-    attempts: row.attempts,
-    lastAttempt: row.last_attempt,
-  };
+/**
+ * Batch-fetch progress for many modules in a single query (eliminates N+1).
+ * Returns a Map<moduleId, progress>.
+ */
+async function getProgressBatch(moduleIds) {
+  if (moduleIds.length === 0) return new Map();
+  const { data, error } = await supabase
+    .from('module_progress')
+    .select('*')
+    .in('module_id', moduleIds);
+  if (error) throw error;
+  const map = new Map((data || []).map(row => [row.module_id, formatProgress(row)]));
+  return map;
 }
 
 async function listModules(req, res, next) {
@@ -35,12 +52,12 @@ async function listModules(req, res, next) {
       modules = await getAllModules();
     }
 
-    const modulesWithProgress = await Promise.all(
-      modules.map(async (mod) => ({
-        ...mod,
-        progress: await getProgressForModule(mod.id),
-      }))
-    );
+    // Single batch query instead of N individual queries
+    const progressMap = await getProgressBatch(modules.map(m => m.id));
+    const modulesWithProgress = modules.map(mod => ({
+      ...mod,
+      progress: progressMap.get(mod.id) || formatProgress(null),
+    }));
 
     const generating = documentId ? isGeneratingModules(documentId) : false;
     res.json({ modules: modulesWithProgress, generating });
@@ -76,35 +93,34 @@ async function updateProgress(req, res, next) {
 
     const completed = score >= 70;
 
-    await supabase.rpc('upsert_module_progress', {
-      p_module_id: id,
-      p_completed: completed,
-      p_best_score: score,
-      p_last_attempt: new Date().toISOString(),
-      p_user_id: userId,
-    });
+    const tpRow = module.topic ? {
+      topic: module.topic,
+      source_mode: 'module',
+      source_id: id,
+      score: score / 100,
+      ...(userId ? { user_id: userId } : {}),
+    } : null;
 
-    // Record topic performance
-    if (module.topic) {
-      const row = {
-        topic: module.topic,
-        source_mode: 'module',
-        source_id: id,
-        score: score / 100,
-      };
-      if (userId) row.user_id = userId;
-      const { error: tpErr } = await supabase.from('topic_performance').insert(row);
-      if (tpErr) throw tpErr;
-    }
-
-    // Record study session
     const sessRow = {
       mode: 'learn',
       details_json: { moduleId: id, score },
+      ...(userId ? { user_id: userId } : {}),
     };
-    if (userId) sessRow.user_id = userId;
-    const { error: sessErr } = await supabase.from('study_sessions').insert(sessRow);
-    if (sessErr) throw sessErr;
+
+    // Run all 3 writes in parallel
+    const [, tpRes, sessRes] = await Promise.all([
+      supabase.rpc('upsert_module_progress', {
+        p_module_id: id,
+        p_completed: completed,
+        p_best_score: score,
+        p_last_attempt: new Date().toISOString(),
+        p_user_id: userId,
+      }),
+      tpRow ? supabase.from('topic_performance').insert(tpRow) : Promise.resolve({ error: null }),
+      supabase.from('study_sessions').insert(sessRow),
+    ]);
+    if (tpRes.error) throw tpRes.error;
+    if (sessRes.error) throw sessRes.error;
 
     // Check if a bridge module should be generated (non-blocking)
     let bridgeGenerating = false;

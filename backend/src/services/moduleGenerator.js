@@ -3,6 +3,7 @@ const { getGenerativeModel, withRetryOnRateLimit } = require('../config/gemini')
 const { MODULE_GENERATION_PROMPT, MODULE_OUTLINE_PROMPT, MODULE_BATCH_GENERATION_PROMPT, QUESTION_REGENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection, buildLegalGroundingSection, getModuleDepthSection, getQuizDepthSection } = require('../utils/prompts');
 const { getUserTeachingLevel, getUserInterests, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
 const { prepareTextForLLM } = require('./chunkingService');
+const { moduleCache } = require('../config/cache');
 const { v4: uuidv4 } = require('uuid');
 
 // Max chars per LLM segment — Gemini Flash handles large contexts,
@@ -340,6 +341,10 @@ async function insertModuleResults(docId, segmentResults, startOrderIndex, opts 
     }
   }
 
+  // Invalidate module caches after writes
+  moduleCache.del(`byDoc:${docId}`);
+  moduleCache.del('allModules');
+
   // Background enrichment for each inserted module (diagrams + medical resources)
   if (allModuleRows.length > 0) {
     const userId = opts.userId || null;
@@ -526,13 +531,20 @@ async function generateModules(docId, documentText, userId = null) {
 }
 
 async function getModulesByDocument(docId) {
+  const cacheKey = `byDoc:${docId}`;
+  const cached = moduleCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
   const { data: rows, error } = await supabase
     .from('modules')
     .select('*')
     .eq('document_id', docId)
     .order('order_index');
   if (error) throw error;
-  if (!rows || rows.length === 0) return [];
+  if (!rows || rows.length === 0) {
+    moduleCache.set(cacheKey, []);
+    return [];
+  }
 
   // Fetch all questions for these modules in a single query
   const moduleIds = rows.map(r => r.id);
@@ -549,17 +561,26 @@ async function getModulesByDocument(docId) {
     questionsByModule[q.module_id].push(q);
   }
 
-  return rows.map(row => formatModule(row, questionsByModule[row.id] || []));
+  const result = rows.map(row => formatModule(row, questionsByModule[row.id] || []));
+  moduleCache.set(cacheKey, result);
+  return result;
 }
 
 async function getModuleById(moduleId) {
+  const cacheKey = `mod:${moduleId}`;
+  const cached = moduleCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
   const { data: row, error } = await supabase
     .from('modules')
     .select('*')
     .eq('id', moduleId)
     .single();
 
-  if (error && error.code === 'PGRST116') return null;
+  if (error && error.code === 'PGRST116') {
+    moduleCache.set(cacheKey, null);
+    return null;
+  }
   if (error) throw error;
 
   const { data: questions, error: qErr } = await supabase
@@ -568,16 +589,25 @@ async function getModuleById(moduleId) {
     .eq('module_id', moduleId);
   if (qErr) throw qErr;
 
-  return formatModule(row, questions || []);
+  const result = formatModule(row, questions || []);
+  moduleCache.set(cacheKey, result);
+  return result;
 }
 
 async function getAllModules() {
+  const cacheKey = 'allModules';
+  const cached = moduleCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
   const { data: rows, error } = await supabase
     .from('modules')
     .select('*')
     .order('order_index');
   if (error) throw error;
-  if (!rows || rows.length === 0) return [];
+  if (!rows || rows.length === 0) {
+    moduleCache.set(cacheKey, []);
+    return [];
+  }
 
   // Fetch all questions in a single query
   const moduleIds = rows.map(r => r.id);
@@ -593,7 +623,9 @@ async function getAllModules() {
     questionsByModule[q.module_id].push(q);
   }
 
-  return rows.map(row => formatModule(row, questionsByModule[row.id] || []));
+  const result = rows.map(row => formatModule(row, questionsByModule[row.id] || []));
+  moduleCache.set(cacheKey, result);
+  return result;
 }
 
 async function getModulesByCourse(courseId) {
@@ -756,6 +788,10 @@ async function regenerateQuestions(moduleId, userId = null) {
     const { error: insErr } = await supabase.from('questions').insert(newQuestions);
     if (insErr) throw insErr;
   }
+
+  // Invalidate caches so next fetch reflects new questions
+  moduleCache.del(`mod:${moduleId}`);
+  moduleCache.del('allModules');
 
   // Return updated module
   return await getModuleById(moduleId);

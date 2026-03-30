@@ -117,7 +117,16 @@ async function getActivityTimeline(days = 30, userId = null) {
 }
 
 async function getStudyRecommendation(userId = null) {
-  const weakTopics = await getWeakTopics(0.6, userId);
+  // Fetch all 3 data sources in parallel instead of waterfall
+  const [weakTopics, dueRes, incompleteRes] = await Promise.all([
+    getWeakTopics(0.6, userId),
+    supabase.rpc('get_due_flashcard_count', { p_user_id: userId }),
+    supabase.rpc('get_first_incomplete_module', { p_user_id: userId }),
+  ]);
+
+  if (dueRes.error) throw dueRes.error;
+  if (incompleteRes.error) throw incompleteRes.error;
+
   if (weakTopics.length > 0) {
     return {
       type: 'weak_topic',
@@ -127,20 +136,15 @@ async function getStudyRecommendation(userId = null) {
     };
   }
 
-  const { data: dueCount, error: dueErr } = await supabase.rpc('get_due_flashcard_count', { p_user_id: userId });
-  if (dueErr) throw dueErr;
-
-  if (dueCount > 0) {
+  if (dueRes.data > 0) {
     return {
       type: 'flashcard_review',
-      message: `You have ${dueCount} flashcards due for review`,
+      message: `You have ${dueRes.data} flashcards due for review`,
       action: 'flashcards',
     };
   }
 
-  const { data: incompleteModules, error: modErr } = await supabase.rpc('get_first_incomplete_module', { p_user_id: userId });
-  if (modErr) throw modErr;
-
+  const incompleteModules = incompleteRes.data;
   if (incompleteModules && incompleteModules.length > 0) {
     return {
       type: 'module',
@@ -172,12 +176,13 @@ async function getFlashcardStats(userId = null) {
 }
 
 async function getOverview(userId = null) {
-  return {
-    mastery: await getOverallMastery(userId),
-    streak: await getStudyStreak(userId),
-    recommendation: await getStudyRecommendation(userId),
-    flashcardStats: await getFlashcardStats(userId),
-  };
+  const [mastery, streak, recommendation, flashcardStats] = await Promise.all([
+    getOverallMastery(userId),
+    getStudyStreak(userId),
+    getStudyRecommendation(userId),
+    getFlashcardStats(userId),
+  ]);
+  return { mastery, streak, recommendation, flashcardStats };
 }
 
 async function getUserSettings(userId = null) {

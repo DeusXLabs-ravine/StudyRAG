@@ -293,8 +293,29 @@ export default function TutorMessage({ msg, onAction, isCompact }) {
         );
     }
 
-    const segments = segmentMarkdown(msg.text);
+    // While streaming, render as a single segment to avoid partial-markdown parse artifacts
+    const segments = msg._streaming
+        ? [{ id: 'stream', type: 'text', content: msg.text, title: null }]
+        : segmentMarkdown(msg.text);
     const blocks = msg.blocks || [];
+
+    // Show typing indicator while streaming with no text yet
+    if (msg._streaming && !msg.text) {
+        return (
+            <div className="flex gap-4 mb-12">
+                <div className="flex-shrink-0 hidden sm:block">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center border border-gray-200 bg-white shadow-sm">
+                        <Brain className="h-4 w-4 text-blue-500 animate-pulse" />
+                    </div>
+                </div>
+                <div className="flex items-center gap-1.5 px-4 py-3 bg-gray-50 rounded-2xl border border-gray-100">
+                    <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col gap-6 mb-12 relative">

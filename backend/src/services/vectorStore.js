@@ -56,7 +56,7 @@ async function addChunks(docId, chunks) {
     embedding: JSON.stringify(chunk.embedding),
   }));
 
-  const BATCH_SIZE = 50;
+  const BATCH_SIZE = 200;
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE);
     const { error } = await supabase.from('chunks').insert(batch);
@@ -108,18 +108,33 @@ async function getDocumentChunks(docId) {
   }));
 }
 
-async function getAllChunksWithText() {
+async function getAllChunksWithText(userId = null, limit = 200) {
+  // If userId provided, filter to only that user's documents to avoid cross-user data leak
+  // and cap results to prevent loading thousands of rows into memory
+  if (userId) {
+    const { data: docs, error: docsErr } = await supabase
+      .from('documents')
+      .select('id')
+      .eq('user_id', userId);
+    if (docsErr) throw docsErr;
+    const docIds = (docs || []).map(d => d.id);
+    if (docIds.length === 0) return [];
+
+    const { data, error } = await supabase
+      .from('chunks')
+      .select('id, doc_id, text, heading')
+      .in('doc_id', docIds)
+      .limit(limit);
+    if (error) throw error;
+    return (data || []).map(row => ({ id: row.id, docId: row.doc_id, text: row.text, heading: row.heading }));
+  }
+
   const { data, error } = await supabase
     .from('chunks')
-    .select('id, doc_id, text, heading');
+    .select('id, doc_id, text, heading')
+    .limit(limit);
   if (error) throw error;
-
-  return (data || []).map(row => ({
-    id: row.id,
-    docId: row.doc_id,
-    text: row.text,
-    heading: row.heading,
-  }));
+  return (data || []).map(row => ({ id: row.id, docId: row.doc_id, text: row.text, heading: row.heading }));
 }
 
 // ─── Page Index (vectorless RAG) ──────────────────────────────
@@ -133,7 +148,7 @@ async function addPages(docId, pages) {
     heading: sanitizeForPostgres(page.heading) || null,
   }));
 
-  const BATCH_SIZE = 50;
+  const BATCH_SIZE = 200;
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE);
     const { error } = await supabase.from('pages').insert(batch);

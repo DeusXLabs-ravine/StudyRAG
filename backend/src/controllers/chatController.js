@@ -1,5 +1,5 @@
 const supabase = require('../config/database');
-const { queryWithRAG } = require('../services/ragService');
+const { queryWithRAG, queryWithRAGStream } = require('../services/ragService');
 const { v4: uuidv4 } = require('uuid');
 
 async function queryChat(req, res, next) {
@@ -106,4 +106,83 @@ async function clearChatHistory(req, res, next) {
   }
 }
 
-module.exports = { queryChat, getChatHistory, clearChatHistory };
+/**
+ * Streaming chat endpoint (SSE).
+ * Emits text chunks as they arrive from Gemini, then a final 'done' event with sources.
+ * Falls back gracefully to non-streaming for web-search queries or vector-only docs.
+ */
+async function streamQuery(req, res, next) {
+  const { query, documentId } = req.body;
+  const userId = req.user?.id || null;
+
+  if (!query || !query.trim()) {
+    return res.status(400).json({ error: 'Query is required' });
+  }
+
+  // SSE headers — disable compression for streaming
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+  res.flushHeaders();
+
+  const writeEvent = (data) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    // Fetch conversation history
+    const histQuery = supabase
+      .from('chat_messages')
+      .select('query, answer')
+      .order('timestamp', { ascending: false })
+      .limit(5);
+    if (userId) histQuery.eq('user_id', userId);
+    const { data: recentRows } = await histQuery;
+    const recentMessages = (recentRows || []).reverse();
+
+    let fullAnswer = '';
+    let finalSources = [];
+    let finalWebSources = [];
+    let finalSuggestSolver = false;
+    const messageId = uuidv4();
+    const timestamp = new Date().toISOString();
+
+    for await (const event of queryWithRAGStream(query, documentId || null, recentMessages, userId)) {
+      if (event.type === 'text') {
+        fullAnswer += event.text;
+        writeEvent(event);
+      } else if (event.type === 'done') {
+        finalSources = event.sources || [];
+        finalWebSources = event.webSources || [];
+        finalSuggestSolver = event.suggestSolver || false;
+        writeEvent({ type: 'done', id: messageId, timestamp, sources: finalSources, webSources: finalWebSources, suggestSolver: finalSuggestSolver });
+      }
+    }
+
+    res.end();
+
+    // Persist in background (fire-and-forget)
+    const msgRow = {
+      id: messageId,
+      query,
+      answer: fullAnswer,
+      sources_json: finalSources,
+      document_id: documentId || null,
+      timestamp,
+    };
+    if (userId) msgRow.user_id = userId;
+    const sessRow = { mode: 'chat', details_json: { messageId } };
+    if (userId) sessRow.user_id = userId;
+    Promise.all([
+      supabase.from('chat_messages').insert(msgRow),
+      supabase.from('study_sessions').insert(sessRow),
+    ]).catch(err => console.error('[Chat] Background persist error:', err));
+
+  } catch (error) {
+    writeEvent({ type: 'error', message: error.message || 'An error occurred' });
+    res.end();
+  }
+}
+
+module.exports = { queryChat, streamQuery, getChatHistory, clearChatHistory };

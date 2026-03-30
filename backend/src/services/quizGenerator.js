@@ -7,7 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 
 async function generateQuiz({ numQuestions = 10, difficulty = 'medium', docId = null, adaptive = false, isExam = false, timeLimitSeconds = null, userId = null }) {
   // Try page-based content first, fall back to chunks
-  let contextItems = await getContentForGeneration(docId);
+  let contextItems = await getContentForGeneration(docId, userId);
 
   if (contextItems.length === 0) {
     throw new Error('No study materials found. Please upload documents first.');
@@ -118,52 +118,44 @@ async function submitQuiz(quizId, answers, questions, timeSpentSeconds = null, u
   const score = Math.round((correct / questions.length) * 100);
   const resultId = uuidv4();
 
-  const { error: resErr } = await supabase.from('quiz_results').insert({
-    id: resultId,
-    quiz_session_id: quizId,
-    score,
-    correct_count: correct,
-    total_count: questions.length,
-    results_json: results,
-    time_spent_seconds: timeSpentSeconds || null,
-  });
-  if (resErr) throw resErr;
-
-  // Record topic performance for each question that has a topic
+  // Build all rows before any DB calls
   const topicPerfRows = results
     .filter(r => r.topic)
-    .map(r => {
-      const row = {
-        topic: r.topic,
-        source_mode: 'quiz',
-        source_id: resultId,
-        score: r.isCorrect ? 1.0 : 0.0,
-      };
-      if (userId) row.user_id = userId;
-      return row;
-    });
-
-  if (topicPerfRows.length > 0) {
-    const { error: tpErr } = await supabase.from('topic_performance').insert(topicPerfRows);
-    if (tpErr) throw tpErr;
-  }
+    .map(r => ({
+      topic: r.topic,
+      source_mode: 'quiz',
+      source_id: resultId,
+      score: r.isCorrect ? 1.0 : 0.0,
+      ...(userId ? { user_id: userId } : {}),
+    }));
 
   const studyRow = {
     mode: 'quiz',
-    details_json: {
-      quizId,
-      resultId,
-      score,
-      correct,
-      total: questions.length,
-      timeSpentSeconds,
-    },
+    details_json: { quizId, resultId, score, correct, total: questions.length, timeSpentSeconds },
+    ...(userId ? { user_id: userId } : {}),
   };
-  if (userId) studyRow.user_id = userId;
-  const { error: sessErr } = await supabase.from('study_sessions').insert(studyRow);
-  if (sessErr) throw sessErr;
 
-  await updateTeachingLevelFromQuiz(score, results, userId);
+  // Run all 3 writes in parallel + teaching level update
+  const [resResult, tpResult, sessResult] = await Promise.all([
+    supabase.from('quiz_results').insert({
+      id: resultId,
+      quiz_session_id: quizId,
+      score,
+      correct_count: correct,
+      total_count: questions.length,
+      results_json: results,
+      time_spent_seconds: timeSpentSeconds || null,
+    }),
+    topicPerfRows.length > 0
+      ? supabase.from('topic_performance').insert(topicPerfRows)
+      : Promise.resolve({ error: null }),
+    supabase.from('study_sessions').insert(studyRow),
+    updateTeachingLevelFromQuiz(score, results, userId),
+  ]);
+
+  if (resResult.error) throw resResult.error;
+  if (tpResult.error) throw tpResult.error;
+  if (sessResult.error) throw sessResult.error;
 
   return {
     id: resultId,
@@ -223,7 +215,7 @@ async function getQuizSession(sessionId) {
 /**
  * Get content for quiz/flashcard generation. Tries pages first, falls back to chunks.
  */
-async function getContentForGeneration(docId) {
+async function getContentForGeneration(docId, userId = null) {
   if (docId) {
     // Try page-based content first
     const pages = await vectorStore.getDocumentPages(docId);
@@ -231,8 +223,8 @@ async function getContentForGeneration(docId) {
     // Fall back to chunks for legacy documents
     return await vectorStore.getDocumentChunks(docId);
   }
-  // No docId: use all chunks (cross-document)
-  return await vectorStore.getAllChunksWithText();
+  // No docId: use user's chunks only, with a cap to avoid loading all rows
+  return await vectorStore.getAllChunksWithText(userId, 200);
 }
 
 // --- Adaptive selection helpers ---

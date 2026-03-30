@@ -104,6 +104,9 @@ const embeddingCache = new LRUCache({ max: 5000, ttlMs: 60 * 60_000, name: 'embe
 /** Response cache — for GET endpoint responses */
 const responseCache = new LRUCache({ max: 3000, ttlMs: 2 * 60_000, name: 'response' }); // 2 min
 
+/** Flashcard deck/list cache */
+const flashcardCache = new LRUCache({ max: 2000, ttlMs: 5 * 60_000, name: 'flashcard' }); // 5 min
+
 /** Get all cache stats for monitoring */
 function getAllCacheStats() {
   return [
@@ -113,6 +116,7 @@ function getAllCacheStats() {
     moduleCache.stats(),
     embeddingCache.stats(),
     responseCache.stats(),
+    flashcardCache.stats(),
   ];
 }
 
@@ -124,5 +128,6 @@ module.exports = {
   moduleCache,
   embeddingCache,
   responseCache,
+  flashcardCache,
   getAllCacheStats,
 };

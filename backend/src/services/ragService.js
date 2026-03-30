@@ -1,4 +1,4 @@
-const { getGenerativeModel, getSearchGroundedModel, selectModelTier, withRetryOnRateLimit } = require('../config/gemini');
+const { getGenerativeModel, getSearchGroundedModel, selectModelTier, withRetryOnRateLimit, requestQueue } = require('../config/gemini');
 const { isDeepSeekAvailable, callDeepSeekChat } = require('../config/deepseek');
 const { isSTEMQuery } = require('../utils/stemDetector');
 const { getTutorDepthSection } = require('../utils/prompts/depthRouter');
@@ -712,4 +712,146 @@ async function tutorChat(moduleContent, moduleTitle, moduleTopic, message, conve
   return { reply: replyText, webSources };
 }
 
-module.exports = { queryWithRAG, explainSimply, tutorGreeting, tutorChat };
+/**
+ * Streaming version of queryWithRAG.
+ * Yields SSE-style objects: { type: 'text', text } or { type: 'done', sources, webSources, suggestSolver }
+ * Falls back to non-streaming when web search is needed (search grounding doesn't support streaming).
+ *
+ * @param {string} query
+ * @param {string|null} docId
+ * @param {Array} conversationHistory
+ * @param {string|null} userId
+ * @yields {{ type: 'text', text: string } | { type: 'done', sources: Array, webSources: Array, suggestSolver: boolean }}
+ */
+async function* queryWithRAGStream(query, docId, conversationHistory, userId) {
+  // If web search is needed, fall back to non-streaming (search grounding + streaming not supported)
+  if (shouldUseWebSearch(query)) {
+    const result = await queryWithRAG(query, docId, conversationHistory, userId);
+    // Emit full text as a single chunk, then done
+    yield { type: 'text', text: result.answer };
+    yield { type: 'done', sources: result.sources, webSources: result.webSources || [], suggestSolver: result.suggestSolver || false };
+    return;
+  }
+
+  // Resolve content + prompt in parallel
+  let prompt, sources, suggestSolver;
+
+  if (docId) {
+    const pageIndex = await vectorStore.getPageIndex(docId);
+
+    if (pageIndex) {
+      // Page-index path
+      const [relevantPageResults, promptParts] = await Promise.all([
+        searchPageIndex(query, pageIndex.treeJson, { docId, conversationHistory }),
+        buildPromptParts(query, docId, conversationHistory, userId),
+      ]);
+
+      if (relevantPageResults.length === 0) {
+        yield { type: 'text', text: "I couldn't find relevant information in your study materials to answer this question. Try rephrasing your question." };
+        yield { type: 'done', sources: [], webSources: [], suggestSolver: false };
+        return;
+      }
+
+      const pageNumbers = relevantPageResults.slice(0, 10).map(r => r.page);
+      const needsVectorFallback = relevantPageResults.length < 3;
+      const [pages, vectorChunks] = await Promise.all([
+        vectorStore.getPages(docId, pageNumbers),
+        needsVectorFallback ? vectorStore.search(query, 3, docId).catch(() => []) : [],
+      ]);
+
+      if (pages.length === 0) {
+        yield { type: 'text', text: "I couldn't find relevant information in your study materials." };
+        yield { type: 'done', sources: [], webSources: [], suggestSolver: false };
+        return;
+      }
+
+      const docMeta = await vectorStore.getDocument(docId);
+      const docName = docMeta?.originalName || 'Unknown Document';
+      const priorityLabel = getSourcePriorityLabel(docMeta);
+
+      const CONTEXT_BUDGET = 30000;
+      let charsSoFar = 0;
+      let context = pages.map((p, i) => {
+        let text = p.text;
+        charsSoFar += text.length;
+        if (charsSoFar > CONTEXT_BUDGET) {
+          const remaining = Math.max(800, CONTEXT_BUDGET - (charsSoFar - text.length));
+          text = text.slice(0, remaining) + '\n[... truncated]';
+        }
+        return `${priorityLabel} [Source ${i + 1}: ${docName} — Page ${p.pageNumber}${p.heading ? ` - ${p.heading}` : ''}]\n${text}`;
+      }).join('\n\n---\n\n');
+
+      if (vectorChunks.length > 0) {
+        const pageTextsSet = new Set(pages.map(p => p.text.slice(0, 100)));
+        const uniqueChunks = vectorChunks.filter(c => !pageTextsSet.has(c.text.slice(0, 100)));
+        if (uniqueChunks.length > 0) {
+          context += '\n\n---\n\n[Additional relevant passages:]\n' +
+            uniqueChunks.map((c, i) => `${priorityLabel} [Vector Match ${i + 1}: ${docName}${c.heading ? ` - ${c.heading}` : ''}]\n${c.text}`).join('\n\n---\n\n');
+        }
+      }
+
+      const { teachingHint, conversationContext, weakTopicHint, resourceContext, learningStyleHint, paceHint } = promptParts;
+      const sourceHierarchy = `\nSOURCE PRIORITY: 1. PRIMARY SOURCES (★) 2. UPLOADED MATERIALS 3. STUDENT NOTES 4. WEB-SOURCED 5. WEB RESEARCH\nAlways prefer higher-priority sources.`;
+
+      prompt = `You are a helpful, knowledgeable tutor assisting a student with their studies.\n${teachingHint}\n${learningStyleHint}\n${paceHint}\n${sourceHierarchy}\n${conversationContext}\nSTUDY MATERIALS:\n${context}\n${resourceContext}\n${weakTopicHint}\nStudent's question: ${query}\n\nBase your answer on the study materials. Cite page numbers. Format with markdown.`;
+
+      sources = pages.map((page) => {
+        const searchResult = relevantPageResults.find(r => r.page === page.pageNumber);
+        return {
+          documentId: docId,
+          documentName: docName,
+          heading: page.heading,
+          pageNumber: page.pageNumber,
+          excerpt: page.text.slice(0, 200) + '...',
+          relevanceReason: searchResult?.reason || '',
+        };
+      });
+      suggestSolver = looksLikeProblem(query);
+
+    } else {
+      // Legacy vector fallback — fall back to non-streaming
+      const result = await queryWithVectorRAG(query, docId, conversationHistory, userId);
+      yield { type: 'text', text: result.answer };
+      yield { type: 'done', sources: result.sources, webSources: [], suggestSolver: result.suggestSolver || false };
+      return;
+    }
+  } else {
+    // Multi-document — fall back to non-streaming (complex path)
+    const result = await queryMultiDocument(query, conversationHistory, userId);
+    yield { type: 'text', text: result.answer };
+    yield { type: 'done', sources: result.sources, webSources: result.webSources || [], suggestSolver: result.suggestSolver || false };
+    return;
+  }
+
+  // Stream the answer generation
+  const tier = selectModelTier({});
+  let fullText = '';
+  try {
+    const streamResult = await requestQueue.execute(async () => {
+      const model = getGenerativeModel(tier);
+      return model.generateContentStream(prompt);
+    }, 0);
+
+    for await (const chunk of streamResult.stream) {
+      const text = chunk.text();
+      if (text) {
+        fullText += text;
+        yield { type: 'text', text };
+      }
+    }
+  } catch (err) {
+    // If streaming fails, try non-streaming fallback
+    if (!fullText) {
+      const result = await withRetryOnRateLimit(async () => {
+        const model = getGenerativeModel(tier);
+        return model.generateContent(prompt);
+      }, 3, 0);
+      const text = result.response.text();
+      yield { type: 'text', text };
+    }
+  }
+
+  yield { type: 'done', sources: sources || [], webSources: [], suggestSolver: suggestSolver || false };
+}
+
+module.exports = { queryWithRAG, queryWithRAGStream, explainSimply, tutorGreeting, tutorChat };
