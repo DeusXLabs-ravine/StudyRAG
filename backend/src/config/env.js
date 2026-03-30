@@ -1,7 +1,7 @@
 require('dotenv').config();
 
 const config = {
-  port: process.env.PORT || 5000,
+  port: parseInt(process.env.PORT) || 5000,
   nodeEnv: process.env.NODE_ENV || 'development',
   geminiApiKey: process.env.GEMINI_API_KEY,
   geminiApiKeys: [
@@ -28,4 +28,11 @@ const config = {
 };
 
 console.log(`[Config] Environment: ${config.nodeEnv}`);
+if (process.env.PORT) {
+  console.log(`[Config] Using platform-assigned port: ${process.env.PORT}`);
+} else {
+  console.log(`[Config] No PORT environment variable found, defaulting to: 5000`);
+}
+
 module.exports = config;
+

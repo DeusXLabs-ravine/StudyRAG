@@ -35,10 +35,13 @@ if (USE_CLUSTERING && cluster.isPrimary) {
   const { port } = require('./config/env');
 
   const server = app.listen(port, '0.0.0.0', () => {
-    const workerId = cluster.isWorker ? ` [worker ${cluster.worker.id}]` : '';
-    console.log(`StudyRAG Backend running on port ${port} [${nodeEnv}]${workerId}`);
-    console.log(`Database: Supabase (PostgreSQL)`);
+    const mode = cluster.isWorker ? `[Worker ${cluster.worker.id}]` : '[Single Mode]';
+    console.log(`[Server] ${mode} StudyRAG Backend listening on port ${port} [${nodeEnv}]`);
+    if (!cluster.isWorker) {
+      console.log(`[Database] Connecting to Supabase (PostgreSQL)...`);
+    }
   });
+
 
   // Graceful shutdown for individual workers
   process.on('SIGTERM', () => {
