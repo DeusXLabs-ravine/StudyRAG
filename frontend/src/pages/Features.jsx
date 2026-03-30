@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import FeatureLiveDemo from '../components/features/FeatureLiveDemo';
+import SEO from '../components/common/SEO';
 
 export default function Features() {
     const [hoveredIdx, setHoveredIdx] = useState(null);
@@ -98,6 +99,11 @@ export default function Features() {
 
     return (
         <div className="min-h-screen flex flex-col bg-slate-50 selection:bg-primary selection:text-white">
+            <SEO 
+                title="AI Study Features & Advanced RAG"
+                description="Explore StudyRAG's cutting-edge features: Learn Mode, Chat with Citations, Adaptive Quizzes, and Flashcards powered by professional RAG infrastructure."
+                canonical="/features"
+            />
             <PublicNavbar />
             <main className="flex-1">
                 {/* Hero with refined background */}

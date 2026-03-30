@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Target, Lightbulb, HelpCircle, X, CheckCircle, Lock, ChevronRight, Shapes, Wand2, Loader2 } from 'lucide-react';
+import { Target, Lightbulb, HelpCircle, X, CheckCircle, Lock, ChevronRight, Shapes, Wand2, Loader2, GraduationCap } from 'lucide-react';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
@@ -13,7 +13,7 @@ import MedicalResourcesPanel from './MedicalResourcesPanel';
 import useSettingsStore from '../../store/settingsStore';
 import { resolveThemeVars, getBoardType, parseThemeSetting } from '../../lib/boardThemes';
 
-export default function LessonViewer({ module, onStartQuiz, regeneratingQuestions, diagrams = [], teachingLevel, generatedDiagrams = [], onGenerateDiagram, generatingDiagram, medicalResources = [] }) {
+export default function LessonViewer({ module, onStartQuiz, regeneratingQuestions, diagrams = [], teachingLevel, generatedDiagrams = [], onGenerateDiagram, generatingDiagram, medicalResources = [], onTeach }) {
   const settings = useSettingsStore(state => state.settings);
 
   const { themeVars, boardType } = useMemo(() => {
@@ -72,8 +72,23 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
             </div>
             <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight leading-tight">{module.title}</h2>
           </div>
-          <div className="w-full md:w-auto flex justify-end">
+          <div className="w-full md:w-auto flex items-center justify-end gap-3">
             <TTSButton text={module.content} variant={isWhiteboard || isNotebook ? 'default' : 'chalk'} />
+            {onTeach && (
+              <button
+                onClick={onTeach}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-lg"
+                style={{
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  color: 'white',
+                  boxShadow: '0 4px 20px rgba(99,102,241,0.35)',
+                }}
+                title="Start a live audio teaching session with Sage"
+              >
+                <GraduationCap className="h-4 w-4" />
+                <span className="hidden sm:inline">Teach Me</span>
+              </button>
+            )}
           </div>
         </div>
 

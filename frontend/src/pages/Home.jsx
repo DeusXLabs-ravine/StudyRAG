@@ -11,6 +11,7 @@ import Logo from '../components/common/Logo';
 import { LampContainer } from '../components/ui/lamp';
 import FeatureLiveDemo from '../components/features/FeatureLiveDemo';
 import useAuthStore from '../store/authStore';
+import SEO from '../components/common/SEO';
 
 const features = [
   {
@@ -54,6 +55,24 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-slate-950 selection:bg-primary selection:text-white">
+      <SEO
+        title="Master Your Knowledge with AI"
+        description="StudyRAG uses Retrieval-Augmented Generation to transform your documents into interactive learning modules, quizzes, and flashcards."
+        canonical="/"
+        schema={{
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          "name": "StudyRAG",
+          "operatingSystem": "Web",
+          "applicationCategory": "EducationApplication",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "description": "AI-powered learning platform using RAG to master any subject through interactive document analysis."
+        }}
+      />
       <PublicNavbar transparent={!scrolled} />
 
       <main>

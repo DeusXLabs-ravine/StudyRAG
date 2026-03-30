@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
-import { Trash2, FileText, Sparkles, ArrowUp, Globe, MessageSquare, Plus, ChevronDown, Menu, X, Image as ImageIcon, Mic } from 'lucide-react';
+import { Trash2, FileText, Sparkles, ArrowUp, Globe, MessageSquare, Plus, ChevronDown, Menu, X, Image as ImageIcon, Mic, GraduationCap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as chatService from '../services/chatService';
 import useDocumentStore from '../store/documentStore';
@@ -14,6 +14,7 @@ import FormulaInput from '../components/chat/FormulaInput';
 import InputPreview from '../components/chat/InputPreview';
 import { ChatInput } from '@/components/ui/chat-input';
 import { MorphingSquare } from '../components/ui/morphing-square';
+import GeminiLiveTeacher from '../components/teach/GeminiLiveTeacher';
 
 // Sidebar extracted outside Chat to prevent re-creation on every keystroke
 const SidebarContent = memo(function SidebarContent({ messages, onClear, onCloseSidebar }) {
@@ -64,6 +65,7 @@ export default function Chat() {
   const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
   const [isPhotoActive, setIsPhotoActive] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isTeachOpen, setIsTeachOpen] = useState(false);
   const voiceInputEnabled = useSettingsStore(state => state.settings.a11y_voice_input === 'true');
   const { isListening: isVoiceListening, isSupported: isVoiceSupported, toggle: voiceToggle } = useVoiceInput({
     onTranscript: (text) => setInput(prev => prev + (prev ? ' ' : '') + text),
@@ -556,6 +558,26 @@ export default function Chat() {
                         {isVoiceListening && <span className="text-[9px] font-black uppercase tracking-wider pr-0.5">Listening</span>}
                       </button>
                     )}
+
+                    {/* Live Teach button */}
+                    <button
+                      type="button"
+                      onClick={() => setIsTeachOpen(true)}
+                      className="p-1.5 rounded-lg transition-all flex items-center gap-1.5"
+                      style={{
+                        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                        color: 'white',
+                        borderRadius: '0.5rem',
+                        padding: '0.375rem 0.75rem',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        boxShadow: '0 2px 12px rgba(99,102,241,0.35)',
+                      }}
+                      title="Start live audio teaching with Sage"
+                    >
+                      <GraduationCap className="h-4 w-4" />
+                      <span className="hidden sm:inline">Teach Me</span>
+                    </button>
                   </div>
 
                   <div className="flex items-center gap-1.5 min-w-0">
@@ -580,6 +602,25 @@ export default function Chat() {
           </div>
         </div>
       </div>
+
+      {/* Gemini Live Teacher Modal */}
+      <GeminiLiveTeacher
+        isOpen={isTeachOpen}
+        onClose={() => setIsTeachOpen(false)}
+        moduleTitle={selectedDocId
+          ? (readyDocs.find(d => d.id === selectedDocId)?.originalName
+            || readyDocs.find(d => d.id === selectedDocId)?.name
+            || 'Your Document')
+          : 'Your Knowledge Vault'
+        }
+        content=""
+        contextLabel={selectedDocId
+          ? readyDocs.find(d => d.id === selectedDocId)?.originalName
+            || readyDocs.find(d => d.id === selectedDocId)?.name
+          : 'Full Knowledge Vault'
+        }
+        teachingLevel="intermediate"
+      />
     </div>
   );
 }

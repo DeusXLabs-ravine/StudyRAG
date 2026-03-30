@@ -1,6 +1,7 @@
 import PublicNavbar from '../components/layout/PublicNavbar';
 import Footer from '../components/layout/Footer';
 import { Check, Star } from 'lucide-react';
+import SEO from '../components/common/SEO';
 
 export default function Pricing() {
     const tiers = [
@@ -40,6 +41,11 @@ export default function Pricing() {
 
     return (
         <div className="min-h-screen flex flex-col">
+            <SEO 
+                title="Sponsorship & Pricing Plans"
+                description="Choose the right plan for your academic journey. From our free starter tier to the advanced Pro plan with Sage 1.5 Pro reasoning models."
+                canonical="/pricing"
+            />
             <PublicNavbar />
             <main className="flex-1 bg-gray-50/50">
                 <section className="py-24 px-6">

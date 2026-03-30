@@ -29,6 +29,7 @@ import { recordLearningInteraction } from '../services/analyticsService';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import GeminiLiveTeacher from '../components/teach/GeminiLiveTeacher';
 
 // Stable reference to avoid Zustand infinite re-render loop
 const EMPTY_MESSAGES = [];
@@ -51,6 +52,7 @@ export default function Learn() {
   const [isTutorOpen, setIsTutorOpen] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isTutorMaximized, setIsTutorMaximized] = useState(false);
+  const [isTeachOpen, setIsTeachOpen] = useState(false);
 
   // Track IDs of modules explicitly unlocked this session so they can't re-lock
   const unlockedIdsRef = useRef(new Set());
@@ -610,6 +612,7 @@ export default function Learn() {
                   onGenerateDiagram={handleGenerateDiagram}
                   generatingDiagram={generatingDiagram}
                   medicalResources={medicalResources}
+                  onTeach={() => setIsTeachOpen(true)}
                   onStartQuiz={async () => {
                     // Track quiz start as kinesthetic interaction
                     recordLearningInteraction('quiz', 'click').catch(() => { });
@@ -665,12 +668,24 @@ export default function Learn() {
                   onDiagramRequest={handleGenerateDiagram}
                   onGameRequest={handleGameRequest}
                   onGameComplete={handleGameComplete}
+                  onTeach={() => setIsTeachOpen(true)}
                 />
               </motion.div>
             )}
           </AnimatePresence>
         </div>
       )}
+
+      {/* Gemini Live Teacher Modal */}
+      <GeminiLiveTeacher
+        isOpen={isTeachOpen}
+        onClose={() => setIsTeachOpen(false)}
+        moduleTitle={currentModule?.title || ''}
+        moduleTopic={currentModule?.topic || ''}
+        content={currentModule?.content || ''}
+        teachingLevel={settings.teaching_level || 'intermediate'}
+        contextLabel={currentModule ? `Module ${(currentModule.orderIndex ?? 0) + 1}: ${currentModule.title}` : ''}
+      />
 
       {/* Module Selector (Mobile Drawer) */}
       <AnimatePresence>
@@ -754,12 +769,28 @@ export default function Learn() {
                       <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Knowledge Explorer</span>
                     </div>
                   </div>
-                  <button onClick={() => setMobileAssistantOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                    <X className="h-6 w-6 text-gray-400" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {currentModule && (
+                      <button
+                        onClick={() => { setMobileAssistantOpen(false); setIsTeachOpen(true); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all active:scale-95"
+                        style={{
+                          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                          color: 'white',
+                          boxShadow: '0 2px 10px rgba(99,102,241,0.35)',
+                        }}
+                      >
+                        <GraduationCap className="h-3.5 w-3.5" />
+                        Teach
+                      </button>
+                    )}
+                    <button onClick={() => setMobileAssistantOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                      <X className="h-6 w-6 text-gray-400" />
+                    </button>
+                  </div>
                 </div>
                 <div className="flex-1 overflow-hidden">
-                  <TutorChat
+                   <TutorChat
                     messages={tutorMessages}
                     input={tutorInput}
                     setInput={setTutorInput}
@@ -771,6 +802,7 @@ export default function Learn() {
                     onDiagramRequest={handleGenerateDiagram}
                     onGameRequest={handleGameRequest}
                     onGameComplete={handleGameComplete}
+                    onTeach={() => { setMobileAssistantOpen(false); setIsTeachOpen(true); }}
                   />
                 </div>
               </motion.div>
@@ -925,7 +957,7 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
   );
 }
 
-function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded, currentModule, isMobile, isMaximized, setIsMaximized, onDiagramRequest, onGameRequest, onGameComplete }) {
+function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded, currentModule, isMobile, isMaximized, setIsMaximized, onDiagramRequest, onGameRequest, onGameComplete, onTeach }) {
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -996,6 +1028,21 @@ function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded,
               </div>
             </div>
             <div className="flex items-center gap-1">
+              {onTeach && currentModule && (
+                <button
+                  onClick={onTeach}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
+                  style={{
+                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    color: 'white',
+                    boxShadow: '0 2px 10px rgba(99,102,241,0.4)',
+                  }}
+                  title="Start live audio teaching session"
+                >
+                  <GraduationCap className="h-3.5 w-3.5" />
+                  Teach
+                </button>
+              )}
               <button
                 onClick={() => setIsMaximized(!isMaximized)}
                 className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"

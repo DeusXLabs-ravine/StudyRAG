@@ -1,0 +1,22 @@
+# StudyRAG Robots.txt
+# Master Your Knowledge - Optimized for StudyRAG.co
+
+User-agent: *
+Allow: /
+Allow: /about
+Allow: /features
+Allow: /pricing
+
+# Disallow protected app routes to focus crawl budget on public marketing pages
+Disallow: /documents
+Disallow: /learn
+Disallow: /chat
+Disallow: /quiz
+Disallow: /flashcards
+Disallow: /analytics
+Disallow: /exam
+Disallow: /simulations
+Disallow: /settings
+
+# Sitemap location
+Sitemap: https://studyrag.co/sitemap.xml

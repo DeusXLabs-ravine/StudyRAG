@@ -2,10 +2,16 @@ import { motion } from 'framer-motion';
 import PublicNavbar from '../components/layout/PublicNavbar';
 import Footer from '../components/layout/Footer';
 import { Target, Users, Sparkles, Shield, Zap, Search } from 'lucide-react';
+import SEO from '../components/common/SEO';
 
 export default function About() {
     return (
         <div className="min-h-screen flex flex-col bg-white selection:bg-primary selection:text-white">
+            <SEO 
+                title="Our Mission & Technology"
+                description="Learn how StudyRAG utilizes Retrieval-Augmented Generation to eliminate AI hallucinations and provide evidence-first educational tools."
+                canonical="/about"
+            />
             <PublicNavbar />
             <main className="flex-1">
                 {/* Hero section with sophisticated background */}
