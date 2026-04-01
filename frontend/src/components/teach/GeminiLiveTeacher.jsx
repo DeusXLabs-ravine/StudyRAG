@@ -3,21 +3,23 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mic, MicOff, GraduationCap, Volume2, VolumeX, AlertCircle, Send, Loader2, Brain, Sparkles, MessageSquare, Zap, Search, Image as ImageIcon, BookOpen } from 'lucide-react';
 import mermaid from 'mermaid';
 import useGeminiLive from '../../hooks/useGeminiLive';
-import { generateDiagramForTopic, getGeneratedDiagramImageUrl } from '../../services/diagramService';
-import { sendQuery } from '../../services/chatService';
+import { getGeneratedDiagramImageUrl } from '../../services/diagramService';
 
 // Initialize mermaid
-mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+mermaid.initialize({ startOnLoad: false, theme: 'neutral' });
+
+// Unique ID counter so each render call gets a fresh element ID (Mermaid 11.x requirement)
+let _mermaidIdCounter = 0;
 
 function DiagramDisplay({ code, title }) {
   const ref = useRef(null);
 
   useEffect(() => {
-    if (ref.current && code) {
-      mermaid.render('mermaid-svg', code).then(({ svg }) => {
-        if (ref.current) ref.current.innerHTML = svg;
-      });
-    }
+    if (!ref.current || !code) return;
+    const id = `mermaid-live-${++_mermaidIdCounter}`;
+    mermaid.render(id, code)
+      .then(({ svg }) => { if (ref.current) ref.current.innerHTML = svg; })
+      .catch(err => { console.warn('[DiagramDisplay] Mermaid render failed:', err.message); });
   }, [code]);
 
   return (
@@ -64,9 +66,9 @@ function IllustrationDisplay({ prompt, url, loading }) {
   );
 }
 
-function KnowledgeCard({ query, results, loading }) {
+function KnowledgeCard({ query, results, summary, loading }) {
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className="bg-white p-5 rounded-3xl border border-emerald-100 shadow-xl w-full max-w-md my-4"
@@ -84,24 +86,76 @@ function KnowledgeCard({ query, results, loading }) {
           <Search className="h-3 w-3 inline mr-2 opacity-40" />
           {query}
         </p>
-        
+
+        {/* Summary from search grounding — the standard model's answer */}
+        {!loading && summary && (
+          <p className="text-xs text-gray-600 leading-relaxed px-1">{summary}</p>
+        )}
+
         {!loading && results?.length > 0 && (
-          <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-            {results.slice(0, 3).map((res, i) => (
-              <a 
-                key={i} 
-                href={res.url} 
-                target="_blank" 
+          <div className="space-y-2 max-h-36 overflow-y-auto pr-2">
+            {results.slice(0, 4).map((res, i) => (
+              <a
+                key={i}
+                href={res.url}
+                target="_blank"
                 rel="noreferrer"
                 className="block p-2.5 rounded-xl hover:bg-emerald-50 transition-colors border border-transparent hover:border-emerald-100 group"
               >
                 <p className="text-[11px] font-bold text-emerald-700 truncate group-hover:underline">{res.title}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5 line-clamp-1 opacity-80">{res.snippet || res.url}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5 truncate opacity-80">{res.url}</p>
               </a>
             ))}
           </div>
         )}
       </div>
+    </motion.div>
+  );
+}
+
+function LightningRound({ topic, questions, loading }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-amber-50 p-5 rounded-3xl border border-amber-200 shadow-xl w-full my-4"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Zap className="h-3.5 w-3.5 text-amber-500 fill-current" />
+          <h4 className="text-[10px] font-black uppercase text-amber-600 tracking-widest">
+            Lightning Round{topic ? ` — ${topic}` : ''}
+          </h4>
+        </div>
+        {loading && <Loader2 className="h-3 w-3 text-amber-400 animate-spin" />}
+      </div>
+
+      {loading && (
+        <p className="text-xs text-amber-400 font-bold animate-pulse">Generating questions...</p>
+      )}
+
+      {!loading && questions?.length > 0 && (
+        <div className="space-y-2">
+          {questions.map((q, i) => (
+            <div key={i} className="bg-white rounded-2xl p-3 border border-amber-100">
+              <div className="flex items-start gap-2">
+                <span className="text-[10px] font-black text-amber-400 mt-0.5 w-4 flex-shrink-0">{i + 1}.</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-gray-800">{q.question}</p>
+                  {q.hint && (
+                    <p className="text-[10px] text-gray-400 mt-1 italic">Hint: {q.hint}</p>
+                  )}
+                </div>
+                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0 ${
+                  q.difficulty === 'easy' ? 'bg-green-100 text-green-600' :
+                  q.difficulty === 'hard' ? 'bg-red-100 text-red-600' :
+                  'bg-amber-100 text-amber-600'
+                }`}>{q.difficulty}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -261,51 +315,70 @@ export default function GeminiLiveTeacher({
 }) {
   const [interruptInput, setInterruptInput] = useState('');
   const [showInterrupt, setShowInterrupt] = useState(false);
-  const [toolData, setToolData] = useState(null); // { type: 'diagram'|'illustration'|'research', loading: bool, ... }
+  const [toolData, setToolData] = useState(null);
+  const [lightningQuestions, setLightningQuestions] = useState([]);
   const [isLightningRound, setIsLightningRound] = useState(false);
   const inputRef = useRef(null);
 
-  const onToolCall = useCallback(async (call) => {
-    const fc = call.functionCalls[0];
-    console.log(`[SageTool] Executing: ${fc.name}`, fc.args);
+  // Optimistic handler — fires immediately when Live API announces a tool call.
+  // Shows a loading state in the tool panel before the hybrid executor finishes.
+  const onToolCall = useCallback((call) => {
+    const calls = call?.functionCalls;
+    if (!calls?.length) return;
+    const fc = calls[0];
 
     if (fc.name === 'render_diagram') {
-      setToolData({ type: 'diagram', code: fc.args.code, title: fc.args.title });
-    } 
-    
-    else if (fc.name === 'generate_illustration') {
-      setToolData({ type: 'illustration', loading: true, prompt: fc.args.prompt });
-      try {
-        const result = await generateDiagramForTopic({
-          topic: fc.args.prompt,
-          moduleId,
-          documentId,
-          diagramType: 'image'
-        });
-        const imageUrl = await getGeneratedDiagramImageUrl(result.id);
-        setToolData({ type: 'illustration', loading: false, prompt: fc.args.prompt, url: imageUrl });
-      } catch (err) {
-        console.error('Illustration failed', err);
-        setToolData(null);
-      }
-    }
-
-    else if (fc.name === 'search_external_knowledge') {
+      setToolData({ type: 'diagram', loading: true, title: fc.args.title || 'Building diagram...' });
+    } else if (fc.name === 'generate_illustration') {
+      setToolData({ type: 'illustration', loading: true, prompt: fc.args.prompt || fc.args.description });
+    } else if (fc.name === 'search_external_knowledge') {
       setToolData({ type: 'research', loading: true, query: fc.args.query });
+    } else if (fc.name === 'start_lightning_round') {
+      setIsLightningRound(true);
+      setLightningQuestions([]);
+      setToolData({ type: 'lightning', loading: true, topic: fc.args.topic });
+    }
+  }, []);
+
+  // Real result handler — fires after the backend hybrid model finishes.
+  // Replaces loading states with actual content.
+  const onToolResult = useCallback(async ({ name, result }) => {
+    if (result?.error) {
+      setToolData(null);
+      return;
+    }
+
+    if (name === 'render_diagram') {
+      setToolData({ type: 'diagram', loading: false, code: result.mermaidCode, title: result.title });
+    }
+
+    else if (name === 'generate_illustration') {
+      // Fetch the generated image URL via the existing service
       try {
-        const result = await sendQuery(fc.args.query, documentId);
-        setToolData({ type: 'research', loading: false, query: fc.args.query, results: result.webSources || [] });
-      } catch (err) {
-        console.error('Research failed', err);
-        setToolData(null);
+        const imageUrl = await getGeneratedDiagramImageUrl(result.diagramId);
+        setToolData({ type: 'illustration', loading: false, prompt: result.prompt, url: imageUrl });
+      } catch {
+        setToolData({ type: 'illustration', loading: false, prompt: result.prompt, url: null });
       }
     }
 
-    else if (fc.name === 'start_lightning_round') {
-      setIsLightningRound(true);
-      setTimeout(() => setIsLightningRound(false), 12000);
+    else if (name === 'search_external_knowledge') {
+      setToolData({
+        type: 'research',
+        loading: false,
+        query: result.query || toolData?.query || '',
+        results: result.sources || [],
+        summary: result.summary || '',
+      });
     }
-  }, [documentId, moduleId]);
+
+    else if (name === 'start_lightning_round') {
+      setLightningQuestions(result.questions || []);
+      setToolData({ type: 'lightning', loading: false, topic: result.topic, questions: result.questions });
+      // Auto-clear lightning mode after 90s
+      setTimeout(() => { setIsLightningRound(false); setLightningQuestions([]); }, 90_000);
+    }
+  }, [toolData]);
 
   const {
     state,
@@ -319,7 +392,12 @@ export default function GeminiLiveTeacher({
     start,
     stop,
     sendTextInterruption,
-  } = useGeminiLive({ moduleTitle, moduleTopic, content, teachingLevel, userName, onToolCall });
+  } = useGeminiLive({
+    moduleTitle, moduleTopic, content, teachingLevel, userName,
+    moduleId, documentId,
+    onToolCall,
+    onToolResult,
+  });
 
   // Auto-start when opened
   useEffect(() => {
@@ -461,7 +539,21 @@ export default function GeminiLiveTeacher({
               )}
               {toolData?.type === 'research' && (
                 <div key="research" className="px-8 flex justify-center w-full">
-                  <KnowledgeCard query={toolData.query} results={toolData.results} loading={toolData.loading} />
+                  <KnowledgeCard
+                    query={toolData.query}
+                    results={toolData.results}
+                    summary={toolData.summary}
+                    loading={toolData.loading}
+                  />
+                </div>
+              )}
+              {toolData?.type === 'lightning' && (
+                <div key="lightning" className="px-8 w-full">
+                  <LightningRound
+                    topic={toolData.topic}
+                    questions={toolData.questions}
+                    loading={toolData.loading}
+                  />
                 </div>
               )}
             </AnimatePresence>

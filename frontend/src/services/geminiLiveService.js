@@ -8,7 +8,7 @@
  */
 
 const GEMINI_LIVE_WS = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
-const MODEL = 'models/gemini-3.1-flash-live-preview';
+const MODEL = 'models/gemini-2.0-flash-live-001';
 const INPUT_SAMPLE_RATE = 16000;
 const OUTPUT_SAMPLE_RATE = 24000;
 const CONNECT_TIMEOUT_MS = 20000;
@@ -56,14 +56,17 @@ function base64ToArrayBuffer(base64) {
 // ── GeminiLiveSession ─────────────────────────────────────────────────────────
 
 export class GeminiLiveSession {
-  constructor({ token, systemInstruction, onTranscript, onUserTranscript, onStateChange, onError, onToolCall }) {
+  constructor({ token, authToken, systemInstruction, toolContext, onTranscript, onUserTranscript, onStateChange, onError, onToolCall, onToolResult }) {
     this.token = token;
+    this._authToken = authToken || '';  // JWT for calling /api/gemini/execute-tool
+    this.toolContext = toolContext || {}; // { moduleTitle, moduleTopic, moduleId, documentId }
     this.systemInstruction = systemInstruction;
     this.onTranscript = onTranscript || (() => { });
     this.onUserTranscript = onUserTranscript || (() => { });
     this.onStateChange = onStateChange || (() => { });
     this.onError = onError || (() => { });
     this.onToolCall = onToolCall || (() => { });
+    this.onToolResult = onToolResult || (() => { }); // called with real result after hybrid execution
 
     this.ws = null;
     this.sessionId = null;
@@ -204,15 +207,23 @@ export class GeminiLiveSession {
       if (!calls?.length) return;
 
       console.log('[GeminiLive] Tool call:', calls[0].name, calls[0].args);
+
+      // Step 1: send immediate ack so Sage stays live while we execute
+      this._sendJSON({
+        toolResponse: {
+          functionResponses: calls.map(fc => ({
+            name: fc.name,
+            id: fc.id,
+            response: { output: { status: 'processing' } },
+          })),
+        },
+      });
+
+      // Step 2: notify UI optimistically (shows loading state in tool panel)
       this.onToolCall(msg.toolCall);
 
-      // Acknowledge each call so Sage keeps the turn
-      const responses = calls.map(fc => ({
-        name: fc.name,
-        id: fc.id,
-        response: { output: { status: 'processing' } },
-      }));
-      this._sendJSON({ toolResponse: { functionResponses: responses } });
+      // Step 3: execute via the backend hybrid model, then send real result back
+      this._executeToolsHybrid(calls);
     }
 
     // ── Server content ──────────────────────────────────────────
@@ -342,6 +353,59 @@ export class GeminiLiveSession {
       this.state = state;
       this.onStateChange(state);
     }
+  }
+
+  // ── Hybrid tool execution ─────────────────────────────────────────────────
+  // Calls the backend /api/gemini/execute-tool endpoint which uses a standard
+  // generative model to handle everything the Live API can't:
+  //   • Structured Mermaid output (schema-constrained JSON)
+  //   • Real-time web search grounding
+  //   • Image generation via Cloudinary pipeline
+  //   • Structured quiz question sets
+  //
+  // After execution, the REAL result is sent back to the Live session via a
+  // second toolResponse so Sage can speak intelligently about what was produced.
+
+  async _executeToolsHybrid(calls) {
+    const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
+    await Promise.all(calls.map(async (fc) => {
+      let result;
+      try {
+        const res = await fetch(`${API_BASE}/gemini/execute-tool`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this._authToken || ''}`,
+          },
+          body: JSON.stringify({
+            toolName: fc.name,
+            args: fc.args || {},
+            context: this.toolContext || {},
+          }),
+        });
+        const data = await res.json();
+        result = data.result || { status: 'done' };
+        console.log(`[GeminiLive/Hybrid] ${fc.name} result:`, result);
+      } catch (err) {
+        console.error(`[GeminiLive/Hybrid] ${fc.name} fetch failed:`, err.message);
+        result = { error: true, explanation: 'Tool execution failed, continuing session.' };
+      }
+
+      // Notify the UI with real results (replaces the loading state)
+      this.onToolResult?.({ name: fc.name, id: fc.id, result });
+
+      // Send real result back to Live session — Sage uses this to speak about it
+      this._sendJSON({
+        toolResponse: {
+          functionResponses: [{
+            name: fc.name,
+            id: fc.id,
+            response: { output: result },
+          }],
+        },
+      });
+    }));
   }
 }
 

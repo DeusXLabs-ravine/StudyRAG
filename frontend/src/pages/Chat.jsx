@@ -164,7 +164,7 @@ export default function Chat() {
       const nextSessions = hydrateChatSessions({
         storedSessions: loadStoredChatSessions(),
         legacyHistory,
-      }, sessionId);
+      });
       const nextActiveSessionId = resolveActiveChatSessionId(
         nextSessions,
         loadActiveChatSessionId(),
