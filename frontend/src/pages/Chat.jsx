@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
-import { Trash2, FileText, Sparkles, ArrowUp, Globe, MessageSquare, Plus, ChevronDown, Menu, X, Image as ImageIcon, Mic, GraduationCap } from 'lucide-react';
+import { FileText, Sparkles, ArrowUp, Globe, MessageSquare, Plus, ChevronDown, Menu, X, Image as ImageIcon, Mic, GraduationCap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as chatService from '../services/chatService';
 import useDocumentStore from '../store/documentStore';
@@ -15,9 +15,60 @@ import InputPreview from '../components/chat/InputPreview';
 import { ChatInput } from '@/components/ui/chat-input';
 import { MorphingSquare } from '../components/ui/morphing-square';
 import GeminiLiveTeacher from '../components/teach/GeminiLiveTeacher';
+import {
+  appendMessageToChatSession,
+  createChatSession,
+  hydrateChatSessions,
+  loadActiveChatSessionId,
+  loadStoredChatSessions,
+  replaceMessageInChatSession,
+  resolveActiveChatSessionId,
+  saveActiveChatSessionId,
+  saveStoredChatSessions,
+  upsertChatSession,
+} from '../utils/chatSessions';
+
+function formatSessionUpdatedAt(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const now = new Date();
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function getSessionPreviewText(session) {
+  const previewMessage = [...(session.messages || [])]
+    .reverse()
+    .find(message => typeof message.text === 'string' && message.text.trim());
+
+  if (!previewMessage) {
+    return 'No messages yet';
+  }
+
+  const preview = previewMessage.text.trim().replace(/\s+/g, ' ');
+  if (preview.length <= 72) {
+    return preview;
+  }
+
+  return `${preview.slice(0, 71).trimEnd()}...`;
+}
 
 // Sidebar extracted outside Chat to prevent re-creation on every keystroke
-const SidebarContent = memo(function SidebarContent({ messages, onClear, onCloseSidebar }) {
+const SidebarContent = memo(function SidebarContent({
+  sessions,
+  activeSessionId,
+  onNewChat,
+  onSelectSession,
+  onCloseSidebar,
+}) {
+  const visibleSessions = (sessions || []).filter(
+    session => session.messages?.length > 0 || session.id === activeSessionId,
+  );
+
   return (
     <div className="p-6 h-full flex flex-col">
       <div className="mb-6">
@@ -25,7 +76,7 @@ const SidebarContent = memo(function SidebarContent({ messages, onClear, onClose
       </div>
 
       <button
-        onClick={onClear}
+        onClick={onNewChat}
         className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-white border border-[#e2e8f0] text-[#0f172a] font-bold text-sm rounded-2xl hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm active:scale-95 mb-10"
       >
         <Plus className="h-4 w-4" />
@@ -36,14 +87,38 @@ const SidebarContent = memo(function SidebarContent({ messages, onClear, onClose
         <div>
           <h3 className="text-[10px] font-black uppercase text-[#94a3b8] tracking-[0.2em] mb-4 px-2">History</h3>
           <div className="space-y-1">
-            {messages.length > 0 ? (
-              <button
-                onClick={onCloseSidebar}
-                className="w-full flex items-center gap-3 text-left px-3 py-2.5 text-sm text-blue-600 bg-blue-50 rounded-xl font-bold border border-blue-100"
-              >
-                <MessageSquare className="h-4 w-4 opacity-70" />
-                <span className="truncate">Active Session</span>
-              </button>
+            {visibleSessions.length > 0 ? (
+              visibleSessions.map(session => {
+                const isActive = session.id === activeSessionId;
+
+                return (
+                  <button
+                    key={session.id}
+                    onClick={() => {
+                      onSelectSession(session.id);
+                      onCloseSidebar();
+                    }}
+                    className={`w-full flex items-start gap-3 text-left px-3 py-2.5 rounded-xl border transition-all ${
+                      isActive
+                        ? 'text-blue-600 bg-blue-50 font-bold border-blue-100'
+                        : 'text-[#334155] bg-white hover:bg-[#f8fafc] border-transparent'
+                    }`}
+                  >
+                    <MessageSquare className="h-4 w-4 opacity-70 mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="truncate text-sm">{session.title}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-[#94a3b8] flex-shrink-0">
+                          {formatSessionUpdatedAt(session.updatedAt)}
+                        </span>
+                      </div>
+                      <p className="truncate text-[11px] font-medium text-[#64748b] mt-1">
+                        {getSessionPreviewText(session)}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })
             ) : (
               <p className="px-3 py-2 text-xs text-[#94a3b8] font-medium italic">No recent chats</p>
             )}
@@ -57,7 +132,8 @@ const SidebarContent = memo(function SidebarContent({ messages, onClear, onClose
 export default function Chat() {
   const { documents, fetchDocuments } = useDocumentStore();
   // Use tutor-style messages: { role, text, blocks?, webSources?, timestamp }
-  const [messages, setMessages] = useState([]);
+  const [chatSessions, setChatSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedDocId, setSelectedDocId] = useState('');
@@ -76,37 +152,122 @@ export default function Chat() {
   const fileInputRef = useRef(null);
   const chatTextareaRef = useRef(null);
 
+  const activeSession = chatSessions.find(session => session.id === activeSessionId) || null;
+  const messages = activeSession?.messages || [];
+
   useEffect(() => {
+    let cancelled = false;
+
     fetchDocuments();
-    // Load history and convert to tutor message format
-    chatService.getChatHistory().then(data => {
-      if (Array.isArray(data)) {
-        const converted = [];
-        for (const msg of data) {
-          if (msg.query) converted.push({ role: 'student', text: msg.query, timestamp: msg.timestamp, _id: msg.id });
-          if (msg.answer) converted.push({ role: 'tutor', text: msg.answer, webSources: msg.webSources || [], timestamp: msg.timestamp, _id: msg.id, _sources: msg.sources });
-        }
-        setMessages(converted);
-      }
-    }).catch(() => { });
+
+    const initializeSessions = (legacyHistory = []) => {
+      const nextSessions = hydrateChatSessions({
+        storedSessions: loadStoredChatSessions(),
+        legacyHistory,
+      }, sessionId);
+      const nextActiveSessionId = resolveActiveChatSessionId(
+        nextSessions,
+        loadActiveChatSessionId(),
+      );
+
+      if (cancelled) return;
+
+      setChatSessions(nextSessions);
+      setActiveSessionId(nextActiveSessionId);
+
+      const nextActiveSession = nextSessions.find(session => session.id === nextActiveSessionId);
+      setSelectedDocId(nextActiveSession?.documentId || '');
+    };
+
+    chatService.getChatHistory()
+      .then(data => initializeSessions(Array.isArray(data) ? data : []))
+      .catch(() => initializeSessions());
+
+    return () => {
+      cancelled = true;
+    };
   }, [fetchDocuments]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
+  useEffect(() => {
+    if (chatSessions.length === 0) return;
+    saveStoredChatSessions(chatSessions);
+  }, [chatSessions]);
+
+  useEffect(() => {
+    saveActiveChatSessionId(activeSessionId);
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    if (!activeSessionId) return;
+
+    setChatSessions(prev => {
+      const currentSession = prev.find(session => session.id === activeSessionId);
+      if (!currentSession) return prev;
+
+      const nextDocumentId = selectedDocId || null;
+      if (currentSession.documentId === nextDocumentId) {
+        return prev;
+      }
+
+      return upsertChatSession(prev, {
+        ...currentSession,
+        documentId: nextDocumentId,
+      });
+    });
+  }, [activeSessionId, selectedDocId]);
+
   const readyDocs = (documents || []).filter(d => d.status === 'ready');
 
   // ─── Add message helper ────────────────────────────────────
-  const addMessage = (msg) => {
-    setMessages(prev => [...prev, { ...msg, timestamp: msg.timestamp || Date.now() }]);
-  };
+  const ensureActiveSession = useCallback(() => {
+    if (activeSessionId) {
+      return activeSessionId;
+    }
+
+    const nextSession = createChatSession();
+    setChatSessions(prev => upsertChatSession(prev, nextSession));
+    setActiveSessionId(nextSession.id);
+    return nextSession.id;
+  }, [activeSessionId]);
+
+  const updateSession = useCallback((sessionId, updater) => {
+    setChatSessions(prev => {
+      const existingSession = prev.find(session => session.id === sessionId)
+        || createChatSession({ id: sessionId, documentId: selectedDocId || null });
+      return upsertChatSession(prev, updater(existingSession));
+    });
+  }, [selectedDocId]);
+
+  const addMessage = useCallback((msg, sessionId = activeSessionId || ensureActiveSession()) => {
+    updateSession(sessionId, session => appendMessageToChatSession(
+      {
+        ...session,
+        documentId: selectedDocId || session.documentId || null,
+      },
+      { ...msg, timestamp: msg.timestamp || Date.now() },
+    ));
+  }, [activeSessionId, ensureActiveSession, selectedDocId, updateSession]);
+
+  const patchMessage = useCallback((sessionId, predicate, updater) => {
+    updateSession(sessionId, session => replaceMessageInChatSession(session, predicate, updater));
+  }, [updateSession]);
+
+  const handleSelectSession = useCallback((sessionId) => {
+    const nextSession = chatSessions.find(session => session.id === sessionId);
+    setActiveSessionId(sessionId);
+    setSelectedDocId(nextSession?.documentId || '');
+    setExpandedSources({});
+  }, [chatSessions]);
 
   // ─── Game request handler ──────────────────────────────────
-  const handleGameRequest = async (gameType) => {
+  const handleGameRequest = async (gameType, sessionId = activeSessionId || ensureActiveSession()) => {
     if (loading) return;
     if (!selectedDocId) {
-      addMessage({ role: 'tutor', text: 'Please select a document first so I can generate a game from your study materials!' });
+      addMessage({ role: 'tutor', text: 'Please select a document first so I can generate a game from your study materials!' }, sessionId);
       return;
     }
 
@@ -117,7 +278,7 @@ export default function Chat() {
       const { data } = await api.get('/modules', { params: { documentId: selectedDocId } });
       const modules = data.modules || [];
       if (modules.length === 0) {
-        addMessage({ role: 'tutor', text: 'No modules found for this document yet. Upload a document and wait for processing to complete!' });
+        addMessage({ role: 'tutor', text: 'No modules found for this document yet. Upload a document and wait for processing to complete!' }, sessionId);
         return;
       }
 
@@ -133,7 +294,7 @@ export default function Chat() {
               gameBlock.type === 'fill_blank' ? "Fill in the missing words:" :
                 "Let's test your knowledge!",
           blocks: [gameBlock],
-        });
+        }, sessionId);
       }
     } catch (err) {
       const errMsg = err?.response?.data?.error || err?.message || '';
@@ -143,14 +304,14 @@ export default function Chat() {
         text: isOverload
           ? "The AI is experiencing high demand right now. Try again in a few seconds!"
           : "Couldn't generate a game right now. Try again in a moment!",
-      });
+      }, sessionId);
     } finally {
       setLoading(false);
     }
   };
 
   // ─── Game complete handler ─────────────────────────────────
-  const handleGameComplete = async (result) => {
+  const handleGameComplete = async (result, sessionId = activeSessionId || ensureActiveSession()) => {
     try {
       const { type: _actionType, ...gameResult } = result;
       const submitResult = await useGameStore.getState().submitResult(gameResult);
@@ -166,22 +327,22 @@ export default function Chat() {
             streak: submitResult.streak || 0,
             newAchievements: submitResult.newAchievements || [],
           }],
-        });
+        }, sessionId);
         useGameStore.getState().fetchStats();
       }
     } catch { /* silent */ }
   };
 
   // ─── Diagram generation handler ─────────────────────────────
-  const handleDiagramRequest = async (topic) => {
+  const handleDiagramRequest = async (topic, sessionId = activeSessionId || ensureActiveSession()) => {
     if (loading) return;
     if (!selectedDocId) {
-      addMessage({ role: 'tutor', text: 'Select a document first so I can generate a diagram from your study materials!' });
+      addMessage({ role: 'tutor', text: 'Select a document first so I can generate a diagram from your study materials!' }, sessionId);
       return;
     }
 
     setLoading(true);
-    addMessage({ role: 'tutor', text: `Generating a visual for **${topic || 'this topic'}**... This may take a moment.` });
+    addMessage({ role: 'tutor', text: `Generating a visual for **${topic || 'this topic'}**... This may take a moment.` }, sessionId);
 
     try {
       const { default: api } = await import('../services/api');
@@ -189,7 +350,7 @@ export default function Chat() {
       const { data } = await api.get('/modules', { params: { documentId: selectedDocId } });
       const modules = data.modules || [];
       if (modules.length === 0) {
-        addMessage({ role: 'tutor', text: 'No modules found for this document yet.' });
+        addMessage({ role: 'tutor', text: 'No modules found for this document yet.' }, sessionId);
         return;
       }
 
@@ -205,7 +366,7 @@ export default function Chat() {
         documentId: selectedDocId,
         diagramType: 'auto',
         teachingLevel: 'intermediate',
-      });
+      }, sessionId);
 
       const diagrams = await getModuleDiagrams(targetModule.id);
       const newDiagram = diagrams.find(d => d.status === 'ready' && d.diagramCode);
@@ -213,19 +374,19 @@ export default function Chat() {
         addMessage({
           role: 'tutor',
           text: `Here's the diagram for **${topic || targetModule.topic}**:\n\n\`\`\`mermaid\n${newDiagram.diagramCode}\n\`\`\`\n\n${newDiagram.description || ''}`,
-        });
+        }, sessionId);
       } else {
-        addMessage({ role: 'tutor', text: 'Visual generated! It may take a moment to render. Check back shortly.' });
+        addMessage({ role: 'tutor', text: 'Visual generated! It may take a moment to render. Check back shortly.' }, sessionId);
       }
     } catch (err) {
-      addMessage({ role: 'tutor', text: "Couldn't generate the visual right now. Please try again in a moment!" });
+      addMessage({ role: 'tutor', text: "Couldn't generate the visual right now. Please try again in a moment!" }, sessionId);
     } finally {
       setLoading(false);
     }
   };
 
   // ─── Simulation request handler ──────────────────────────────
-  const handleSimulationRequest = async (query) => {
+  const handleSimulationRequest = async (query, sessionId = activeSessionId || ensureActiveSession()) => {
     setLoading(true);
     try {
       const { generateSimulationParams } = await import('../services/simulationService');
@@ -240,7 +401,7 @@ export default function Chat() {
             params: result.params || {},
             suggestedExperiment: result.suggestedExperiment || null,
           }],
-        });
+        }, sessionId);
       } else {
         // Fallback — pick a simulation based on keyword matching
         const simMap = {
@@ -255,7 +416,7 @@ export default function Chat() {
           role: 'tutor',
           text: `Here's an interactive **${sim.title}** simulation! Adjust the parameters and press Play.`,
           blocks: [{ type: 'simulation', simulationId: sim.id, params: {} }],
-        });
+        }, sessionId);
       }
     } catch {
       // Fallback without backend
@@ -271,7 +432,7 @@ export default function Chat() {
         role: 'tutor',
         text: `Here's an interactive **${sim.title}** simulation! Adjust the parameters and press Play.`,
         blocks: [{ type: 'simulation', simulationId: sim.id, params: {} }],
-      });
+      }, sessionId);
     } finally {
       setLoading(false);
     }
@@ -287,32 +448,33 @@ export default function Chat() {
     const query = (text || input).trim();
     if (!query || loading) return;
     setInput('');
+    const sessionId = activeSessionId || ensureActiveSession();
 
     // ── Keyword: game/quiz ──
     if (/\b(quiz me|test me|play.*game|start.*game|challenge me|let'?s play|game time|trivia)\b/i.test(query)) {
-      addMessage({ role: 'student', text: query });
-      handleGameRequest(null);
+      addMessage({ role: 'student', text: query }, sessionId);
+      handleGameRequest(null, sessionId);
       return;
     }
 
     // ── Keyword: calculator ──
     if (/\b(calculator|calc|compute|calculate)\b/i.test(query)) {
-      addMessage({ role: 'student', text: query });
-      addMessage({ role: 'tutor', text: 'Here\'s a scientific calculator with graphing and unit conversion!', blocks: [{ type: 'calculator' }] });
+      addMessage({ role: 'student', text: query }, sessionId);
+      addMessage({ role: 'tutor', text: 'Here\'s a scientific calculator with graphing and unit conversion!', blocks: [{ type: 'calculator' }] }, sessionId);
       return;
     }
 
     // ── Keyword: simulation ──
     if (/\b(simulat(?:e|ion)|physics lab|projectile|pendulum|spring[\s-]?mass|collision)\b/i.test(query)) {
-      addMessage({ role: 'student', text: query });
-      handleSimulationRequest(query);
+      addMessage({ role: 'student', text: query }, sessionId);
+      handleSimulationRequest(query, sessionId);
       return;
     }
 
     // ── Keyword: plot/graph ──
     const plotMatch = query.match(/^(?:plot|graph)\s+(?:y\s*=\s*)?(.+)/i);
     if (plotMatch) {
-      addMessage({ role: 'student', text: query });
+      addMessage({ role: 'student', text: query }, sessionId);
       const exprText = plotMatch[1].trim();
       const rangeMatch = exprText.match(/^(.+?)\s+from\s+([-\d.]+)\s+to\s+([-\d.]+)/i);
       const expression = rangeMatch ? rangeMatch[1].trim() : exprText;
@@ -334,10 +496,10 @@ export default function Chat() {
     }
 
     // ── Normal chat send (streaming) ──
-    addMessage({ role: 'student', text: query });
+    addMessage({ role: 'student', text: query }, sessionId);
     // Add empty tutor message that fills in as tokens arrive
     const streamingId = `stream-${Date.now()}`;
-    setMessages(prev => [...prev, { role: 'tutor', text: '', _streaming: true, _streamId: streamingId, timestamp: Date.now() }]);
+    addMessage({ role: 'tutor', text: '', _streaming: true, _streamId: streamingId, timestamp: Date.now() }, sessionId);
     setLoading(true);
 
     const durationSeconds = Math.round((Date.now() - lastMessageTime) / 1000);
@@ -348,39 +510,71 @@ export default function Chat() {
       for await (const event of chatService.streamQuery(query, selectedDocId || null, durationSeconds)) {
         if (event.type === 'text') {
           accumulated += event.text;
-          setMessages(prev => prev.map(m =>
-            m._streamId === streamingId ? { ...m, text: accumulated } : m
-          ));
+          patchMessage(
+            sessionId,
+            message => message._streamId === streamingId,
+            message => ({ ...message, text: accumulated }),
+          );
         } else if (event.type === 'done') {
-          setMessages(prev => prev.map(m =>
-            m._streamId === streamingId
-              ? { ...m, _streaming: false, _streamId: undefined, webSources: event.webSources || [], _sources: event.sources || [], _id: event.id, timestamp: event.timestamp || m.timestamp }
-              : m
-          ));
+          patchMessage(
+            sessionId,
+            message => message._streamId === streamingId,
+            message => ({
+              ...message,
+              _streaming: false,
+              _streamId: undefined,
+              webSources: event.webSources || [],
+              _sources: event.sources || [],
+              _id: event.id,
+              timestamp: event.timestamp || message.timestamp,
+            }),
+          );
         } else if (event.type === 'error') {
-          setMessages(prev => prev.map(m =>
-            m._streamId === streamingId
-              ? { ...m, text: "Sorry, I'm having trouble responding right now. Please try again in a moment!", _streaming: false, _streamId: undefined }
-              : m
-          ));
+          patchMessage(
+            sessionId,
+            message => message._streamId === streamingId,
+            message => ({
+              ...message,
+              text: "Sorry, I'm having trouble responding right now. Please try again in a moment!",
+              _streaming: false,
+              _streamId: undefined,
+            }),
+          );
         }
       }
     } catch (err) {
-      setMessages(prev => prev.map(m =>
-        m._streamId === streamingId
+      patchMessage(
+        sessionId,
+        message => message._streamId === streamingId,
+        message => ({
+          ...message,
+          text: "Sorry, I'm having trouble responding right now. There's a lot of activity on our servers - please try again in a moment!",
+          _streaming: false,
+          _streamId: undefined,
+        }), /*
           ? { ...m, text: "Sorry, I'm having trouble responding right now. There's a lot of activity on our servers — please try again in a moment!", _streaming: false, _streamId: undefined }
           : m
-      ));
+      */);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleClear = useCallback(async () => {
-    await chatService.clearChatHistory();
-    setMessages([]);
+  const handleNewChat = useCallback(() => {
+    const currentSession = chatSessions.find(session => session.id === activeSessionId);
+    if (currentSession && currentSession.messages.length === 0) {
+      setSelectedDocId(currentSession.documentId || '');
+      setIsSidebarOpen(false);
+      return;
+    }
+
+    const nextSession = createChatSession();
+    setChatSessions(prev => upsertChatSession(prev, nextSession));
+    setActiveSessionId(nextSession.id);
+    setSelectedDocId('');
+    setExpandedSources({});
     setIsSidebarOpen(false);
-  }, []);
+  }, [activeSessionId, chatSessions]);
 
   const toggleSource = (msgIdx) => {
     setExpandedSources(prev => ({ ...prev, [msgIdx]: !prev[msgIdx] }));
@@ -404,7 +598,13 @@ export default function Chat() {
 
       {/* Desktop Sidebar */}
       <div className="w-64 md:w-72 bg-[#fcfdff] border-r border-[#f1f5f9] hidden md:flex flex-col flex-shrink-0 z-10">
-        <SidebarContent messages={messages} onClear={handleClear} onCloseSidebar={closeSidebar} />
+        <SidebarContent
+          sessions={chatSessions}
+          activeSessionId={activeSessionId}
+          onNewChat={handleNewChat}
+          onSelectSession={handleSelectSession}
+          onCloseSidebar={closeSidebar}
+        />
       </div>
 
       {/* Mobile Drawer */}
@@ -417,7 +617,13 @@ export default function Chat() {
                 <span className="text-sm font-black text-[#0f172a] uppercase tracking-widest">Chat History</span>
                 <button onClick={() => setIsSidebarOpen(false)} className="p-2 text-[#94a3b8]"><X className="h-5 w-5" /></button>
               </div>
-              <SidebarContent messages={messages} onClear={handleClear} onCloseSidebar={closeSidebar} />
+              <SidebarContent
+                sessions={chatSessions}
+                activeSessionId={activeSessionId}
+                onNewChat={handleNewChat}
+                onSelectSession={handleSelectSession}
+                onCloseSidebar={closeSidebar}
+              />
             </motion.div>
           </>
         )}

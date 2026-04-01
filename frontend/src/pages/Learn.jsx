@@ -127,7 +127,9 @@ export default function Learn() {
         // Only auto-select if no module is currently active for this specific document/course
         if (!currentModule || (currentModule.documentId !== selectedDocId && currentModule.courseId !== selectedCourseId)) {
           const firstIncomplete = modules.find(m => !m.progress?.completed) || modules[0];
-          setCurrentModule(firstIncomplete);
+          if (firstIncomplete) {
+            setCurrentModule(firstIncomplete);
+          }
         }
       }
     }
@@ -696,7 +698,7 @@ export default function Learn() {
         content={currentModule?.content || ''}
         teachingLevel={settings.teaching_level || 'intermediate'}
         contextLabel={currentModule ? `Module ${(currentModule.orderIndex ?? 0) + 1}: ${currentModule.title}` : ''}
-        documentId={id}
+        documentId={selectedDocId}
         moduleId={currentModule?.id}
       />
 

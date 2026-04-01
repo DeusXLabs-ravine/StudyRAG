@@ -197,6 +197,12 @@ export class GeminiLiveSession {
 
       this.ws.onmessage = (event) => {
         try {
+          if (typeof event.data !== 'string') {
+            // Binary data received, ignore or handle as audio if needed
+            // The API usually sends audio as base64 in a JSON message, 
+            // but sometimes raw binary might come through if configured.
+            return;
+          }
           const response = JSON.parse(event.data);
           if (response.setupComplete) {
             this._setupCompleteReceived = true;
