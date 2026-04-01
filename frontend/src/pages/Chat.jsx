@@ -66,6 +66,7 @@ export default function Chat() {
   const [isPhotoActive, setIsPhotoActive] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isTeachOpen, setIsTeachOpen] = useState(false);
+  const [lastMessageTime, setLastMessageTime] = useState(Date.now());
   const voiceInputEnabled = useSettingsStore(state => state.settings.a11y_voice_input === 'true');
   const { isListening: isVoiceListening, isSupported: isVoiceSupported, toggle: voiceToggle } = useVoiceInput({
     onTranscript: (text) => setInput(prev => prev + (prev ? ' ' : '') + text),
@@ -339,9 +340,12 @@ export default function Chat() {
     setMessages(prev => [...prev, { role: 'tutor', text: '', _streaming: true, _streamId: streamingId, timestamp: Date.now() }]);
     setLoading(true);
 
+    const durationSeconds = Math.round((Date.now() - lastMessageTime) / 1000);
+    setLastMessageTime(Date.now());
+
     try {
       let accumulated = '';
-      for await (const event of chatService.streamQuery(query, selectedDocId || null)) {
+      for await (const event of chatService.streamQuery(query, selectedDocId || null, durationSeconds)) {
         if (event.type === 'text') {
           accumulated += event.text;
           setMessages(prev => prev.map(m =>
@@ -620,6 +624,7 @@ export default function Chat() {
           : 'Full Knowledge Vault'
         }
         teachingLevel="intermediate"
+        documentId={selectedDocId}
       />
     </div>
   );

@@ -6,7 +6,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { COLORS, GradientBg, DotGrid, Badge, FeatureCard } from "./shared";
+import { COLORS, GradientBg, DotGrid, Badge, FeatureCard, SHADOWS } from "./shared";
 
 export const AnalyticsScene: React.FC = () => {
   const frame = useCurrentFrame();
@@ -26,13 +26,10 @@ export const AnalyticsScene: React.FC = () => {
   // Bar chart data
   const topics = [
     { name: "Photosynthesis", score: 92, color: COLORS.green },
-    { name: "Cell Division", score: 78, color: COLORS.sky },
+    { name: "Cell Division", score: 78, color: COLORS.primary },
     { name: "Genetics", score: 65, color: COLORS.purple },
     { name: "Evolution", score: 45, color: COLORS.amber },
   ];
-
-  // Animate bars
-  const barProgress = interpolate(frame, [50, 110], [0, 1], { extrapolateRight: "clamp" });
 
   return (
     <AbsoluteFill>
@@ -44,173 +41,142 @@ export const AnalyticsScene: React.FC = () => {
           position: "absolute",
           inset: 0,
           display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "60px 100px",
+          alignItems: "stretch",
+          padding: "60px 80px",
           gap: 48,
         }}
       >
-        {/* Left: label + description */}
-        <div style={{ width: 320 }}>
-          <div style={{ opacity: fadeIn(0, 20), marginBottom: 20 }}>
-            <Badge color={COLORS.purple}>Analytics</Badge>
+        {/* Left: Progress Sidebar */}
+        <div
+          style={{
+            width: 320,
+            display: "flex",
+            flexDirection: "column",
+            gap: 20,
+            opacity: fadeIn(0, 25),
+            transform: `translateX(${interpolate(sp(0), [0, 1], [-30, 0])}px)`,
+          }}
+        >
+          <div style={{ marginBottom: 12 }}>
+            <Badge color={COLORS.purple}>Learning Analytics</Badge>
           </div>
-          <h2
-            style={{
-              opacity: fadeIn(10, 35),
-              transform: `translateY(${slideIn(10)}px)`,
-              fontSize: 52,
-              fontWeight: 800,
-              color: COLORS.textPrimary,
-              margin: "0 0 20px",
-              lineHeight: 1.1,
-              letterSpacing: "-0.02em",
-              fontFamily: "Outfit, sans-serif",
-            }}
-          >
-            Track Your{" "}
-            <span style={{ background: `linear-gradient(135deg, ${COLORS.purple}, ${COLORS.sky})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-              Progress
-            </span>
-          </h2>
-          <p
-            style={{
-              opacity: fadeIn(30, 55),
-              fontSize: 17,
-              color: COLORS.textSecondary,
-              lineHeight: 1.7,
-              margin: "0 0 32px",
-              fontFamily: "Outfit, sans-serif",
-            }}
-          >
-            Real-time mastery tracking across every topic. Identify weak areas and focus your study time where it matters most.
-          </p>
-
-          {/* Quick stats */}
-          <div style={{ opacity: fadeIn(50, 75), display: "flex", flexDirection: "column", gap: 12 }}>
-            {[
-              { icon: "🏆", label: "Overall Mastery", value: `${masteryScore}%`, color: COLORS.green },
-              { icon: "🔥", label: "Study Streak", value: "12 days", color: COLORS.amber },
-              { icon: "⚡", label: "XP Earned", value: "2,840", color: COLORS.sky },
-            ].map(({ icon, label, value, color }) => (
-              <div key={label} style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div style={{ fontSize: 20 }}>{icon}</div>
-                <div style={{ flex: 1 }}>
-                  <p style={{ margin: 0, fontSize: 13, color: COLORS.textMuted, fontFamily: "Outfit, sans-serif" }}>{label}</p>
+          
+          <div style={{ 
+            background: "#fff", 
+            borderRadius: 24, 
+            padding: 24, 
+            boxShadow: SHADOWS.md,
+            border: `1px solid ${COLORS.border}`,
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            gap: 24
+          }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: COLORS.textMuted, margin: 0, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+              Key Performance
+            </h3>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              {[
+                { icon: "🏆", label: "Overall Mastery", value: `${masteryScore}%`, color: COLORS.green },
+                { icon: "🔥", label: "Study Streak", value: "12 days", color: COLORS.amber },
+                { icon: "⚡", label: "XP Earned", value: "2,840", color: COLORS.primary },
+              ].map((stat, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, opacity: fadeIn(i*10, i*10+20) }}>
+                  <div style={{ fontSize: 24 }}>{stat.icon}</div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontSize: 12, color: COLORS.textMuted, fontWeight: 600, textTransform: "uppercase" }}>{stat.label}</p>
+                    <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: stat.color }}>{stat.value}</p>
+                  </div>
                 </div>
-                <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color, fontFamily: "Outfit, sans-serif" }}>{value}</p>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            <div style={{ marginTop: "auto", background: COLORS.bgCardAlt, borderRadius: 16, padding: 20, border: `1px solid ${COLORS.border}` }}>
+                <p style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: COLORS.textPrimary }}>Weekly Goal</p>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, color: COLORS.textSecondary }}>Study Time</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.primary }}>12/15h</span>
+                </div>
+                <div style={{ height: 6, background: "#fff", borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ width: "80%", height: "100%", background: COLORS.primary }} />
+                </div>
+            </div>
           </div>
         </div>
 
-        {/* Right: charts */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 20 }}>
-          {/* Mastery score ring + label */}
-          <div style={{ display: "flex", gap: 20 }}>
-            {/* Score card */}
-            <FeatureCard
+        {/* Right: Detailed Charts */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 24 }}>
+          {/* Main Title Area */}
+          <div style={{ opacity: fadeIn(10, 35), transform: `translateY(${slideIn(10)}px)` }}>
+            <h2
               style={{
-                opacity: fadeIn(15, 40),
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                padding: "28px 24px",
-                background: `linear-gradient(135deg, ${COLORS.bgCard}, ${COLORS.bgCardAlt})`,
+                fontSize: 56,
+                fontWeight: 900,
+                color: COLORS.textPrimary,
+                margin: "0 0 12px",
+                lineHeight: 1.1,
+                letterSpacing: "-0.04em",
+                fontFamily: "Outfit, sans-serif",
               }}
             >
-              <p style={{ margin: "0 0 8px", fontSize: 11, color: COLORS.textMuted, fontFamily: "Outfit, sans-serif", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                Mastery Score
-              </p>
-              <div
+              Visualize Your{" "}
+              <span
                 style={{
-                  fontSize: 72,
-                  fontWeight: 900,
-                  background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.sky})`,
+                  background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.purple})`,
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
-                  fontFamily: "Outfit, sans-serif",
-                  lineHeight: 1,
-                  marginBottom: 8,
                 }}
               >
-                {masteryScore}
-                <span style={{ fontSize: 32 }}>%</span>
-              </div>
-              <p style={{ margin: 0, fontSize: 13, color: COLORS.green, fontFamily: "Outfit, sans-serif", fontWeight: 500 }}>
-                ↑ 12% this week
-              </p>
-            </FeatureCard>
-
-            {/* Streak card */}
-            <FeatureCard
-              style={{
-                opacity: fadeIn(20, 45),
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "28px 24px",
-              }}
-            >
-              <div style={{ fontSize: 48, marginBottom: 8 }}>🔥</div>
-              <p style={{ margin: "0 0 4px", fontSize: 36, fontWeight: 800, color: COLORS.amber, fontFamily: "Outfit, sans-serif" }}>12</p>
-              <p style={{ margin: 0, fontSize: 13, color: COLORS.textMuted, fontFamily: "Outfit, sans-serif", textTransform: "uppercase", letterSpacing: "0.04em" }}>Day Streak</p>
-            </FeatureCard>
+                Growth
+              </span>
+            </h2>
+            <p style={{ fontSize: 20, color: COLORS.textSecondary, fontWeight: 500 }}>AI-driven insights to optimize your study patterns.</p>
           </div>
 
-          {/* Topic breakdown bars */}
-          <FeatureCard style={{ opacity: fadeIn(35, 60) }}>
-            <p style={{ margin: "0 0 20px", fontSize: 14, fontWeight: 600, color: COLORS.textPrimary, fontFamily: "Outfit, sans-serif" }}>
-              Topic Mastery Breakdown
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {topics.map((topic, i) => {
-                const barDelay = 50 + i * 15;
-                const barWidth = interpolate(frame, [barDelay, barDelay + 40], [0, topic.score], { extrapolateRight: "clamp" });
+          <div style={{ display: "flex", gap: 24 }}>
+             {/* Score Card */}
+             <div style={{ flex: 1.5, background: "#fff", borderRadius: 24, padding: 32, boxShadow: SHADOWS.lg, border: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column", gap: 24 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <h3 style={{ fontSize: 18, fontWeight: 800, color: COLORS.textPrimary }}>Topic Mastery Breakdown</h3>
+                    <Badge color={COLORS.primary}>Biology Ch.5</Badge>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    {topics.map((topic, i) => {
+                        const barDelay = 50 + i * 15;
+                        const barWidth = interpolate(frame, [barDelay, barDelay + 40], [0, topic.score], { extrapolateRight: "clamp" });
+                        return (
+                            <div key={topic.name}>
+                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                                    <span style={{ fontSize: 14, color: COLORS.textSecondary, fontWeight: 600 }}>{topic.name}</span>
+                                    <span style={{ fontSize: 14, fontWeight: 800, color: topic.color }}>{Math.round(barWidth)}%</span>
+                                </div>
+                                <div style={{ height: 10, background: COLORS.bgCardAlt, borderRadius: 5, overflow: "hidden" }}>
+                                    <div style={{ width: `${barWidth}%`, height: "100%", background: topic.color, borderRadius: 5 }} />
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+             </div>
 
-                return (
-                  <div key={topic.name}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, color: COLORS.textSecondary, fontFamily: "Outfit, sans-serif" }}>
-                        {topic.name}
-                      </span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: topic.color, fontFamily: "Outfit, sans-serif" }}>
-                        {Math.round(barWidth)}%
-                      </span>
+             {/* Right Column: Mini Cards */}
+             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 24 }}>
+                <div style={{ background: "#fff", borderRadius: 24, padding: 24, boxShadow: SHADOWS.md, border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", gap: 16 }}>
+                    <div style={{ width: 48, height: 48, borderRadius: 12, background: `${COLORS.amber}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>🎯</div>
+                    <div>
+                        <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: COLORS.textMuted }}>FOCUS AREA</p>
+                        <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: COLORS.textPrimary }}>Evolution Basics</p>
                     </div>
-                    <div style={{ height: 8, background: COLORS.bgCardAlt, borderRadius: 4, overflow: "hidden" }}>
-                      <div
-                        style={{
-                          width: `${barWidth}%`,
-                          height: "100%",
-                          background: topic.color,
-                          borderRadius: 4,
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </FeatureCard>
-
-          {/* Weak areas */}
-          <FeatureCard style={{ opacity: fadeIn(80, 105) }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontSize: 20 }}>🎯</span>
-              <div>
-                <p style={{ margin: "0 0 2px", fontSize: 14, fontWeight: 600, color: COLORS.textPrimary, fontFamily: "Outfit, sans-serif" }}>
-                  Recommended Focus
-                </p>
-                <p style={{ margin: 0, fontSize: 13, color: COLORS.textSecondary, fontFamily: "Outfit, sans-serif" }}>
-                  Spend more time on <span style={{ color: COLORS.amber, fontWeight: 600 }}>Evolution</span> — only 45% mastery. StudyRAG has prepared 8 targeted exercises.
-                </p>
-              </div>
-            </div>
-          </FeatureCard>
+                </div>
+                
+                <div style={{ flex: 1, background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.purple})`, borderRadius: 24, padding: 24, boxShadow: SHADOWS.lg, color: "#fff", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", textAlign: "center" }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 700, opacity: 0.9, marginBottom: 8 }}>PREDICTED GRADE</p>
+                    <p style={{ margin: 0, fontSize: 64, fontWeight: 900, lineHeight: 1 }}>A+</p>
+                    <p style={{ margin: "12px 0 0", fontSize: 14, fontWeight: 600, opacity: 0.9 }}>Based on 124 quiz attempts</p>
+                </div>
+             </div>
+          </div>
         </div>
       </div>
     </AbsoluteFill>

@@ -5,8 +5,8 @@ export async function generateAptitudeTest(subject) {
   return data;
 }
 
-export async function submitAptitudeTest(subject, answers, questions) {
-  const { data } = await api.post('/aptitude/submit', { subject, answers, questions });
+export async function submitAptitudeTest(subject, answers, questions, durationSeconds = null) {
+  const { data } = await api.post('/aptitude/submit', { subject, answers, questions, durationSeconds });
   return data;
 }
 

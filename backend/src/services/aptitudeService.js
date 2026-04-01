@@ -36,7 +36,7 @@ async function generateAptitudeTest(subject) {
   };
 }
 
-async function submitAptitudeTest(subject, answers, questions, userId = null) {
+async function submitAptitudeTest(subject, answers, questions, userId = null, durationSeconds = null) {
   let correct = 0;
   const tierScores = { beginner: 0, intermediate: 0, advanced: 0, expert: 0 };
   const tierTotals = { beginner: 0, intermediate: 0, advanced: 0, expert: 0 };
@@ -102,6 +102,7 @@ async function submitAptitudeTest(subject, answers, questions, userId = null) {
 
   const sessRow = {
     mode: 'aptitude',
+    duration_seconds: durationSeconds || 300, // Estimate 5 minutes per aptitude test if not provided
     details_json: { subject, score, knowledgeLevel, learningPace },
   };
   if (userId) sessRow.user_id = userId;

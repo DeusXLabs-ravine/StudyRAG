@@ -6,7 +6,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import useModuleStore from '../../store/moduleStore';
 
-export default function QuizSection({ module, onBack, onComplete }) {
+export default function QuizSection({ module, onBack, onComplete, startTime }) {
   const { submitProgress } = useModuleStore();
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState({});
@@ -31,8 +31,9 @@ export default function QuizSection({ module, onBack, onComplete }) {
     });
 
     const score = Math.round((correct / questions.length) * 100);
+    const durationSeconds = startTime ? Math.round((Date.now() - startTime) / 1000) : null;
     try {
-      await submitProgress(module.id, score, answers);
+      await submitProgress(module.id, score, answers, durationSeconds);
     } catch (err) {
       // progress save failed — non-blocking
     }

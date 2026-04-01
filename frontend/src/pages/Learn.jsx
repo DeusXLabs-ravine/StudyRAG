@@ -53,6 +53,16 @@ export default function Learn() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isTutorMaximized, setIsTutorMaximized] = useState(false);
   const [isTeachOpen, setIsTeachOpen] = useState(false);
+  const [moduleStartTime, setModuleStartTime] = useState(null);
+
+  // Set start time when a module is selected
+  useEffect(() => {
+    if (currentModule) {
+      setModuleStartTime(Date.now());
+    } else {
+      setModuleStartTime(null);
+    }
+  }, [currentModule?.id]);
 
   // Track IDs of modules explicitly unlocked this session so they can't re-lock
   const unlockedIdsRef = useRef(new Set());
@@ -589,6 +599,7 @@ export default function Learn() {
               showQuiz ? (
                 <QuizSection
                   module={currentModule}
+                  startTime={moduleStartTime}
                   onComplete={() => {
                     markModuleCompleted(currentModule.id);
                     const safeModules = modules || [];
@@ -685,6 +696,8 @@ export default function Learn() {
         content={currentModule?.content || ''}
         teachingLevel={settings.teaching_level || 'intermediate'}
         contextLabel={currentModule ? `Module ${(currentModule.orderIndex ?? 0) + 1}: ${currentModule.title}` : ''}
+        documentId={id}
+        moduleId={currentModule?.id}
       />
 
       {/* Module Selector (Mobile Drawer) */}

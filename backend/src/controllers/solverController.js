@@ -2,13 +2,13 @@ const { solveProblem, solveFollowUp, getSolverHistory } = require('../services/s
 
 async function solve(req, res, next) {
   try {
-    const { problem, subject, documentId, useWebSearch = false } = req.body;
+    const { problem, subject, documentId, useWebSearch = false, durationSeconds } = req.body;
 
     if (!problem || !problem.trim()) {
       return res.status(400).json({ error: 'Problem is required' });
     }
 
-    const result = await solveProblem(problem.trim(), subject || null, documentId || null, useWebSearch, req.user?.id || null);
+    const result = await solveProblem(problem.trim(), subject || null, documentId || null, useWebSearch, req.user?.id || null, durationSeconds);
     res.json(result);
   } catch (error) {
     next(error);

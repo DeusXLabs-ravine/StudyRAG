@@ -18,6 +18,7 @@ export default function Quiz() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState('config'); // config, quiz, result
+  const [startTime, setStartTime] = useState(null);
 
   useEffect(() => { fetchDocuments(); }, [fetchDocuments]);
 
@@ -30,6 +31,7 @@ export default function Quiz() {
       setQuiz(data);
       setAnswers({});
       setCurrentQ(0);
+      setStartTime(Date.now());
       setView('quiz');
     } catch (err) {
       alert(err.message);
@@ -45,8 +47,9 @@ export default function Quiz() {
   const handleSubmit = async () => {
     setLoading(true);
     try {
+      const timeSpentSeconds = Math.round((Date.now() - startTime) / 1000);
       const answerArray = quiz.questions.map(q => answers[q.id] || '');
-      const data = await quizService.submitQuiz(quiz.id, answerArray, quiz.questions);
+      const data = await quizService.submitQuiz(quiz.id, answerArray, quiz.questions, timeSpentSeconds);
       setResult(data);
       setView('result');
     } catch (err) {

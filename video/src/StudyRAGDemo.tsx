@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill } from "remotion";
+import { AbsoluteFill, Audio, staticFile } from "remotion";
 import { TransitionSeries, linearTiming, springTiming } from "@remotion/transitions";
 import { fade } from "@remotion/transitions/fade";
 import { slide } from "@remotion/transitions/slide";
@@ -11,13 +11,16 @@ import { QuizScene } from "./scenes/QuizScene";
 import { FlashcardsScene } from "./scenes/FlashcardsScene";
 import { AnalyticsScene } from "./scenes/AnalyticsScene";
 import { OutroScene } from "./scenes/OutroScene";
+import { BackgroundAudio } from "./scenes/BackgroundAudio";
 
 export const StudyRAGDemo: React.FC = () => {
   return (
-    <AbsoluteFill style={{ backgroundColor: "#0a0f1e", fontFamily: "Outfit, sans-serif" }}>
+    <AbsoluteFill style={{ backgroundColor: "#F8FAFC", fontFamily: "Outfit, sans-serif" }}>
+      <BackgroundAudio />
       <TransitionSeries>
         {/* Scene 1: Hero */}
         <TransitionSeries.Sequence durationInFrames={150}>
+          <Audio src={staticFile("/audio/voiceover/hero.wav")} />
           <HeroScene />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition
@@ -27,6 +30,7 @@ export const StudyRAGDemo: React.FC = () => {
 
         {/* Scene 2: Upload */}
         <TransitionSeries.Sequence durationInFrames={150}>
+          <Audio src={staticFile("/audio/voiceover/upload.wav")} />
           <UploadScene />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition
@@ -36,6 +40,7 @@ export const StudyRAGDemo: React.FC = () => {
 
         {/* Scene 3: Learn */}
         <TransitionSeries.Sequence durationInFrames={150}>
+          <Audio src={staticFile("/audio/voiceover/learn.wav")} />
           <LearnScene />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition
@@ -45,6 +50,7 @@ export const StudyRAGDemo: React.FC = () => {
 
         {/* Scene 4: Chat */}
         <TransitionSeries.Sequence durationInFrames={150}>
+          <Audio src={staticFile("/audio/voiceover/chat.wav")} />
           <ChatScene />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition
@@ -54,6 +60,7 @@ export const StudyRAGDemo: React.FC = () => {
 
         {/* Scene 5: Quiz */}
         <TransitionSeries.Sequence durationInFrames={150}>
+          <Audio src={staticFile("/audio/voiceover/quiz.wav")} />
           <QuizScene />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition
@@ -63,6 +70,7 @@ export const StudyRAGDemo: React.FC = () => {
 
         {/* Scene 6: Flashcards */}
         <TransitionSeries.Sequence durationInFrames={150}>
+          <Audio src={staticFile("/audio/voiceover/flashcards.wav")} />
           <FlashcardsScene />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition
@@ -72,6 +80,7 @@ export const StudyRAGDemo: React.FC = () => {
 
         {/* Scene 7: Analytics */}
         <TransitionSeries.Sequence durationInFrames={150}>
+          <Audio src={staticFile("/audio/voiceover/analytics.wav")} />
           <AnalyticsScene />
         </TransitionSeries.Sequence>
         <TransitionSeries.Transition
@@ -81,6 +90,7 @@ export const StudyRAGDemo: React.FC = () => {
 
         {/* Scene 8: Outro */}
         <TransitionSeries.Sequence durationInFrames={150}>
+          <Audio src={staticFile("/audio/voiceover/outro.wav")} />
           <OutroScene />
         </TransitionSeries.Sequence>
       </TransitionSeries>

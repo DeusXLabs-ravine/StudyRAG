@@ -1,7 +1,6 @@
 import { useRef, useState, useCallback } from 'react';
 import { GeminiLiveSession, buildTeachingInstruction } from '../services/geminiLiveService';
 
-// ── API key pool — mirrors backend rotation ────────────────────────────────
 const GEMINI_KEYS = [
   import.meta.env.VITE_GEMINI_API_KEY_1,
   import.meta.env.VITE_GEMINI_API_KEY_2,
@@ -11,9 +10,8 @@ const GEMINI_KEYS = [
   import.meta.env.VITE_GEMINI_API_KEY_6,
   import.meta.env.VITE_GEMINI_API_KEY_7,
   import.meta.env.VITE_GEMINI_API_KEY_8,
-].filter(Boolean); // drop any undefined keys
+].filter(Boolean);
 
-// Round-robin counter shared across all hook instances (module scope)
 let _keyIndex = 0;
 function getNextApiKey() {
   if (GEMINI_KEYS.length === 0) return '';
@@ -24,19 +22,12 @@ function getNextApiKey() {
 
 /**
  * useGeminiLive
- * React hook for managing a Gemini Live teaching session.
- *
- * @param {object} opts
- * @param {string} opts.moduleTitle     - Title of the current module/topic
- * @param {string} opts.moduleTopic     - Topic category
- * @param {string} opts.content         - Full text content to teach
- * @param {string} [opts.teachingLevel] - beginner | intermediate | advanced
- * @param {string} [opts.userName]      - Student name for personalization
+ * React hook for managing a Gemini Live teaching session with multimodal tools.
  */
-export default function useGeminiLive({ moduleTitle, moduleTopic, content, teachingLevel, userName } = {}) {
+export default function useGeminiLive({ moduleTitle, moduleTopic, content, teachingLevel, userName, onToolCall } = {}) {
   const sessionRef = useRef(null);
-  const [state, setState] = useState('idle'); // idle | connecting | ready | teaching | listening | thinking | ended | error
-  const [transcript, setTranscript] = useState(''); // cumulative Gemini speaking transcript
+  const [state, setState] = useState('idle');
+  const [transcript, setTranscript] = useState('');
   const [userTranscript, setUserTranscript] = useState('');
   const [error, setError] = useState(null);
 
@@ -74,16 +65,17 @@ export default function useGeminiLive({ moduleTitle, moduleTopic, content, teach
         setError(msg);
         setState('error');
       },
+      onToolCall: (call) => {
+        onToolCall?.(call);
+      }
     });
 
     sessionRef.current = session;
 
     try {
       await session.start();
-    } catch (err) {
-      // error already handled via onError callback
-    }
-  }, [moduleTitle, moduleTopic, content, teachingLevel, userName]);
+    } catch (err) {}
+  }, [moduleTitle, moduleTopic, content, teachingLevel, userName, onToolCall]);
 
   const stop = useCallback(() => {
     if (sessionRef.current) {

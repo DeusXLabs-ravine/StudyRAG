@@ -10,7 +10,7 @@ const { v4: uuidv4 } = require('uuid');
 /**
  * Solve a STEM problem step-by-step using Gemini 3 Pro.
  */
-async function solveProblem(problem, subject, docId, useWebSearch, userId = null) {
+async function solveProblem(problem, subject, docId, useWebSearch, userId = null, durationSeconds = null) {
   const [teachingLevel, interests, learningStyle, learningPace] = await Promise.all([
     getUserTeachingLevel(userId),
     getUserInterests(userId),
@@ -132,6 +132,7 @@ async function solveProblem(problem, subject, docId, useWebSearch, userId = null
   // Record study session for analytics
   const studyRow = {
     mode: 'solver',
+    duration_seconds: durationSeconds || 120, // Estimate 2 minutes per complex problem if not provided
     details_json: {
       sessionId,
       subject: parsed.subject,

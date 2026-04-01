@@ -16,9 +16,10 @@ export async function getModule(id) {
   return data;
 }
 
-export async function updateProgress(moduleId, score, answers = null) {
+export async function updateProgress(moduleId, score, answers = null, durationSeconds = null) {
   const body = { score };
   if (answers) body.answers = answers;
+  if (durationSeconds) body.durationSeconds = durationSeconds;
   const { data } = await api.put(`/modules/${moduleId}/progress`, body);
   return data;
 }

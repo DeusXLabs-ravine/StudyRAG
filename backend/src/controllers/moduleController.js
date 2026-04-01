@@ -83,7 +83,7 @@ async function getModule(req, res, next) {
 async function updateProgress(req, res, next) {
   try {
     const { id } = req.params;
-    const { score, answers } = req.body;
+    const { score, answers, durationSeconds } = req.body;
     const userId = req.user?.id || null;
 
     const module = await getModuleById(id);
@@ -103,6 +103,7 @@ async function updateProgress(req, res, next) {
 
     const sessRow = {
       mode: 'learn',
+      duration_seconds: durationSeconds || null,
       details_json: { moduleId: id, score },
       ...(userId ? { user_id: userId } : {}),
     };

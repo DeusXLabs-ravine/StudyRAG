@@ -534,12 +534,25 @@ If the student seems confused, offer to explain in simpler terms.`;
 
 async function explainSimply(lessonContent, userQuestion = '', userId = null) {
   const { EXPLAIN_SIMPLY_PROMPT, buildInterestsSection } = require('../utils/prompts');
-  const { getUserInterests } = require('./userProfileService');
-  const interests = await getUserInterests(userId);
+  const { getUserInterests, getUserProfile, getUserTeachingLevel } = require('./userProfileService');
+
+  const [profile, interests, teachingLevel] = await Promise.all([
+    getUserProfile(userId),
+    getUserInterests(userId),
+    getUserTeachingLevel(userId),
+  ]);
+
+  const studentName = profile?.first_name || profile?.full_name?.split(' ')[0] || 'there';
+  const studentAge = profile?.age ? String(profile.age) : 'Not provided';
+
   const prompt = EXPLAIN_SIMPLY_PROMPT
+    .replace('{student_name}', studentName)
+    .replace('{student_age}', studentAge)
+    .replace('{teaching_level}', teachingLevel || 'intermediate')
     .replace('{lesson_content}', lessonContent)
     .replace('{user_question}', userQuestion || 'No specific question provided')
-    .replace('{interests_section}', buildInterestsSection(interests));
+    .replace('{interests_section}', buildInterestsSection(interests, teachingLevel) || '');
+
   const result = await withRetryOnRateLimit(async () => {
     const model = getGenerativeModel('standard');
     return model.generateContent(prompt);
@@ -673,7 +686,7 @@ async function tutorChat(moduleContent, moduleTitle, moduleTopic, message, conve
     .replace('{student_name}', studentName || 'there')
     .replace('{student_age}', studentAge ? `${studentAge}` : 'Not provided')
     .replace('{teaching_level}', teachingLevel)
-    .replace('{interests_section}', interestsSection ? `Student interests:\n${interestsSection}` : '')
+    .replace('{interests_section}', interestsSection || '')
     .replace('{learning_style_section}', learningStyleSection)
     .replace('{pace_section}', paceSection)
     .replace('{weak_topics_section}', weakTopicsSection)

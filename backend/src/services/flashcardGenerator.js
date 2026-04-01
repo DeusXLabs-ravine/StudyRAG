@@ -267,7 +267,7 @@ async function getStudyQueue(deckId) {
   };
 }
 
-async function reviewCard(cardId, quality, userId = null) {
+async function reviewCard(cardId, quality, durationSeconds = null, userId = null) {
   const { data: card, error } = await supabase
     .from('flashcard_cards')
     .select('*')
@@ -301,6 +301,7 @@ async function reviewCard(cardId, quality, userId = null) {
 
   const sessRow = {
     mode: 'flashcard',
+    duration_seconds: durationSeconds || null,
     details_json: { cardId: card.id, deckId: card.deck_id, quality },
     ...(userId ? { user_id: userId } : {}),
   };

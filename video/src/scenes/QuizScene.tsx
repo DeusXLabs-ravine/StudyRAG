@@ -6,7 +6,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { COLORS, GradientBg, DotGrid, Badge, FeatureCard } from "./shared";
+import { COLORS, GradientBg, DotGrid, Badge, FeatureCard, SHADOWS } from "./shared";
 
 export const QuizScene: React.FC = () => {
   const frame = useCurrentFrame();
@@ -47,26 +47,27 @@ export const QuizScene: React.FC = () => {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: "60px 200px",
+          padding: "60px 180px",
         }}
       >
         {/* Header */}
         <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32, opacity: fadeIn(0, 20) }}>
-          <Badge color={COLORS.amber}>Quiz Mode</Badge>
+          <Badge color={COLORS.amber}>Adaptive Quiz</Badge>
           <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-            <div style={{ fontSize: 13, color: COLORS.textMuted, fontFamily: "Outfit, sans-serif" }}>
-              Question <span style={{ color: COLORS.textPrimary, fontWeight: 700 }}>3</span> / 10
+            <div style={{ fontSize: 14, color: COLORS.textSecondary, fontWeight: 600, fontFamily: "Outfit, sans-serif" }}>
+              Question <span style={{ color: COLORS.primary, fontWeight: 800 }}>3</span> / 10
             </div>
             <div
               style={{
-                background: `${COLORS.amber}18`,
+                background: "#fff",
                 border: `1px solid ${COLORS.amber}44`,
-                borderRadius: 8,
-                padding: "6px 14px",
-                fontSize: 13,
+                borderRadius: 12,
+                padding: "8px 16px",
+                fontSize: 14,
                 color: COLORS.amber,
                 fontFamily: "Outfit, sans-serif",
-                fontWeight: 600,
+                fontWeight: 700,
+                boxShadow: SHADOWS.sm
               }}
             >
               ⏱ 01:42
@@ -78,14 +79,16 @@ export const QuizScene: React.FC = () => {
         <div
           style={{
             width: "100%",
-            height: 4,
+            height: 10,
             background: COLORS.bgCardAlt,
-            borderRadius: 2,
-            marginBottom: 36,
+            borderRadius: 5,
+            marginBottom: 48,
             opacity: fadeIn(0, 20),
+            overflow: "hidden",
+            boxShadow: "inset 0 1px 2px rgba(0,0,0,0.1)"
           }}
         >
-          <div style={{ width: "30%", height: "100%", background: `linear-gradient(90deg, ${COLORS.amber}, ${COLORS.sky})`, borderRadius: 2 }} />
+          <div style={{ width: "30%", height: "100%", background: `linear-gradient(90deg, ${COLORS.primary}, ${COLORS.amber})`, borderRadius: 5 }} />
         </div>
 
         {/* Question */}
@@ -94,17 +97,24 @@ export const QuizScene: React.FC = () => {
             width: "100%",
             opacity: fadeIn(10, 35),
             transform: `translateY(${slideIn(10)}px)`,
-            marginBottom: 32,
+            marginBottom: 40,
           }}
         >
-          <FeatureCard>
-            <p style={{ fontSize: 11, fontWeight: 600, color: COLORS.textMuted, fontFamily: "Outfit, sans-serif", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>
-              Biology · Hard
+          <div style={{ 
+            background: "#fff", 
+            borderRadius: 24, 
+            padding: "32px 40px", 
+            boxShadow: SHADOWS.lg,
+            border: `1px solid ${COLORS.border}`,
+            position: "relative"
+          }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: COLORS.textMuted, fontFamily: "Outfit, sans-serif", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16 }}>
+              Biology · Advanced Level
             </p>
             <h3
               style={{
-                fontSize: 22,
-                fontWeight: 700,
+                fontSize: 26,
+                fontWeight: 800,
                 color: COLORS.textPrimary,
                 margin: 0,
                 lineHeight: 1.4,
@@ -113,31 +123,33 @@ export const QuizScene: React.FC = () => {
             >
               Which statement correctly describes the role of RuBisCO in the Calvin cycle?
             </h3>
-          </FeatureCard>
+          </div>
         </div>
 
         {/* Options */}
-        <div style={{ width: "100%", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div style={{ width: "100%", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
           {options.map((opt, i) => {
             const optOpacity = fadeIn(25 + i * 10, 45 + i * 10);
             const optY = interpolate(sp(25 + i * 10), [0, 1], [20, 0]);
             const isCorrect = opt.correct;
             const showResult = revealCorrect;
 
-            let bgColor = COLORS.bgCard;
+            let bgColor = "#fff";
             let borderColor = COLORS.border;
             let textColor = COLORS.textPrimary;
+            let shadow = SHADOWS.md;
 
             if (showResult) {
               if (isCorrect) {
-                bgColor = `${COLORS.green}18`;
+                bgColor = `${COLORS.green}10`;
                 borderColor = COLORS.green;
                 textColor = COLORS.green;
+                shadow = `0 4px 14px ${COLORS.green}33`;
               } else if (i === 1) {
-                // Simulate user picked B (wrong)
-                bgColor = `${COLORS.red}18`;
+                bgColor = `${COLORS.red}10`;
                 borderColor = COLORS.red;
                 textColor = COLORS.red;
+                shadow = "none";
               }
             }
 
@@ -153,34 +165,33 @@ export const QuizScene: React.FC = () => {
                   style={{
                     background: bgColor,
                     border: `2px solid ${borderColor}`,
-                    borderRadius: 14,
-                    padding: "16px 20px",
+                    borderRadius: 18,
+                    padding: "20px 24px",
                     display: "flex",
-                    gap: 14,
+                    gap: 18,
                     alignItems: "center",
-                    cursor: "pointer",
-                    transition: "none",
+                    boxShadow: shadow,
+                    transition: "all 0.3s ease",
                   }}
                 >
                   <div
                     style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 8,
+                      width: 36,
+                      height: 36,
+                      borderRadius: 10,
                       background: showResult
                         ? isCorrect
-                          ? `${COLORS.green}33`
+                          ? COLORS.green
                           : i === 1
-                          ? `${COLORS.red}33`
+                          ? COLORS.red
                           : COLORS.bgCardAlt
                         : COLORS.bgCardAlt,
-                      border: `1px solid ${borderColor}`,
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color: textColor,
+                      fontSize: 14,
+                      fontWeight: 800,
+                      color: showResult && (isCorrect || i === 1) ? "#fff" : COLORS.textSecondary,
                       fontFamily: "Outfit, sans-serif",
                       flexShrink: 0,
                     }}
@@ -190,8 +201,9 @@ export const QuizScene: React.FC = () => {
                   <p
                     style={{
                       margin: 0,
-                      fontSize: 15,
+                      fontSize: 16,
                       color: textColor,
+                      fontWeight: 500,
                       fontFamily: "Outfit, sans-serif",
                       lineHeight: 1.4,
                     }}
@@ -208,23 +220,23 @@ export const QuizScene: React.FC = () => {
         <div
           style={{
             position: "absolute",
-            top: 80,
-            right: 80,
+            top: 100,
+            right: 100,
             opacity: xpOpacity,
             transform: `translateY(${xpY}px) scale(${xpScale})`,
-            background: `linear-gradient(135deg, ${COLORS.amber}cc, ${COLORS.sky}cc)`,
-            borderRadius: 16,
-            padding: "12px 24px",
+            background: `linear-gradient(135deg, ${COLORS.amber}, ${COLORS.primary})`,
+            borderRadius: 20,
+            padding: "16px 28px",
             display: "flex",
             alignItems: "center",
-            gap: 10,
-            boxShadow: `0 8px 32px rgba(245,158,11,0.3)`,
+            gap: 12,
+            boxShadow: `0 12px 32px ${COLORS.amber}44`,
           }}
         >
-          <span style={{ fontSize: 24 }}>⚡</span>
+          <span style={{ fontSize: 28 }}>⚡</span>
           <div>
-            <p style={{ margin: 0, fontSize: 12, color: "rgba(255,255,255,0.8)", fontFamily: "Outfit, sans-serif" }}>Correct!</p>
-            <p style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#fff", fontFamily: "Outfit, sans-serif" }}>+50 XP</p>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,0.9)", fontFamily: "Outfit, sans-serif", textTransform: "uppercase" }}>Mastered!</p>
+            <p style={{ margin: 0, fontSize: 24, fontWeight: 900, color: "#fff", fontFamily: "Outfit, sans-serif" }}>+120 XP</p>
           </div>
         </div>
       </div>

@@ -117,7 +117,6 @@ async function getActivityTimeline(days = 30, userId = null) {
 }
 
 async function getStudyRecommendation(userId = null) {
-  // Fetch all 3 data sources in parallel instead of waterfall
   const [weakTopics, dueRes, incompleteRes] = await Promise.all([
     getWeakTopics(0.6, userId),
     supabase.rpc('get_due_flashcard_count', { p_user_id: userId }),
@@ -130,17 +129,19 @@ async function getStudyRecommendation(userId = null) {
   if (weakTopics.length > 0) {
     return {
       type: 'weak_topic',
-      message: `Focus on "${weakTopics[0].topic}" - your average score is ${weakTopics[0].avgScore}%`,
+      title: `Improve "${weakTopics[0].topic}"`,
+      description: `Your average score is ${weakTopics[0].avgScore}%. Let's bump that up with a quick quiz.`,
       topic: weakTopics[0].topic,
-      action: 'quiz',
+      link: '/quiz',
     };
   }
 
   if (dueRes.data > 0) {
     return {
       type: 'flashcard_review',
-      message: `You have ${dueRes.data} flashcards due for review`,
-      action: 'flashcards',
+      title: 'Retention Time',
+      description: `You have ${dueRes.data} cards ready for review. Don't let them slip!`,
+      link: '/flashcards',
     };
   }
 
@@ -148,16 +149,17 @@ async function getStudyRecommendation(userId = null) {
   if (incompleteModules && incompleteModules.length > 0) {
     return {
       type: 'module',
-      message: `Continue learning: "${incompleteModules[0].title}"`,
-      moduleId: incompleteModules[0].id,
-      action: 'learn',
+      title: 'Keep Learning',
+      description: `Continue where you left off: "${incompleteModules[0].title}"`,
+      link: '/learn',
     };
   }
 
   return {
     type: 'review',
-    message: 'Great job! Take a quiz to reinforce your knowledge',
-    action: 'quiz',
+    title: 'Expert Mode',
+    description: 'You\'re doing great! Take an adaptive quiz to keep your edge.',
+    link: '/quiz',
   };
 }
 
@@ -175,14 +177,99 @@ async function getFlashcardStats(userId = null) {
   };
 }
 
+// ─── Enhanced Analytics ───────────────────────────────────────
+
+async function getStudyTimeByMode(userId = null) {
+  try {
+    const { data, error } = await supabase.rpc('get_study_time_by_mode', { p_user_id: userId });
+    if (error) return [];
+    return data.map(row => ({
+      mode: row.mode,
+      seconds: Number(row.total_seconds)
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function getStudyTimeTrend(days = 14, userId = null) {
+  try {
+    const { data, error } = await supabase.rpc('get_study_time_trend', { p_days: days, p_user_id: userId });
+    if (error) return [];
+    return data.map(row => ({
+      date: row.study_date,
+      seconds: Number(row.total_seconds)
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function getDocumentMastery(userId = null) {
+  try {
+    const { data, error } = await supabase.rpc('get_document_mastery', { p_user_id: userId });
+    if (error) return [];
+    return data.map(row => ({
+      id: row.document_id,
+      name: row.original_name,
+      avgScore: row.avg_score ? Math.round(row.avg_score) : 0,
+      completion: Math.round((row.completion_rate || 0) * 100),
+      totalModules: Number(row.total_modules),
+      completedModules: Number(row.completed_modules)
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function getUserPerformanceSummary(userId = null) {
+  try {
+    const { data, error } = await supabase.rpc('get_user_performance_summary', { p_user_id: userId });
+    if (error || !data?.[0]) return { totalXp: 0, level: 1, gamesPlayed: 0, totalDocs: 0, totalSessions: 0 };
+    const row = data[0];
+    return {
+      totalXp: row.total_xp,
+      level: row.current_level,
+      gamesPlayed: row.games_played,
+      totalDocs: Number(row.total_documents),
+      totalSessions: Number(row.total_sessions)
+    };
+  } catch {
+    return { totalXp: 0, level: 1, gamesPlayed: 0, totalDocs: 0, totalSessions: 0 };
+  }
+}
+
 async function getOverview(userId = null) {
-  const [mastery, streak, recommendation, flashcardStats] = await Promise.all([
+  const [
+    mastery, 
+    streak, 
+    recommendation, 
+    flashcardStats,
+    timeByMode,
+    timeTrend,
+    docMastery,
+    performance
+  ] = await Promise.all([
     getOverallMastery(userId),
     getStudyStreak(userId),
     getStudyRecommendation(userId),
     getFlashcardStats(userId),
+    getStudyTimeByMode(userId),
+    getStudyTimeTrend(14, userId),
+    getDocumentMastery(userId),
+    getUserPerformanceSummary(userId)
   ]);
-  return { mastery, streak, recommendation, flashcardStats };
+
+  return { 
+    mastery, 
+    streak, 
+    recommendation, 
+    flashcardStats, 
+    timeByMode, 
+    timeTrend,
+    docMastery, 
+    performance 
+  };
 }
 
 async function getUserSettings(userId = null) {
@@ -227,6 +314,10 @@ module.exports = {
   getActivityTimeline,
   getStudyRecommendation,
   getFlashcardStats,
+  getStudyTimeByMode,
+  getStudyTimeTrend,
+  getDocumentMastery,
+  getUserPerformanceSummary,
   getOverview,
   getUserSettings,
   updateUserSetting,

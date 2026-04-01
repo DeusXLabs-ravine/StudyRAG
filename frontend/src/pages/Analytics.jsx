@@ -1,15 +1,24 @@
 import { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, Target, Flame, Brain, BookOpen, Zap, ArrowRight } from 'lucide-react';
+import { 
+  BarChart3, TrendingUp, Target, Flame, Brain, BookOpen, Zap, 
+  ArrowRight, Clock, Award, Shield, FileText, PieChart as PieChartIcon
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { 
+  PieChart, Pie, Cell, ResponsiveContainer, Tooltip, 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
+  AreaChart, Area
+} from 'recharts';
 import * as analyticsService from '../services/analyticsService';
 import { MorphingSquare } from '../components/ui/morphing-square';
 
+const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
+
 export default function Analytics() {
   const navigate = useNavigate();
-  const [overview, setOverview] = useState(null);
+  const [data, setData] = useState(null);
   const [topics, setTopics] = useState([]);
   const [quizTrend, setQuizTrend] = useState([]);
-  const [weakAreas, setWeakAreas] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,18 +28,16 @@ export default function Analytics() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [overviewData, topicsData, trendData, weakData] = await Promise.all([
+      const [overview, topicsData, trendData] = await Promise.all([
         analyticsService.getOverview(),
         analyticsService.getTopics(),
         analyticsService.getQuizTrend(),
-        analyticsService.getWeakAreas(),
       ]);
-      setOverview(overviewData || {});
+      setData(overview || {});
       setTopics(Array.isArray(topicsData) ? topicsData : []);
       setQuizTrend(Array.isArray(trendData) ? trendData : []);
-      setWeakAreas(Array.isArray(weakData) ? weakData : []);
     } catch (err) {
-      // ignore
+      console.error('Analytics load error', err);
     } finally {
       setLoading(false);
     }
@@ -39,166 +46,295 @@ export default function Analytics() {
   if (loading) {
     return (
       <div className="flex justify-center items-center py-24">
-        <MorphingSquare message="Analyzing progress" />
+        <MorphingSquare message="Analyzing your growth..." />
       </div>
     );
   }
 
-  const mastery = overview?.mastery || { score: 0, topicCount: 0 };
-  const streak = overview?.streak || { currentStreak: 0, longestStreak: 0, totalDays: 0 };
-  const recommendation = overview?.recommendation;
-  const flashcardStats = overview?.flashcardStats || {};
+  const { 
+    mastery = { score: 0, topicCount: 0 }, 
+    streak = { currentStreak: 0, longestStreak: 0 }, 
+    flashcardStats = { total: 0, dueToday: 0, mastered: 0 },
+    timeByMode = [],
+    timeTrend = [],
+    docMastery = [],
+    performance = { totalXp: 0, level: 1, totalDocs: 0, totalSessions: 0 },
+    recommendation
+  } = data;
+
+  // Format time data for pie chart
+  const pieData = timeByMode.map(m => ({
+    name: m.mode.charAt(0).toUpperCase() + m.mode.slice(1),
+    value: Math.round(m.seconds / 60) // minutes
+  })).filter(d => d.value > 0);
+
+  // Format time trend for area chart
+  const trendData = timeTrend.map(t => ({
+    date: t.date,
+    minutes: Math.round(t.seconds / 60)
+  }));
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Analytics Dashboard</h1>
+    <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight">Learning Insights</h1>
+          <p className="text-gray-500 font-medium">Real-time mapping of your knowledge vault</p>
+        </div>
+        <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm">
+          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Award className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Current Rank</p>
+            <p className="text-lg font-black text-gray-900 leading-none">Level {performance.level}</p>
+          </div>
+        </div>
+      </header>
 
-      {/* Top Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      {/* Top Stats - High Level Overview */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          icon={<Target className="h-5 w-5 text-blue-500" />}
+          icon={<Target className="h-5 w-5" />}
           label="Overall Mastery"
           value={`${mastery.score}%`}
-          sub={`${mastery.topicCount} topics`}
+          sub={`${mastery.topicCount} Topics Learned`}
           color="blue"
         />
         <StatCard
-          icon={<Flame className="h-5 w-5 text-orange-500" />}
+          icon={<Flame className="h-5 w-5" />}
           label="Study Streak"
-          value={`${streak.currentStreak} days`}
-          sub={`Best: ${streak.longestStreak} days`}
+          value={`${streak.currentStreak} Days`}
+          sub={`Personal Best: ${streak.longestStreak}`}
           color="orange"
         />
         <StatCard
-          icon={<Brain className="h-5 w-5 text-purple-500" />}
-          label="Learned Topics"
-          value={overview?.topicCount || 0}
-          sub="Across all docs"
+          icon={<Shield className="h-5 w-5" />}
+          label="Knowledge Vault"
+          value={performance.totalDocs}
+          sub="Primary Sources"
           color="purple"
         />
         <StatCard
-          icon={<BookOpen className="h-5 w-5 text-green-500" />}
-          label="Flashcards"
-          value={flashcardStats.total || 0}
-          sub={`${flashcardStats.due || 0} due today`}
+          icon={<Zap className="h-5 w-5" />}
+          label="Total XP"
+          value={performance.totalXp.toLocaleString()}
+          sub={`${performance.totalSessions} Sessions`}
           color="green"
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Chart Area */}
+        {/* Left Column: Progress Charts */}
         <div className="lg:col-span-2 space-y-8">
-          {/* Performance Trend */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <BarChart3 className="h-5 w-5 text-blue-500" />
-                Performance Trend
-              </h2>
-            </div>
-            <div className="h-64 flex items-end justify-between gap-2 px-2">
-              {quizTrend.length > 0 ? (
-                quizTrend.map((d, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
-                    <div className="relative w-full">
-                      <div
-                        className="w-full bg-blue-100 rounded-t-md hover:bg-blue-200 transition-all cursor-help relative"
-                        style={{ height: `${d.score}%` }}
-                      >
-                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                          {d.score}% score
-                        </div>
+          
+          {/* Document Mastery Table */}
+          <section className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm">
+            <h2 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-3">
+              <FileText className="h-6 w-6 text-blue-500" />
+              Source Coverage
+            </h2>
+            <div className="space-y-6">
+              {docMastery.length > 0 ? (
+                docMastery.map((doc) => (
+                  <div key={doc.id} className="group cursor-pointer" onClick={() => navigate(`/learn?doc=${doc.id}`)}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <span className="text-sm font-bold text-gray-800 group-hover:text-primary transition-colors">{doc.name}</span>
+                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                          {doc.completedModules} / {doc.totalModules} Modules Mastered
+                        </p>
                       </div>
+                      <span className="text-sm font-black text-gray-900">{doc.completion}%</span>
                     </div>
-                    <span className="text-[10px] text-gray-400 font-medium rotate-45 origin-left">{d.date}</span>
+                    <div className="w-full bg-gray-50 rounded-full h-3 overflow-hidden border border-gray-100">
+                      <div 
+                        className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-1000"
+                        style={{ width: `${doc.completion}%` }}
+                      />
+                    </div>
                   </div>
                 ))
               ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-gray-50 rounded-lg border border-dashed border-gray-200 uppercase tracking-widest text-[10px] font-black">
-                  Complete quizzes to see your trend
-                </div>
+                <EmptyState message="Upload documents to track mastery" />
               )}
             </div>
-          </div>
+          </section>
 
-          {/* Topic Breakdown */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
-              <BookOpen className="h-5 w-5 text-purple-500" />
-              Topic Breakdown
+          {/* Quiz Performance Chart */}
+          <section className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm overflow-hidden">
+            <h2 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-3">
+              <TrendingUp className="h-6 w-6 text-green-500" />
+              Performance Trend
             </h2>
-            <div className="space-y-4">
-              {topics.map((t, i) => (
-                <div key={i} className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium text-gray-700">{t.name}</span>
-                    <span className="text-gray-500 font-bold">{t.mastery}%</span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-1000 ${t.mastery > 80 ? 'bg-green-500' : t.mastery > 50 ? 'bg-blue-500' : 'bg-orange-500'}`}
-                      style={{ width: `${t.mastery}%` }}
+            <div className="h-[300px] w-full">
+              {quizTrend.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={quizTrend.slice(-10)}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis 
+                      dataKey="date" 
+                      tickFormatter={(val) => new Date(val).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                      tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }}
+                      axisLine={false}
+                      tickLine={false}
                     />
-                  </div>
-                </div>
-              ))}
-              {topics.length === 0 && (
-                <div className="py-8 text-center text-gray-400 text-xs font-bold uppercase tracking-widest">
-                  No topics processed yet
-                </div>
+                    <YAxis 
+                      domain={[0, 100]} 
+                      tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                      itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
+                    />
+                    <Bar dataKey="score" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={30} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState message="Complete quizzes to see data" />
               )}
             </div>
-          </div>
+          </section>
+
+          {/* Daily Activity (Time Trend) */}
+          <section className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm overflow-hidden">
+            <h2 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-3">
+              <Zap className="h-6 w-6 text-yellow-500" />
+              Study Intensity
+            </h2>
+            <div className="h-[300px] w-full">
+              {trendData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={trendData}>
+                    <defs>
+                      <linearGradient id="colorMinutes" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis 
+                      dataKey="date" 
+                      tickFormatter={(val) => new Date(val).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                      tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }}
+                      axisLine={false}
+                      tickLine={false}
+                      label={{ value: 'Minutes', angle: -90, position: 'insideLeft', style: { fontSize: 10, fontWeight: 700, fill: '#94a3b8' } }}
+                    />
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                      itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="minutes" 
+                      stroke="#3b82f6" 
+                      strokeWidth={3}
+                      fillOpacity={1} 
+                      fill="url(#colorMinutes)" 
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyState message="No study time recorded yet" />
+              )}
+            </div>
+          </section>
         </div>
 
-        {/* Sidebar Area */}
+        {/* Right Column: Distribution & Recs */}
         <div className="space-y-8">
-          {/* Weak Areas */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-orange-500" />
-              Growth Opportunities
+          
+          {/* Study Time Distribution */}
+          <section className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm">
+            <h2 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-3">
+              <Clock className="h-6 w-6 text-orange-500" />
+              Time Allocation
             </h2>
-            <div className="space-y-3">
-              {weakAreas.length > 0 ? (
-                weakAreas.map((w, i) => (
-                  <div key={i} className="p-3 bg-white border border-gray-100 rounded-xl hover:border-orange-200 transition-colors">
-                    <p className="text-sm font-bold text-gray-900">{w.name}</p>
-                    <div className="flex items-center justify-between mt-2">
-                      <span className="text-[10px] font-black uppercase text-orange-500 tracking-widest">Mastery: {w.mastery}%</span>
-                      <button
-                        onClick={() => navigate('/learn')}
-                        className="text-[10px] text-gray-400 hover:text-blue-500 font-black uppercase tracking-widest flex items-center gap-1"
-                      >
-                        Study <ArrowRight className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))
+            <div className="h-[240px] relative">
+              {pieData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={8}
+                      dataKey="value"
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                  </PieChart>
+                </ResponsiveContainer>
               ) : (
-                <p className="text-sm text-gray-500 italic">No weak areas identified. Keep it up!</p>
+                <EmptyState message="No study time recorded" />
               )}
             </div>
-          </div>
+          </section>
 
-          {/* Smart Recommendation */}
-          {recommendation && (
-            <div className="bg-primary/5 rounded-[2rem] border border-primary/10 p-6 relative overflow-hidden">
-              <div className="absolute -top-4 -right-4 w-20 h-20 bg-primary/10 rounded-full blur-2xl" />
-              <div className="relative z-10">
-                <div className="inline-flex items-center gap-2 px-3 py-1 bg-white rounded-full text-[10px] font-black text-primary border border-primary/10 uppercase tracking-widest mb-4">
-                  <Zap className="h-3 w-3" /> Sage Suggestion
-                </div>
-                <h3 className="text-base font-black text-gray-900 mb-2">{recommendation.title}</h3>
-                <p className="text-xs text-gray-600 font-medium leading-relaxed mb-4">{recommendation.description}</p>
-                <button
-                  onClick={() => navigate(recommendation.link)}
-                  className="w-full py-2.5 bg-gray-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-black transition-colors"
-                >
-                  Start Now
-                </button>
+          {/* Flashcard Mastery */}
+          <section className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm">
+            <h2 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-3">
+              <Brain className="h-6 w-6 text-purple-500" />
+              Retention
+            </h2>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Due Today</p>
+                <p className="text-2xl font-black text-orange-500">{flashcardStats.dueToday}</p>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Mastered</p>
+                <p className="text-2xl font-black text-emerald-500">{flashcardStats.mastered}</p>
               </div>
             </div>
+            <div className="mt-6 p-4 bg-primary/5 rounded-2xl border border-primary/10">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-primary uppercase tracking-widest">Mastery Rate</span>
+                <span className="text-xs font-black text-primary">
+                  {flashcardStats.total > 0 ? Math.round((flashcardStats.mastered / flashcardStats.total) * 100) : 0}%
+                </span>
+              </div>
+              <div className="w-full bg-primary/10 rounded-full h-2 overflow-hidden">
+                <div 
+                  className="h-full bg-primary rounded-full"
+                  style={{ width: `${flashcardStats.total > 0 ? (flashcardStats.mastered / flashcardStats.total) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Recommendation */}
+          {recommendation && (
+            <section className="bg-gray-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-xl">
+              <div className="absolute top-0 right-0 p-4">
+                <Zap className="h-8 w-8 text-yellow-400 fill-current opacity-20" />
+              </div>
+              <div className="relative z-10">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full text-[10px] font-black text-yellow-400 border border-white/10 uppercase tracking-widest mb-6">
+                  Sage Suggestion
+                </div>
+                <h3 className="text-xl font-black mb-2 leading-tight">{recommendation.title}</h3>
+                <p className="text-sm text-gray-400 font-medium mb-8 leading-relaxed">{recommendation.description}</p>
+                <button
+                  onClick={() => navigate(recommendation.link)}
+                  className="w-full py-4 bg-white text-gray-900 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-yellow-400 transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  Apply Recommendation <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </section>
           )}
         </div>
       </div>
@@ -208,22 +344,34 @@ export default function Analytics() {
 
 function StatCard({ icon, label, value, sub, color }) {
   const colorMap = {
-    blue: 'bg-blue-50 text-blue-600',
-    orange: 'bg-orange-50 text-orange-600',
-    purple: 'bg-purple-50 text-purple-600',
-    green: 'bg-green-50 text-green-600',
+    blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    orange: 'bg-orange-50 text-orange-600 border-orange-100',
+    purple: 'bg-purple-50 text-purple-600 border-purple-100',
+    green: 'bg-green-50 text-green-600 border-green-100',
   };
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${colorMap[color]}`}>
+    <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 border ${colorMap[color]}`}>
         {icon}
       </div>
       <div>
         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{label}</p>
-        <p className="text-xl font-black text-gray-900 leading-none">{value}</p>
-        <p className="text-[10px] font-bold text-gray-500 mt-2 uppercase tracking-tighter opacity-60">{sub}</p>
+        <p className="text-3xl font-black text-gray-900 leading-none tracking-tight">{value}</p>
+        <div className="flex items-center gap-1.5 mt-4">
+          <div className="w-1 h-1 rounded-full bg-gray-300" />
+          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">{sub}</p>
+        </div>
       </div>
+    </div>
+  );
+}
+
+function EmptyState({ message }) {
+  return (
+    <div className="h-full min-h-[160px] flex flex-col items-center justify-center text-gray-400 bg-gray-50/50 rounded-3xl border border-dashed border-gray-200 p-8">
+      <PieChartIcon className="h-8 w-8 mb-3 opacity-20" />
+      <p className="uppercase tracking-widest text-[10px] font-black text-center">{message}</p>
     </div>
   );
 }

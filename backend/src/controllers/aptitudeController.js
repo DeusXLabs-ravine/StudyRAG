@@ -15,11 +15,11 @@ async function createAptitudeTest(req, res, next) {
 
 async function submitTest(req, res, next) {
   try {
-    const { subject, answers, questions } = req.body;
+    const { subject, answers, questions, durationSeconds } = req.body;
     if (!answers || !questions) {
       return res.status(400).json({ error: 'Answers and questions are required' });
     }
-    const result = await submitAptitudeTest(subject, answers, questions, req.user?.id || null);
+    const result = await submitAptitudeTest(subject, answers, questions, req.user?.id || null, durationSeconds);
     res.json(result);
   } catch (error) {
     next(error);

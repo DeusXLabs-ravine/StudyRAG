@@ -1,7 +1,110 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mic, MicOff, GraduationCap, Volume2, VolumeX, AlertCircle, Send, Loader2, Brain, Sparkles, MessageSquare } from 'lucide-react';
+import { X, Mic, MicOff, GraduationCap, Volume2, VolumeX, AlertCircle, Send, Loader2, Brain, Sparkles, MessageSquare, Zap, Search, Image as ImageIcon, BookOpen } from 'lucide-react';
+import mermaid from 'mermaid';
 import useGeminiLive from '../../hooks/useGeminiLive';
+import { generateDiagramForTopic, getGeneratedDiagramImageUrl } from '../../services/diagramService';
+import { sendQuery } from '../../services/chatService';
+
+// Initialize mermaid
+mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+
+function DiagramDisplay({ code, title }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (ref.current && code) {
+      mermaid.render('mermaid-svg', code).then(({ svg }) => {
+        if (ref.current) ref.current.innerHTML = svg;
+      });
+    }
+  }, [code]);
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="bg-white p-6 rounded-3xl border border-blue-100 shadow-xl w-full max-w-md my-4"
+    >
+      <div className="flex items-center gap-2 mb-4">
+        <Zap className="h-3 w-3 text-primary fill-current" />
+        <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">{title || 'Sage Whiteboard'}</h4>
+      </div>
+      <div ref={ref} className="overflow-auto flex justify-center" />
+    </motion.div>
+  );
+}
+
+function IllustrationDisplay({ prompt, url, loading }) {
+  return (
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="bg-white p-4 rounded-3xl border border-purple-100 shadow-xl w-full max-w-sm my-4 overflow-hidden"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Sparkles className="h-3 w-3 text-purple-500 fill-current" />
+        <h4 className="text-[10px] font-black uppercase text-purple-500 tracking-widest">Sage Visualization</h4>
+      </div>
+      
+      <div className="relative aspect-video rounded-2xl bg-purple-50 flex items-center justify-center overflow-hidden border border-purple-100/50">
+        {loading ? (
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-6 w-6 text-purple-400 animate-spin" />
+            <p className="text-[9px] font-bold text-purple-300 uppercase tracking-tighter">Painting concepts...</p>
+          </div>
+        ) : url ? (
+          <img src={url} alt="Educational illustration" className="w-full h-full object-cover" />
+        ) : (
+          <ImageIcon className="h-8 w-8 text-purple-200" />
+        )}
+      </div>
+      {prompt && <p className="mt-3 text-[10px] text-gray-400 italic leading-tight px-1">"{prompt}"</p>}
+    </motion.div>
+  );
+}
+
+function KnowledgeCard({ query, results, loading }) {
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-white p-5 rounded-3xl border border-emerald-100 shadow-xl w-full max-w-md my-4"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <BookOpen className="h-3 w-3 text-emerald-500 fill-current" />
+          <h4 className="text-[10px] font-black uppercase text-emerald-500 tracking-widest">External Research</h4>
+        </div>
+        {loading && <Loader2 className="h-3 w-3 text-emerald-400 animate-spin" />}
+      </div>
+
+      <div className="space-y-3">
+        <p className="text-xs font-bold text-gray-700 bg-emerald-50/50 p-2 rounded-xl border border-emerald-100/50 italic">
+          <Search className="h-3 w-3 inline mr-2 opacity-40" />
+          {query}
+        </p>
+        
+        {!loading && results?.length > 0 && (
+          <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+            {results.slice(0, 3).map((res, i) => (
+              <a 
+                key={i} 
+                href={res.url} 
+                target="_blank" 
+                rel="noreferrer"
+                className="block p-2.5 rounded-xl hover:bg-emerald-50 transition-colors border border-transparent hover:border-emerald-100 group"
+              >
+                <p className="text-[11px] font-bold text-emerald-700 truncate group-hover:underline">{res.title}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5 line-clamp-1 opacity-80">{res.snippet || res.url}</p>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
 
 // ── Waveform visualizer ────────────────────────────────────────────────────
 
@@ -153,10 +256,56 @@ export default function GeminiLiveTeacher({
   teachingLevel = 'intermediate',
   userName = '',
   contextLabel = '',
+  documentId = null,
+  moduleId = null,
 }) {
   const [interruptInput, setInterruptInput] = useState('');
   const [showInterrupt, setShowInterrupt] = useState(false);
+  const [toolData, setToolData] = useState(null); // { type: 'diagram'|'illustration'|'research', loading: bool, ... }
+  const [isLightningRound, setIsLightningRound] = useState(false);
   const inputRef = useRef(null);
+
+  const onToolCall = useCallback(async (call) => {
+    const fc = call.functionCalls[0];
+    console.log(`[SageTool] Executing: ${fc.name}`, fc.args);
+
+    if (fc.name === 'render_diagram') {
+      setToolData({ type: 'diagram', code: fc.args.code, title: fc.args.title });
+    } 
+    
+    else if (fc.name === 'generate_illustration') {
+      setToolData({ type: 'illustration', loading: true, prompt: fc.args.prompt });
+      try {
+        const result = await generateDiagramForTopic({
+          topic: fc.args.prompt,
+          moduleId,
+          documentId,
+          diagramType: 'image'
+        });
+        const imageUrl = await getGeneratedDiagramImageUrl(result.id);
+        setToolData({ type: 'illustration', loading: false, prompt: fc.args.prompt, url: imageUrl });
+      } catch (err) {
+        console.error('Illustration failed', err);
+        setToolData(null);
+      }
+    }
+
+    else if (fc.name === 'search_external_knowledge') {
+      setToolData({ type: 'research', loading: true, query: fc.args.query });
+      try {
+        const result = await sendQuery(fc.args.query, documentId);
+        setToolData({ type: 'research', loading: false, query: fc.args.query, results: result.webSources || [] });
+      } catch (err) {
+        console.error('Research failed', err);
+        setToolData(null);
+      }
+    }
+
+    else if (fc.name === 'start_lightning_round') {
+      setIsLightningRound(true);
+      setTimeout(() => setIsLightningRound(false), 12000);
+    }
+  }, [documentId, moduleId]);
 
   const {
     state,
@@ -170,7 +319,7 @@ export default function GeminiLiveTeacher({
     start,
     stop,
     sendTextInterruption,
-  } = useGeminiLive({ moduleTitle, moduleTopic, content, teachingLevel, userName });
+  } = useGeminiLive({ moduleTitle, moduleTopic, content, teachingLevel, userName, onToolCall });
 
   // Auto-start when opened
   useEffect(() => {
@@ -258,14 +407,25 @@ export default function GeminiLiveTeacher({
             )}
 
             {/* Central visualizer area */}
-            <div className="flex flex-col items-center justify-center px-8 py-10 gap-8">
+            <div className="flex flex-col items-center justify-center px-8 py-10 gap-8 relative">
+              {isLightningRound && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="absolute top-0 flex items-center gap-2 bg-amber-500 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-tighter shadow-lg z-10"
+                >
+                  <Zap className="h-3 w-3 fill-current" />
+                  Lightning Round!
+                </motion.div>
+              )}
+
               {/* Waveform visualizer */}
               <div className="w-full relative py-2">
                  {/* Ambient decorative circle */}
                 <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
                    <div className="w-48 h-48 rounded-full border-4 border-primary animate-pulse" />
                 </div>
-                <AudioWave active={isSpeaking} color={isSpeaking ? '#3b82f6' : '#e2e8f0'} />
+                <AudioWave active={isSpeaking} color={isSpeaking ? (isLightningRound ? '#f59e0b' : '#3b82f6') : '#e2e8f0'} />
               </div>
 
               {/* Status Indicator */}
@@ -279,13 +439,32 @@ export default function GeminiLiveTeacher({
                   {isConnecting
                     ? 'Connecting to secure channel...'
                     : isSpeaking
-                      ? 'Sage is explaining — Speak anytime to interrupt'
+                      ? (isLightningRound ? 'Sage is firing questions!' : 'Sage is explaining — Speak anytime to interrupt')
                       : isListening
                         ? 'Mic active — Ask a question or say "continue"'
                         : 'Calibrating AI voice...'}
                 </p>
               </div>
             </div>
+
+            {/* Multimodal Tool Display (Diagrams, Illustrations, Research) */}
+            <AnimatePresence mode="wait">
+              {toolData?.type === 'diagram' && (
+                <div key="diagram" className="px-8 flex justify-center w-full">
+                  <DiagramDisplay code={toolData.code} title={toolData.title} />
+                </div>
+              )}
+              {toolData?.type === 'illustration' && (
+                <div key="illustration" className="px-8 flex justify-center w-full">
+                  <IllustrationDisplay prompt={toolData.prompt} url={toolData.url} loading={toolData.loading} />
+                </div>
+              )}
+              {toolData?.type === 'research' && (
+                <div key="research" className="px-8 flex justify-center w-full">
+                  <KnowledgeCard query={toolData.query} results={toolData.results} loading={toolData.loading} />
+                </div>
+              )}
+            </AnimatePresence>
 
             {/* Transcript Area */}
             <div className="px-8 pb-4">

@@ -4,7 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 
 async function queryChat(req, res, next) {
   try {
-    const { query, documentId } = req.body;
+    const { query, documentId, durationSeconds } = req.body;
     const userId = req.user?.id || null;
 
     if (!query || !query.trim()) {
@@ -46,7 +46,11 @@ async function queryChat(req, res, next) {
     };
     if (userId) msgRow.user_id = userId;
 
-    const sessRow = { mode: 'chat', details_json: { messageId: message.id } };
+    const sessRow = { 
+      mode: 'chat', 
+      duration_seconds: durationSeconds || 60, // Estimate 1 minute per meaningful chat turn if not provided
+      details_json: { messageId: message.id } 
+    };
     if (userId) sessRow.user_id = userId;
 
     // Send response first, persist in background (non-blocking)
@@ -112,7 +116,7 @@ async function clearChatHistory(req, res, next) {
  * Falls back gracefully to non-streaming for web-search queries or vector-only docs.
  */
 async function streamQuery(req, res, next) {
-  const { query, documentId } = req.body;
+  const { query, documentId, durationSeconds } = req.body;
   const userId = req.user?.id || null;
 
   if (!query || !query.trim()) {
@@ -172,8 +176,14 @@ async function streamQuery(req, res, next) {
       timestamp,
     };
     if (userId) msgRow.user_id = userId;
-    const sessRow = { mode: 'chat', details_json: { messageId } };
+
+    const sessRow = { 
+      mode: 'chat', 
+      duration_seconds: durationSeconds || 60, // Estimate 1 minute if not provided
+      details_json: { messageId } 
+    };
     if (userId) sessRow.user_id = userId;
+
     Promise.all([
       supabase.from('chat_messages').insert(msgRow),
       supabase.from('study_sessions').insert(sessRow),

@@ -1,8 +1,8 @@
 import api from './api';
 import useAuthStore from '../store/authStore';
 
-export async function sendQuery(query, documentId) {
-  const { data } = await api.post('/chat/query', { query, documentId });
+export async function sendQuery(query, documentId, durationSeconds = null) {
+  const { data } = await api.post('/chat/query', { query, documentId, durationSeconds });
   return data;
 }
 
@@ -13,7 +13,7 @@ export async function sendQuery(query, documentId) {
  *   { type: 'done', id, timestamp, sources, webSources, suggestSolver }  — end of stream
  *   { type: 'error', message: string }                        — error
  */
-export async function* streamQuery(query, documentId) {
+export async function* streamQuery(query, documentId, durationSeconds = null) {
   const token = useAuthStore.getState().getAccessToken();
   const baseUrl = import.meta.env.VITE_API_URL || '/api';
 
@@ -23,7 +23,7 @@ export async function* streamQuery(query, documentId) {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ query, documentId }),
+    body: JSON.stringify({ query, documentId, durationSeconds }),
   });
 
   if (!response.ok) {

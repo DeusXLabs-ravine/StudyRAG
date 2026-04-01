@@ -27,6 +27,7 @@ export default function Flashcards() {
   const [generating, setGenerating] = useState(false);
   const [selectedDocId, setSelectedDocId] = useState(null);
   const [studyMode, setStudyMode] = useState(false); // smart study mode
+  const [sessionStartTime, setSessionStartTime] = useState(null);
 
   useEffect(() => {
     fetchDocuments();
@@ -58,6 +59,7 @@ export default function Flashcards() {
       setCurrentDeck(deck);
       setCurrentIndex(0);
       setFlipped(false);
+      setSessionStartTime(Date.now());
     } catch (err) {
       alert(err.message);
     } finally {
@@ -74,6 +76,7 @@ export default function Flashcards() {
       setCurrentIndex(0);
       setFlipped(false);
       setStudyMode(true);
+      setSessionStartTime(Date.now());
     } catch (err) {
       alert(err.message);
     } finally {
@@ -88,6 +91,7 @@ export default function Flashcards() {
       setCurrentIndex(0);
       setFlipped(false);
       setStudyMode(true);
+      setSessionStartTime(Date.now());
     } catch (err) {
       alert(err.message);
     }
@@ -96,14 +100,25 @@ export default function Flashcards() {
   const handleReview = async (quality) => {
     if (!currentDeck) return;
     const card = currentDeck.cards[currentIndex];
+    const durationSeconds = sessionStartTime ? Math.round((Date.now() - sessionStartTime) / 1000) : null;
     try {
-      const updatedCard = await flashcardService.reviewFlashcard(card.id, quality);
+      const updatedCard = await flashcardService.reviewFlashcard(card.id, quality, durationSeconds);
       const updatedCards = [...currentDeck.cards];
       updatedCards[currentIndex] = updatedCard;
       setCurrentDeck({ ...currentDeck, cards: updatedCards });
     } catch (err) {
       // ignore
     }
+    // Reset timer for next card or keep it cumulative? 
+    // Usually study session duration is for the whole session.
+    // If I reset it here, I get per-card time. If I don't, I get cumulative time.
+    // The RPC 'get_study_time_by_mode' sums duration_seconds.
+    // If I want total time per day, cumulative is risky if I don't reset.
+    // Wait, if I don't reset, and I have 20 cards, each 'review' call will have 
+    // a larger and larger duration. Summing them would be wrong.
+    // So I should reset it.
+    setSessionStartTime(Date.now());
+
     // Move to next
     if (currentIndex < currentDeck.cards.length - 1) {
       setCurrentIndex(currentIndex + 1);
@@ -235,7 +250,7 @@ export default function Flashcards() {
                     className="bg-white rounded-[2rem] p-5 flex flex-col sm:flex-row items-center justify-between gap-6 hover:shadow-lg border border-gray-100 transition-all group hover:border-purple-200"
                   >
                     <button
-                      onClick={() => { setCurrentDeck(deck); setCurrentIndex(0); setFlipped(false); setStudyMode(false); }}
+                      onClick={() => { setCurrentDeck(deck); setCurrentIndex(0); setFlipped(false); setStudyMode(false); setSessionStartTime(Date.now()); }}
                       className="flex items-center gap-5 min-w-0 w-full flex-1 text-left"
                     >
                       <div className="w-16 h-16 bg-blue-50 rounded-[1.25rem] flex items-center justify-center flex-shrink-0 group-hover:bg-blue-100 transition-colors">

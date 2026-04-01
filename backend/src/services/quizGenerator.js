@@ -131,6 +131,7 @@ async function submitQuiz(quizId, answers, questions, timeSpentSeconds = null, u
 
   const studyRow = {
     mode: 'quiz',
+    duration_seconds: timeSpentSeconds || null,
     details_json: { quizId, resultId, score, correct, total: questions.length, timeSpentSeconds },
     ...(userId ? { user_id: userId } : {}),
   };

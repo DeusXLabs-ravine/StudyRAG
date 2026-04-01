@@ -6,7 +6,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { COLORS, GradientBg, DotGrid, Badge, FeatureCard, IconCircle } from "./shared";
+import { COLORS, GradientBg, DotGrid, Badge, FeatureCard, SHADOWS } from "./shared";
 
 export const FlashcardsScene: React.FC = () => {
   const frame = useCurrentFrame();
@@ -30,14 +30,14 @@ export const FlashcardsScene: React.FC = () => {
   const stats = [
     { label: "Due Today", value: "24", icon: "📅", color: COLORS.amber },
     { label: "Mastered", value: "156", icon: "⭐", color: COLORS.green },
-    { label: "Streak", value: "12d", icon: "🔥", color: COLORS.sky },
+    { label: "Streak", value: "12d", icon: "🔥", color: COLORS.primary },
   ];
 
   // Rating buttons
   const ratings = [
     { label: "Again", color: COLORS.red },
     { label: "Hard", color: COLORS.amber },
-    { label: "Good", color: COLORS.sky },
+    { label: "Good", color: COLORS.primary },
     { label: "Easy", color: COLORS.green },
   ];
 
@@ -51,72 +51,74 @@ export const FlashcardsScene: React.FC = () => {
           position: "absolute",
           inset: 0,
           display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "60px 100px",
-          gap: 80,
+          alignItems: "stretch",
+          padding: "60px 80px",
+          gap: 48,
         }}
       >
-        {/* Left: description + stats */}
-        <div style={{ flex: 1, maxWidth: 380 }}>
-          <div style={{ opacity: fadeIn(0, 20), marginBottom: 20 }}>
-            <Badge color={COLORS.green}>Flashcards</Badge>
+        {/* Left: Stats & Info Sidebar */}
+        <div
+          style={{
+            width: 320,
+            display: "flex",
+            flexDirection: "column",
+            gap: 20,
+            opacity: fadeIn(0, 25),
+            transform: `translateX(${interpolate(sp(0), [0, 1], [-30, 0])}px)`,
+          }}
+        >
+          <div style={{ marginBottom: 12 }}>
+            <Badge color={COLORS.green}>Smart Flashcards</Badge>
           </div>
-          <h2
-            style={{
-              opacity: fadeIn(10, 35),
-              transform: `translateY(${slideIn(10)}px)`,
-              fontSize: 52,
-              fontWeight: 800,
-              color: COLORS.textPrimary,
-              margin: "0 0 20px",
-              lineHeight: 1.1,
-              letterSpacing: "-0.02em",
-              fontFamily: "Outfit, sans-serif",
-            }}
-          >
-            Smart{" "}
-            <span style={{ background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.sky})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-              Spaced Repetition
-            </span>
-          </h2>
-          <p
-            style={{
-              opacity: fadeIn(30, 55),
-              fontSize: 17,
-              color: COLORS.textSecondary,
-              lineHeight: 1.7,
-              margin: "0 0 32px",
-              fontFamily: "Outfit, sans-serif",
-            }}
-          >
-            AI-generated flashcards using the SM-2 algorithm. Review only what you need, when you need it — for maximum retention with minimum effort.
-          </p>
+          
+          <div style={{ 
+            background: "#fff", 
+            borderRadius: 24, 
+            padding: 24, 
+            boxShadow: SHADOWS.md,
+            border: `1px solid ${COLORS.border}`,
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            gap: 16
+          }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: COLORS.textMuted, margin: 0, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+              Daily Progress
+            </h3>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {stats.map((stat) => (
+                <div key={stat.label} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", background: COLORS.bgCardAlt, borderRadius: 16 }}>
+                  <div style={{ fontSize: 22 }}>{stat.icon}</div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontSize: 12, color: COLORS.textSecondary, fontWeight: 600 }}>{stat.label}</p>
+                    <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: stat.color }}>{stat.value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
 
-          {/* Stats */}
-          <div style={{ opacity: fadeIn(50, 75), display: "flex", gap: 16 }}>
-            {stats.map((stat) => (
-              <FeatureCard key={stat.label} style={{ flex: 1, textAlign: "center", padding: "16px 12px" }}>
-                <div style={{ fontSize: 20, marginBottom: 6 }}>{stat.icon}</div>
-                <p style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 800, color: stat.color, fontFamily: "Outfit, sans-serif" }}>
-                  {stat.value}
-                </p>
-                <p style={{ margin: 0, fontSize: 11, color: COLORS.textMuted, fontFamily: "Outfit, sans-serif", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                  {stat.label}
-                </p>
-              </FeatureCard>
-            ))}
+            <div style={{ marginTop: "auto", background: `linear-gradient(135deg, ${COLORS.primary}10, ${COLORS.purple}10)`, borderRadius: 16, padding: 16, border: `1px dashed ${COLORS.primary}33` }}>
+                <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: COLORS.primary, marginBottom: 4 }}>🧠 SM-2 Algorithm</p>
+                <p style={{ margin: 0, fontSize: 11, color: COLORS.textSecondary }}>Next review scheduled for tomorrow at 9:00 AM</p>
+            </div>
           </div>
         </div>
 
-        {/* Right: flashcard + controls */}
-        <div style={{ flex: 1, maxWidth: 560, display: "flex", flexDirection: "column", gap: 20 }}>
-          {/* Flashcard */}
+        {/* Right: Card View */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 24, justifyContent: "center", alignItems: "center" }}>
+          {/* Deck title badge */}
+          <div style={{ opacity: fadeIn(10, 30), transform: `translateY(${slideIn(10)}px)` }}>
+            <Badge color={COLORS.primary}>Biology: Chapter 5 · 24 Cards</Badge>
+          </div>
+
+          {/* Flashcard with Flip Animation */}
           <div
             style={{
-              opacity: fadeIn(5, 30),
-              perspective: 1000,
-              height: 280,
+              width: 580,
+              height: 360,
+              perspective: 1500,
+              opacity: fadeIn(15, 40),
             }}
           >
             <div
@@ -126,6 +128,7 @@ export const FlashcardsScene: React.FC = () => {
                 height: "100%",
                 transformStyle: "preserve-3d",
                 transform: `rotateY(${rotateY}deg)`,
+                transition: "transform 0.1s linear",
               }}
             >
               {/* Front face */}
@@ -134,25 +137,25 @@ export const FlashcardsScene: React.FC = () => {
                   style={{
                     position: "absolute",
                     inset: 0,
-                    background: COLORS.bgCard,
+                    background: "#fff",
                     border: `1px solid ${COLORS.border}`,
-                    borderRadius: 20,
-                    padding: "32px 40px",
+                    borderRadius: 28,
+                    padding: "48px",
                     display: "flex",
                     flexDirection: "column",
                     justifyContent: "center",
                     alignItems: "center",
                     backfaceVisibility: "hidden",
-                    boxShadow: `0 20px 60px rgba(0,0,0,0.3)`,
+                    boxShadow: SHADOWS.lg,
                   }}
                 >
-                  <div style={{ marginBottom: 16, fontSize: 11, fontWeight: 600, color: COLORS.textMuted, fontFamily: "Outfit, sans-serif", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                    Question
+                  <div style={{ marginBottom: 20, fontSize: 12, fontWeight: 700, color: COLORS.textMuted, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                    Flashcard Question
                   </div>
                   <h3
                     style={{
-                      fontSize: 22,
-                      fontWeight: 700,
+                      fontSize: 30,
+                      fontWeight: 800,
                       color: COLORS.textPrimary,
                       textAlign: "center",
                       margin: 0,
@@ -162,9 +165,9 @@ export const FlashcardsScene: React.FC = () => {
                   >
                     What enzyme is primarily responsible for carbon fixation in the Calvin cycle?
                   </h3>
-                  <p style={{ margin: "20px 0 0", fontSize: 13, color: COLORS.textMuted, fontFamily: "Outfit, sans-serif" }}>
-                    Tap to reveal answer
-                  </p>
+                  <div style={{ marginTop: 40, padding: "8px 20px", background: COLORS.bgCardAlt, borderRadius: 100, fontSize: 13, color: COLORS.textMuted, fontWeight: 600 }}>
+                    Click to flip
+                  </div>
                 </div>
               )}
 
@@ -174,35 +177,35 @@ export const FlashcardsScene: React.FC = () => {
                   style={{
                     position: "absolute",
                     inset: 0,
-                    background: `linear-gradient(135deg, ${COLORS.sky}18, ${COLORS.purple}18)`,
-                    border: `1px solid ${COLORS.sky}44`,
-                    borderRadius: 20,
-                    padding: "32px 40px",
+                    background: `linear-gradient(135deg, #fff, ${COLORS.primary}05)`,
+                    border: `2px solid ${COLORS.primary}44`,
+                    borderRadius: 28,
+                    padding: "48px",
                     display: "flex",
                     flexDirection: "column",
                     justifyContent: "center",
                     alignItems: "center",
                     transform: "rotateY(180deg)",
                     backfaceVisibility: "hidden",
-                    boxShadow: `0 20px 60px rgba(14,165,233,0.15)`,
+                    boxShadow: `0 20px 60px ${COLORS.primary}22`,
                   }}
                 >
-                  <div style={{ marginBottom: 16, fontSize: 11, fontWeight: 600, color: COLORS.sky, fontFamily: "Outfit, sans-serif", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                    Answer
+                  <div style={{ marginBottom: 20, fontSize: 12, fontWeight: 700, color: COLORS.primary, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                    Verified Answer
                   </div>
                   <h3
                     style={{
-                      fontSize: 28,
-                      fontWeight: 800,
-                      color: COLORS.textPrimary,
+                      fontSize: 48,
+                      fontWeight: 900,
+                      color: COLORS.primary,
                       textAlign: "center",
-                      margin: "0 0 16px",
+                      margin: "0 0 20px",
                       fontFamily: "Outfit, sans-serif",
                     }}
                   >
                     RuBisCO
                   </h3>
-                  <p style={{ margin: 0, fontSize: 15, color: COLORS.textSecondary, textAlign: "center", fontFamily: "Outfit, sans-serif", lineHeight: 1.6 }}>
+                  <p style={{ margin: 0, fontSize: 18, color: COLORS.textSecondary, textAlign: "center", fontFamily: "Outfit, sans-serif", lineHeight: 1.6, fontWeight: 500 }}>
                     Ribulose-1,5-bisphosphate carboxylase/oxygenase — the most abundant enzyme on Earth.
                   </p>
                 </div>
@@ -213,10 +216,11 @@ export const FlashcardsScene: React.FC = () => {
           {/* Rating buttons */}
           <div
             style={{
-              opacity: fadeIn(flipStart + 35, flipStart + 55),
+              opacity: fadeIn(flipStart + 35, flipStart + 60),
               transform: `translateY(${interpolate(sp(flipStart + 35), [0, 1], [20, 0])}px)`,
               display: "flex",
-              gap: 12,
+              gap: 16,
+              width: 580,
             }}
           >
             {ratings.map((r) => (
@@ -225,14 +229,16 @@ export const FlashcardsScene: React.FC = () => {
                 style={{
                   flex: 1,
                   textAlign: "center",
-                  padding: "12px 0",
-                  borderRadius: 12,
-                  background: `${r.color}18`,
-                  border: `1px solid ${r.color}44`,
-                  fontSize: 14,
-                  fontWeight: 600,
+                  padding: "16px 0",
+                  borderRadius: 16,
+                  background: "#fff",
+                  border: `2px solid ${r.color}33`,
+                  fontSize: 15,
+                  fontWeight: 700,
                   color: r.color,
                   fontFamily: "Outfit, sans-serif",
+                  boxShadow: SHADOWS.sm,
+                  cursor: "pointer",
                 }}
               >
                 {r.label}
@@ -240,24 +246,10 @@ export const FlashcardsScene: React.FC = () => {
             ))}
           </div>
 
-          {/* Deck info */}
-          <div
-            style={{
-              opacity: fadeIn(40, 65),
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <span style={{ fontSize: 13, color: COLORS.textMuted, fontFamily: "Outfit, sans-serif" }}>
-              Card 8 of 24
-            </span>
-            <span style={{ fontSize: 13, color: COLORS.textMuted, fontFamily: "Outfit, sans-serif" }}>
-              Biology Chapter 5
-            </span>
-            <span style={{ fontSize: 13, color: COLORS.sky, fontFamily: "Outfit, sans-serif", fontWeight: 600 }}>
-              🤖 AI-Generated
-            </span>
+          {/* AI Generation Badge */}
+          <div style={{ opacity: fadeIn(40, 65), display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 14 }}>🤖</span>
+            <span style={{ fontSize: 14, color: COLORS.textMuted, fontWeight: 500 }}>AI-Generated card from page 142 of your document</span>
           </div>
         </div>
       </div>

@@ -5,9 +5,10 @@ import {
   spring,
   useCurrentFrame,
   useVideoConfig,
-  Sequence,
+  Img,
+  staticFile,
 } from "remotion";
-import { COLORS, GradientBg, DotGrid, Badge } from "./shared";
+import { COLORS, GradientBg, DotGrid, Badge, SHADOWS } from "./shared";
 
 export const HeroScene: React.FC = () => {
   const frame = useCurrentFrame();
@@ -54,7 +55,7 @@ export const HeroScene: React.FC = () => {
   );
 
   // Animated glow pulse
-  const glowPulse = interpolate(frame % 60, [0, 30, 60], [0.7, 1, 0.7]);
+  const glowPulse = interpolate(frame % 60, [0, 30, 60], [0.4, 0.7, 0.4]);
 
   const features = ["📄 Upload Any Document", "🤖 AI-Powered Learning", "📊 Track Progress", "🎯 Adaptive Quizzes"];
 
@@ -67,48 +68,52 @@ export const HeroScene: React.FC = () => {
       <div
         style={{
           position: "absolute",
-          top: "50%",
+          top: "45%",
           left: "50%",
           transform: "translate(-50%, -50%)",
-          width: 600,
-          height: 600,
+          width: 800,
+          height: 800,
           borderRadius: "50%",
-          background: `radial-gradient(circle, rgba(14,165,233,${0.06 * glowPulse}) 0%, transparent 70%)`,
+          background: `radial-gradient(circle, rgba(14,165,233,${0.08 * glowPulse}) 0%, transparent 70%)`,
           pointerEvents: "none",
         }}
       />
 
-      {/* Logo circle */}
+      {/* Logo Container */}
       <div
         style={{
           position: "absolute",
-          top: "50%",
+          top: "22%",
           left: "50%",
-          transform: `translate(-50%, -50%) scale(${ringScale})`,
+          transform: `translateX(-50%) scale(${ringScale})`,
           opacity: ringOpacity,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: 0,
-          marginTop: -60,
         }}
       >
-        {/* Outer ring */}
         <div
           style={{
-            width: 100,
-            height: 100,
-            borderRadius: "50%",
-            border: `2px solid ${COLORS.sky}44`,
+            width: 140,
+            height: 140,
+            borderRadius: 32,
+            background: "#fff",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: `radial-gradient(circle, rgba(14,165,233,0.15) 0%, transparent 70%)`,
-            boxShadow: `0 0 40px rgba(14,165,233,0.3)`,
-            marginBottom: 32,
+            boxShadow: SHADOWS.lg,
+            border: `1px solid ${COLORS.border}`,
+            padding: 24,
           }}
         >
-          <span style={{ fontSize: 44 }}>🎓</span>
+          <Img 
+            src={staticFile("/images/logo.png")} 
+            style={{ 
+              width: "100%", 
+              height: "100%", 
+              objectFit: "contain" 
+            }} 
+          />
         </div>
       </div>
 
@@ -122,11 +127,12 @@ export const HeroScene: React.FC = () => {
           alignItems: "center",
           justifyContent: "center",
           gap: 0,
+          paddingTop: 120,
         }}
       >
         {/* Badge */}
         <div style={{ opacity: badgeOpacity, transform: `translateY(${badgeY}px)`, marginBottom: 24 }}>
-          <Badge color={COLORS.sky}>AI-Powered Study Platform</Badge>
+          <Badge color={COLORS.primary}>Adaptive Learning Reimagined</Badge>
         </div>
 
         {/* Main title */}
@@ -140,18 +146,18 @@ export const HeroScene: React.FC = () => {
         >
           <span
             style={{
-              fontSize: 88,
-              fontWeight: 800,
+              fontSize: 100,
+              fontWeight: 900,
               color: COLORS.textPrimary,
-              lineHeight: 1.05,
-              letterSpacing: "-0.03em",
+              lineHeight: 1,
+              letterSpacing: "-0.04em",
               fontFamily: "Outfit, sans-serif",
             }}
           >
             Study
             <span
               style={{
-                background: `linear-gradient(135deg, ${COLORS.sky}, ${COLORS.purple})`,
+                background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.purple})`,
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
               }}
@@ -167,23 +173,22 @@ export const HeroScene: React.FC = () => {
             opacity: subtitleOpacity,
             transform: `translateY(${subtitleY}px)`,
             textAlign: "center",
-            maxWidth: 640,
-            marginBottom: 40,
+            maxWidth: 720,
+            marginBottom: 48,
           }}
         >
           <p
             style={{
-              fontSize: 24,
+              fontSize: 26,
               color: COLORS.textSecondary,
-              lineHeight: 1.6,
+              lineHeight: 1.5,
               margin: 0,
               fontFamily: "Outfit, sans-serif",
               fontWeight: 400,
             }}
           >
-            Transform any document into an interactive learning experience with{" "}
-            <span style={{ color: COLORS.skyLight, fontWeight: 600 }}>AI-powered</span> quizzes,
-            flashcards, and personalized tutoring.
+            The world's first <span style={{ color: COLORS.primary, fontWeight: 600 }}>Adaptive RAG</span> study platform.
+            Upload documents and start learning with AI.
           </p>
         </div>
 
@@ -192,23 +197,23 @@ export const HeroScene: React.FC = () => {
           style={{
             opacity: ctaOpacity,
             transform: `scale(${ctaScale})`,
-            marginBottom: 48,
+            marginBottom: 60,
           }}
         >
           <div
             style={{
-              background: `linear-gradient(135deg, ${COLORS.sky}, ${COLORS.purple})`,
-              borderRadius: 50,
-              padding: "16px 40px",
-              fontSize: 18,
+              background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.purple})`,
+              borderRadius: 16,
+              padding: "18px 48px",
+              fontSize: 22,
               fontWeight: 700,
               color: "#fff",
               fontFamily: "Outfit, sans-serif",
-              boxShadow: `0 8px 32px rgba(14,165,233,0.4)`,
+              boxShadow: `0 12px 40px rgba(14,165,233,0.3)`,
               letterSpacing: "0.01em",
             }}
           >
-            studyrag.co →
+            Get Started Free
           </div>
         </div>
 
@@ -218,7 +223,7 @@ export const HeroScene: React.FC = () => {
             opacity: pillsOpacity,
             transform: `translateY(${pillsY}px)`,
             display: "flex",
-            gap: 12,
+            gap: 16,
             flexWrap: "wrap",
             justifyContent: "center",
           }}
@@ -227,14 +232,15 @@ export const HeroScene: React.FC = () => {
             <div
               key={i}
               style={{
-                background: `${COLORS.bgCard}`,
+                background: COLORS.bgCard,
                 border: `1px solid ${COLORS.border}`,
                 borderRadius: 100,
-                padding: "8px 20px",
-                fontSize: 14,
+                padding: "10px 24px",
+                fontSize: 16,
                 color: COLORS.textSecondary,
                 fontFamily: "Outfit, sans-serif",
                 fontWeight: 500,
+                boxShadow: SHADOWS.sm,
               }}
             >
               {f}

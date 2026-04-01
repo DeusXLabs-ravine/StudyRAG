@@ -63,7 +63,7 @@ async function getDeckStudyQueue(req, res, next) {
 
 async function reviewFlashcard(req, res, next) {
   try {
-    const { quality, status } = req.body;
+    const { quality, status, durationSeconds } = req.body;
     const { id: cardId } = req.params;
 
     let qualityValue;
@@ -79,7 +79,7 @@ async function reviewFlashcard(req, res, next) {
       return res.status(400).json({ error: 'Quality must be between 1 and 4' });
     }
 
-    const card = await reviewCard(cardId, qualityValue, req.user?.id || null);
+    const card = await reviewCard(cardId, qualityValue, durationSeconds || null, req.user?.id || null);
     if (!card) {
       return res.status(404).json({ error: 'Card not found' });
     }

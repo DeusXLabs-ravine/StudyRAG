@@ -80,9 +80,9 @@ const useModuleStore = create((set, get) => ({
 
   bridgeGeneratingModuleId: null,
 
-  submitProgress: async (moduleId, score, answers = null) => {
+  submitProgress: async (moduleId, score, answers = null, durationSeconds = null) => {
     try {
-      const result = await moduleService.updateProgress(moduleId, score, answers);
+      const result = await moduleService.updateProgress(moduleId, score, answers, durationSeconds);
       set(state => ({
         modules: state.modules.map(m =>
           m.id === moduleId ? { ...m, progress: result.progress } : m
