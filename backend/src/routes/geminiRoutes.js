@@ -30,8 +30,10 @@ router.post('/live-token', async (req, res) => {
   }
 
   const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+  // Model goes in the URL path only — NOT in the body.
+  // config mirrors the BidiGenerateContentSetup structure (minus model).
   const body = {
-    model: `models/${LIVE_MODEL}`,
     config: {
       responseModalities: ['AUDIO'],
       speechConfig: {
