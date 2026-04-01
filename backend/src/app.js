@@ -25,6 +25,7 @@ const medicalResourceRoutes = require('./routes/medicalResourceRoutes');
 const gameRoutes = require('./routes/gameRoutes');
 const simulationRoutes = require('./routes/simulationRoutes');
 const webhookRoutes = require('./routes/webhookRoutes');
+const geminiRoutes = require('./routes/geminiRoutes');
 
 const app = express();
 
@@ -130,6 +131,7 @@ app.use('/api/courses', courseRoutes);
 app.use('/api/medical', medicalResourceRoutes);
 app.use('/api/games', gameRoutes);
 app.use('/api/simulations', simulationRoutes);
+app.use('/api/gemini', geminiRoutes);
 
 // Strict rate limit for expensive generation endpoints
 app.use('/api/diagrams/generate', generationLimiter);

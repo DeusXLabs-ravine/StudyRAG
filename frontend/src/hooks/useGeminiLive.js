@@ -1,28 +1,36 @@
 import { useRef, useState, useCallback } from 'react';
 import { GeminiLiveSession, buildTeachingInstruction } from '../services/geminiLiveService';
+import useAuthStore from '../store/authStore';
 
-const GEMINI_KEYS = [
-  import.meta.env.VITE_GEMINI_API_KEY_1,
-  import.meta.env.VITE_GEMINI_API_KEY_2,
-  import.meta.env.VITE_GEMINI_API_KEY_3,
-  import.meta.env.VITE_GEMINI_API_KEY_4,
-  import.meta.env.VITE_GEMINI_API_KEY_5,
-  import.meta.env.VITE_GEMINI_API_KEY_6,
-  import.meta.env.VITE_GEMINI_API_KEY_7,
-  import.meta.env.VITE_GEMINI_API_KEY_8,
-].filter(Boolean);
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
-let _keyIndex = 0;
-function getNextApiKey() {
-  if (GEMINI_KEYS.length === 0) return '';
-  const key = GEMINI_KEYS[_keyIndex % GEMINI_KEYS.length];
-  _keyIndex = (_keyIndex + 1) % GEMINI_KEYS.length;
-  return key;
+/**
+ * Fetch a short-lived ephemeral token from the backend.
+ * The backend generates it using the real API key — never exposed client-side.
+ */
+async function fetchLiveToken(systemInstruction) {
+  const token = useAuthStore.getState().getAccessToken();
+  const res = await fetch(`${API_BASE}/gemini/live-token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ systemInstruction }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error?.message || `Token fetch failed (${res.status})`);
+  }
+
+  const data = await res.json();
+  return data.token; // the ephemeral token value
 }
 
 /**
  * useGeminiLive
- * React hook for managing a Gemini Live teaching session with multimodal tools.
+ * React hook for managing a Gemini Live real-time audio teaching session.
  */
 export default function useGeminiLive({ moduleTitle, moduleTopic, content, teachingLevel, userName, onToolCall } = {}) {
   const sessionRef = useRef(null);
@@ -34,6 +42,7 @@ export default function useGeminiLive({ moduleTitle, moduleTopic, content, teach
   const start = useCallback(async (contextOverride = {}) => {
     if (sessionRef.current) {
       sessionRef.current.stop();
+      sessionRef.current = null;
     }
 
     setTranscript('');
@@ -41,40 +50,46 @@ export default function useGeminiLive({ moduleTitle, moduleTopic, content, teach
     setError(null);
     setState('connecting');
 
-    const systemInstruction = buildTeachingInstruction({
-      moduleTitle: contextOverride.moduleTitle || moduleTitle,
-      moduleTopic: contextOverride.moduleTopic || moduleTopic,
-      content: contextOverride.content || content,
-      teachingLevel: contextOverride.teachingLevel || teachingLevel,
-      userName: contextOverride.userName || userName,
-    });
+    const resolvedContext = {
+      moduleTitle: contextOverride.moduleTitle ?? moduleTitle,
+      moduleTopic: contextOverride.moduleTopic ?? moduleTopic,
+      content: contextOverride.content ?? content,
+      teachingLevel: contextOverride.teachingLevel ?? teachingLevel,
+      userName: contextOverride.userName ?? userName,
+    };
+
+    const systemInstruction = buildTeachingInstruction(resolvedContext);
+
+    let token;
+    try {
+      token = await fetchLiveToken(systemInstruction);
+    } catch (err) {
+      console.error('[useGeminiLive] Token fetch failed:', err);
+      setError(err.message || 'Could not get session token.');
+      setState('error');
+      return;
+    }
 
     const session = new GeminiLiveSession({
-      apiKey: getNextApiKey(),
+      token,
       systemInstruction,
-      onTranscript: (text) => {
-        setTranscript(prev => prev + text);
-      },
-      onUserTranscript: (text) => {
-        setUserTranscript(prev => prev + ' ' + text);
-      },
-      onStateChange: (newState) => {
-        setState(newState);
-      },
+      onTranscript: (text) => setTranscript(prev => prev + text),
+      onUserTranscript: (text) => setUserTranscript(prev => (prev ? prev + ' ' + text : text)),
+      onStateChange: (newState) => setState(newState),
       onError: (msg) => {
         setError(msg);
         setState('error');
       },
-      onToolCall: (call) => {
-        onToolCall?.(call);
-      }
+      onToolCall: (call) => onToolCall?.(call),
     });
 
     sessionRef.current = session;
 
     try {
       await session.start();
-    } catch (err) {}
+    } catch {
+      // errors already surfaced via onError
+    }
   }, [moduleTitle, moduleTopic, content, teachingLevel, userName, onToolCall]);
 
   const stop = useCallback(() => {
@@ -89,17 +104,12 @@ export default function useGeminiLive({ moduleTitle, moduleTopic, content, teach
     sessionRef.current?.sendTextTurn(text);
   }, []);
 
-  const isActive = state !== 'idle' && state !== 'ended' && state !== 'error';
-  const isConnecting = state === 'connecting';
-  const isSpeaking = state === 'teaching';
-  const isListening = state === 'listening';
-
   return {
     state,
-    isActive,
-    isConnecting,
-    isSpeaking,
-    isListening,
+    isActive: state !== 'idle' && state !== 'ended' && state !== 'error',
+    isConnecting: state === 'connecting',
+    isSpeaking: state === 'teaching',
+    isListening: state === 'listening',
     transcript,
     userTranscript,
     error,
