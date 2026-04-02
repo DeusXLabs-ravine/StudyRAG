@@ -66,7 +66,7 @@ export function deriveChatSessionTitle(messages = []) {
     return title;
   }
 
-  return `${title.slice(0, SESSION_TITLE_MAX_LENGTH - 1).trimEnd()}…`;
+  return `${title.slice(0, SESSION_TITLE_MAX_LENGTH - 3).trimEnd()}...`;
 }
 
 export function createChatSession(session = {}) {
