@@ -172,9 +172,11 @@ export class GeminiLiveSession {
         clearTimeout(timer);
         if (!this._closed) {
           this._setState('ended');
-          const reason = event.code === 1006
-            ? 'Connection lost (network issue)'
-            : event.reason || `Closed (${event.code})`;
+          // 1001 = server going away (Railway redeploy), 1006 = network drop
+          const reason =
+            event.code === 1006 ? 'Connection lost — check your internet connection' :
+            event.code === 1001 ? 'Server restarting — please start a new session' :
+            event.reason || `Connection closed (${event.code})`;
           this.onError(reason);
           reject(new Error(reason));
         }

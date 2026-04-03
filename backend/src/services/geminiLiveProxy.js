@@ -35,6 +35,10 @@ const { GoogleGenAI } = require('@google/genai');
 const { geminiApiKey, geminiApiKeys } = require('../config/env');
 const { authCache } = require('../config/cache');
 const supabase = require('../config/database');
+const {
+  buildFunctionResponse,
+  extractServerContentEvents,
+} = require('./geminiLiveProxyUtils');
 
 const LIVE_MODEL = 'gemini-3.1-flash-live-preview';
 
@@ -104,9 +108,10 @@ async function executeTool(name, args, toolContext) {
     getSearchGroundedModel,
     withRetryOnRateLimit,
     keyPool,
+    resolveModel,
   } = require('../config/gemini');
 
-  const GEN_MODEL = 'gemini-3.1-flash';
+  const GEN_MODEL = resolveModel('fast');
 
   switch (name) {
 
@@ -235,11 +240,7 @@ function handleGeminiMessage(ws, msg, geminiSession, toolContext) {
 
     // 2. Ack to keep Gemini session alive during async execution
     geminiSession.sendToolResponse({
-      functionResponses: calls.map(fc => ({
-        id: fc.id,
-        name: fc.name,
-        response: { status: 'processing' },
-      })),
+      functionResponses: calls.map(fc => buildFunctionResponse(fc, { status: 'processing' })),
     });
 
     // 3. Execute tool server-side, send real result back to both Gemini and client
@@ -250,14 +251,14 @@ function handleGeminiMessage(ws, msg, geminiSession, toolContext) {
           send(ws, { type: 'tool_result', name: fc.name, result });
           // Tell Gemini so it can speak intelligently about what was produced
           geminiSession.sendToolResponse({
-            functionResponses: [{ id: fc.id, name: fc.name, response: result }],
+            functionResponses: [buildFunctionResponse(fc, result)],
           });
         })
         .catch(err => {
           console.error(`[GeminiLive] Tool "${fc.name}" failed:`, err.message);
           send(ws, { type: 'tool_result', name: fc.name, result: { error: true } });
           geminiSession.sendToolResponse({
-            functionResponses: [{ id: fc.id, name: fc.name, response: { error: err.message } }],
+            functionResponses: [buildFunctionResponse(fc, { error: err.message })],
           });
         });
     }
@@ -268,34 +269,15 @@ function handleGeminiMessage(ws, msg, geminiSession, toolContext) {
   const sc = msg.serverContent;
   if (!sc) return;
 
-  if (sc.inputTranscription?.text) {
-    send(ws, { type: 'user_transcript', text: sc.inputTranscription.text });
-  }
-
-  if (sc.modelTurn?.parts) {
-    for (const part of sc.modelTurn.parts) {
-      if (part.inlineData?.mimeType?.startsWith('audio/')) {
-        send(ws, { type: 'audio', data: part.inlineData.data, mimeType: part.inlineData.mimeType });
-      }
-      if (part.text) {
-        send(ws, { type: 'transcript', text: part.text });
-      }
-    }
-  }
-
-  if (sc.interrupted) {
-    send(ws, { type: 'interrupted' });
-  }
-
-  if (sc.turnComplete) {
-    send(ws, { type: 'turn_complete' });
+  for (const event of extractServerContentEvents(sc)) {
+    send(ws, event);
   }
 }
 
 // ── Main connection handler ──────────────────────────────────────────────────
 
 async function handleLiveConnection(ws, req) {
-  const url = new URL(req.url, 'http://localhost');
+  const url = new URL(req.url, 'https://studyrag.co');
   const token = url.searchParams.get('token');
 
   // ── Auth ────────────────────────────────────────────────────
@@ -337,6 +319,14 @@ async function handleLiveConnection(ws, req) {
   let initialized = false;
   const audioBuffer = []; // buffer audio arriving before session is ready
 
+  // ── Keepalive ping (Railway drops idle WS after 60s) ────────
+  // Send a ping every 25s so Railway's proxy sees activity.
+  // Browsers automatically respond with pong frames.
+  const { WebSocket: WS } = require('ws');
+  const pingInterval = setInterval(() => {
+    if (ws.readyState === WS.OPEN) ws.ping();
+  }, 25_000);
+
   // ── Client message handler ──────────────────────────────────
   ws.on('message', async (rawData) => {
     let msg;
@@ -362,6 +352,7 @@ async function handleLiveConnection(ws, req) {
               : undefined,
             tools: [{ functionDeclarations: TEACHER_TOOLS }],
             inputAudioTranscription: {},
+            outputAudioTranscription: {},
           },
           callbacks: {
             onopen: () => {
@@ -420,11 +411,13 @@ async function handleLiveConnection(ws, req) {
 
   // ── Cleanup ─────────────────────────────────────────────────
   ws.on('close', () => {
+    clearInterval(pingInterval);
     console.log(`[GeminiLive] Client disconnected (user ${userId.slice(0, 8)})`);
     if (geminiSession) { try { geminiSession.close(); } catch {} }
   });
 
   ws.on('error', (err) => {
+    clearInterval(pingInterval);
     console.error('[GeminiLive] Client WS error:', err.message);
     if (geminiSession) { try { geminiSession.close(); } catch {} }
   });
