@@ -1,5 +1,6 @@
 import api from './api';
 import useAuthStore from '../store/authStore';
+import { API_BASE } from './api';
 
 export async function sendQuery(query, documentId, durationSeconds = null) {
   const { data } = await api.post('/chat/query', { query, documentId, durationSeconds });
@@ -15,9 +16,8 @@ export async function sendQuery(query, documentId, durationSeconds = null) {
  */
 export async function* streamQuery(query, documentId, durationSeconds = null) {
   const token = useAuthStore.getState().getAccessToken();
-  const baseUrl = import.meta.env.VITE_API_URL || '/api';
 
-  const response = await fetch(`${baseUrl}/chat/stream`, {
+  const response = await fetch(`${API_BASE}/chat/stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

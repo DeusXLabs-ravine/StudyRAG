@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback } from 'react';
-import { GeminiLiveSession, buildTeachingInstruction, getLiveWsUrl } from '../services/geminiLiveService';
+import { GeminiLiveSession, buildTeachingInstruction } from '../services/geminiLiveService';
+import { resolveLiveWsUrl } from '../services/apiBase';
 import useAuthStore from '../store/authStore';
 
 /**
@@ -46,7 +47,9 @@ export default function useGeminiLive({
     };
 
     const authToken = useAuthStore.getState().getAccessToken() || '';
-    const wsUrl = getLiveWsUrl();
+    const wsUrl = resolveLiveWsUrl({
+      envApiUrl: import.meta.env.VITE_API_URL,
+    });
     const systemInstruction = buildTeachingInstruction(ctx);
 
     const session = new GeminiLiveSession({

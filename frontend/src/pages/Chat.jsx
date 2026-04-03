@@ -491,7 +491,7 @@ export default function Chat() {
           xMin, xMax,
           title: expressions.length > 1 ? 'Multiple Functions' : `y = ${expression}`,
         }],
-      });
+      }, sessionId);
       return;
     }
 

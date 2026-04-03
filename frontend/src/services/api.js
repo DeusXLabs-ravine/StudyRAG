@@ -1,8 +1,12 @@
 import axios from 'axios';
 import useAuthStore from '../store/authStore';
+import { resolveApiBaseUrl } from './apiBase';
 
-// In production, use the api subdomain. In dev, proxy through Vite.
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+// Prefer the production API subdomain on the live site, while still honoring
+// localhost during actual local development.
+export const API_BASE = resolveApiBaseUrl({
+  envApiUrl: import.meta.env.VITE_API_URL,
+});
 
 const api = axios.create({
   baseURL: API_BASE,

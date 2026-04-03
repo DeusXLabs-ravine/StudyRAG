@@ -1,5 +1,6 @@
 import api from './api';
 import useAuthStore from '../store/authStore';
+import { API_BASE } from './api';
 
 // In-memory audio cache: "voiceId:textHash" → Blob
 const audioCache = new Map();
@@ -48,8 +49,7 @@ export async function fetchSpeechStream(text, voiceId, signal) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const baseUrl = import.meta.env.VITE_API_URL || '/api';
-  const response = await fetch(`${baseUrl}/tts/speak/stream`, {
+  const response = await fetch(`${API_BASE}/tts/speak/stream`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ text, voiceId }),
