@@ -33,6 +33,8 @@ if (USE_CLUSTERING && cluster.isPrimary) {
 
   const app = require('./app');
   const { port } = require('./config/env');
+  const { WebSocketServer } = require('ws');
+  const { handleLiveConnection } = require('./services/geminiLiveProxy');
 
   const server = app.listen(port, '0.0.0.0', () => {
     const mode = cluster.isWorker ? `[Worker ${cluster.worker.id}]` : '[Single Mode]';
@@ -41,6 +43,12 @@ if (USE_CLUSTERING && cluster.isPrimary) {
       console.log(`[Database] Connecting to Supabase (PostgreSQL)...`);
     }
   });
+
+  // WebSocket server for Gemini Live proxy — mounted on the same HTTP server
+  // so Railway's single port handles both HTTP and WS upgrades transparently.
+  const wss = new WebSocketServer({ server, path: '/live' });
+  wss.on('connection', handleLiveConnection);
+  wss.on('error', (err) => console.error('[WSS] Server error:', err.message));
 
 
   // Graceful shutdown for individual workers

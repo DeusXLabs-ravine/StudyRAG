@@ -1,101 +1,110 @@
 /**
  * GeminiLiveService
- * WebSocket client for the Gemini Live API (BidiGenerateContent).
- * Uses ephemeral tokens generated server-side — no API keys in the browser.
+ * Client-side WebSocket connection to our backend proxy.
+ * The backend uses @google/genai SDK to talk to Gemini Live — API keys stay server-side.
  *
- * Protocol reference:
- *   https://ai.google.dev/gemini-api/docs/live-api/get-started-websocket
+ * Protocol frames (JSON):
+ *   → init, audio, text
+ *   ← ready, audio, transcript, user_transcript, tool_call, tool_result,
+ *      interrupted, turn_complete, error, ended
  */
 
-const GEMINI_LIVE_WS = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
-const MODEL = 'models/gemini-3.1-flash-live-preview';
 const INPUT_SAMPLE_RATE = 16000;
 const OUTPUT_SAMPLE_RATE = 24000;
-const CONNECT_TIMEOUT_MS = 20000;
+const CONNECT_TIMEOUT_MS = 25000;
 
-// ── Audio conversion helpers ──────────────────────────────────────────────────
+// ── Audio helpers ─────────────────────────────────────────────────────────────
 
 function floatTo16BitPCM(float32Array) {
-  const buffer = new ArrayBuffer(float32Array.length * 2);
-  const view = new DataView(buffer);
+  const buf = new ArrayBuffer(float32Array.length * 2);
+  const view = new DataView(buf);
   for (let i = 0; i < float32Array.length; i++) {
     const s = Math.max(-1, Math.min(1, float32Array[i]));
     view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
   }
-  return buffer;
+  return buf;
 }
 
 function pcm16ToFloat32(pcm16Buffer) {
-  const int16Array = new Int16Array(pcm16Buffer);
-  const float32Array = new Float32Array(int16Array.length);
-  for (let i = 0; i < int16Array.length; i++) {
-    float32Array[i] = int16Array[i] / 0x7fff;
-  }
-  return float32Array;
+  const i16 = new Int16Array(pcm16Buffer);
+  const f32 = new Float32Array(i16.length);
+  for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 0x7fff;
+  return f32;
 }
 
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
+  let bin = '';
+  for (let i = 0; i < bytes.byteLength; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
 }
 
-function base64ToArrayBuffer(base64) {
-  const binary = atob(base64);
-  const buffer = new ArrayBuffer(binary.length);
-  const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
+function base64ToArrayBuffer(b64) {
+  const bin = atob(b64);
+  const buf = new ArrayBuffer(bin.length);
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return buf;
+}
+
+// ── Derive backend WS URL ─────────────────────────────────────────────────────
+
+export function getLiveWsUrl() {
+  const apiUrl = import.meta.env.VITE_API_URL;
+  if (apiUrl) {
+    // https://backend.railway.app/api  →  wss://backend.railway.app/live
+    return apiUrl.replace(/^http/, 'ws').replace(/\/api\/?$/, '/live');
   }
-  return buffer;
+  // Dev: frontend is on :5173, backend on :5000
+  return 'ws://localhost:5000/live';
 }
 
 // ── GeminiLiveSession ─────────────────────────────────────────────────────────
 
 export class GeminiLiveSession {
-  constructor({ token, authToken, systemInstruction, toolContext, onTranscript, onUserTranscript, onStateChange, onError, onToolCall, onToolResult }) {
-    this.token = token;
-    this._authToken = authToken || '';  // JWT for calling /api/gemini/execute-tool
-    this.toolContext = toolContext || {}; // { moduleTitle, moduleTopic, moduleId, documentId }
+  constructor({
+    wsUrl,
+    authToken,
+    systemInstruction,
+    toolContext,
+    onTranscript,
+    onUserTranscript,
+    onStateChange,
+    onError,
+    onToolCall,
+    onToolResult,
+  }) {
+    this.wsUrl = wsUrl;
+    this.authToken = authToken;
     this.systemInstruction = systemInstruction;
-    this.onTranscript = onTranscript || (() => { });
-    this.onUserTranscript = onUserTranscript || (() => { });
-    this.onStateChange = onStateChange || (() => { });
-    this.onError = onError || (() => { });
-    this.onToolCall = onToolCall || (() => { });
-    this.onToolResult = onToolResult || (() => { }); // called with real result after hybrid execution
+    this.toolContext = toolContext || {};
+    this.onTranscript = onTranscript || (() => {});
+    this.onUserTranscript = onUserTranscript || (() => {});
+    this.onStateChange = onStateChange || (() => {});
+    this.onError = onError || (() => {});
+    this.onToolCall = onToolCall || (() => {});
+    this.onToolResult = onToolResult || (() => {});
 
     this.ws = null;
-    this.sessionId = null;
     this.audioCtx = null;
     this.outputQueue = [];
     this.isPlayingAudio = false;
     this.state = 'idle';
     this._closed = false;
-    this._setupDone = false;
     this._micStream = null;
     this._micProcessor = null;
     this._micInputCtx = null;
   }
 
   async start() {
-    if (!this.token) {
-      this.onError('No live session token — cannot connect.');
-      return;
-    }
     this._setState('connecting');
-    console.log('[GeminiLive] Starting session...');
     try {
       await this._connect();
       await this._initMic();
-      this._setState('listening');
     } catch (err) {
       console.error('[GeminiLive] Start error:', err);
       this._setState('ended');
-      this.onError(err.message || 'Failed to start live session');
+      this.onError(err.message || 'Failed to start session');
       this.stop();
     }
   }
@@ -105,72 +114,49 @@ export class GeminiLiveSession {
     this._stopMic();
     this._stopAudio();
     if (this.ws) {
-      try { this.ws.close(); } catch (_) { }
+      try { this.ws.close(); } catch {}
       this.ws = null;
     }
     this._setState('ended');
   }
 
-  /**
-   * Send a text message as a user turn.
-   * Uses clientContent so the model treats it as a proper conversational turn.
-   */
   sendTextTurn(text) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (!text?.trim() || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     this.onUserTranscript(text);
-    this._sendJSON({
-      clientContent: {
-        turns: [{ role: 'user', parts: [{ text }] }],
-        turnComplete: true,
-      },
-    });
+    this._send({ type: 'text', text });
   }
+
+  // ── Private: connection ────────────────────────────────────────────────────
 
   _connect() {
     return new Promise((resolve, reject) => {
-      // Ephemeral token goes in the URL as access_token
-      const url = `${GEMINI_LIVE_WS}?access_token=${encodeURIComponent(this.token)}`;
+      const url = `${this.wsUrl}?token=${encodeURIComponent(this.authToken)}`;
+      console.log('[GeminiLive] Connecting to backend proxy...');
       this.ws = new WebSocket(url);
 
       const timer = setTimeout(() => {
-        if (!this._setupDone) {
-          if (this.ws) this.ws.close();
-          reject(new Error('Connection timed out — check model availability and token.'));
+        if (this.state === 'connecting') {
+          try { this.ws?.close(); } catch {}
+          reject(new Error('Connection timed out — backend may be starting up, try again.'));
         }
       }, CONNECT_TIMEOUT_MS);
 
       this.ws.onopen = () => {
-        console.log('[GeminiLive] WS open — sending setup...');
-        const setup = {
-          model: MODEL,
-          generationConfig: {
-            responseModalities: ['AUDIO'],
-            speechConfig: {
-              voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } },
-            },
-          },
-          tools: [{ functionDeclarations: TEACHER_TOOLS }],
-        };
-        // Only include systemInstruction in setup if NOT embedded in the token.
-        // If it was passed at token-generation time it's already scoped in.
-        // Sending it again here is harmless — the setup message takes precedence.
-        if (this.systemInstruction) {
-          setup.systemInstruction = { parts: [{ text: this.systemInstruction }] };
-        }
-        this._sendJSON({ setup });
+        // Send init immediately — backend creates the Gemini session
+        this._send({
+          type: 'init',
+          systemInstruction: this.systemInstruction,
+          toolContext: this.toolContext,
+        });
       };
 
       this.ws.onmessage = (event) => {
-        if (typeof event.data !== 'string') return;
         let msg;
         try { msg = JSON.parse(event.data); } catch { return; }
 
-        if (msg.setupComplete !== undefined) {
-          this._setupDone = true;
-          // Capture session ID if provided (used for debugging / resumption)
-          if (msg.sessionId) this.sessionId = msg.sessionId;
+        if (msg.type === 'ready') {
           clearTimeout(timer);
-          console.log('[GeminiLive] Setup complete. sessionId:', this.sessionId);
+          this._setState('listening');
           resolve();
         } else {
           this._handleMessage(msg);
@@ -179,90 +165,84 @@ export class GeminiLiveSession {
 
       this.ws.onerror = () => {
         clearTimeout(timer);
-        if (!this._closed) reject(new Error('WebSocket connection failed.'));
+        reject(new Error('Could not reach backend WebSocket — check server is running.'));
       };
 
       this.ws.onclose = (event) => {
         clearTimeout(timer);
         if (!this._closed) {
           this._setState('ended');
-          const reason = event.code === 1006 ? 'Network error (abnormal closure)' : `Closed (code ${event.code})`;
+          const reason = event.code === 1006
+            ? 'Connection lost (network issue)'
+            : event.reason || `Closed (${event.code})`;
           this.onError(reason);
-          if (!this._setupDone) reject(new Error(reason));
+          reject(new Error(reason));
         }
       };
     });
   }
 
-  _sendJSON(obj) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+  _send(obj) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(obj));
     }
   }
 
+  // ── Private: message routing ───────────────────────────────────────────────
+
   _handleMessage(msg) {
-    // ── Tool calls ──────────────────────────────────────────────
-    if (msg.toolCall) {
-      const calls = msg.toolCall.functionCalls;
-      if (!calls?.length) return;
-
-      console.log('[GeminiLive] Tool call:', calls[0].name, calls[0].args);
-
-      // Step 1: send immediate ack so Sage stays live while we execute
-      this._sendJSON({
-        toolResponse: {
-          functionResponses: calls.map(fc => ({
-            name: fc.name,
-            id: fc.id,
-            response: { output: { status: 'processing' } },
-          })),
-        },
-      });
-
-      // Step 2: notify UI optimistically (shows loading state in tool panel)
-      this.onToolCall(msg.toolCall);
-
-      // Step 3: execute via the backend hybrid model, then send real result back
-      this._executeToolsHybrid(calls);
-    }
-
-    // ── Server content ──────────────────────────────────────────
-    const sc = msg.serverContent;
-    if (!sc) return;
-
-    if (sc.inputTranscription?.text) {
-      this.onUserTranscript(sc.inputTranscription.text);
-    }
-
-    const parts = sc.modelTurn?.parts;
-    if (parts?.length) {
-      let hasAudio = false;
-      for (const part of parts) {
-        if (part.inlineData?.mimeType?.startsWith('audio/pcm')) {
-          hasAudio = true;
-          this.outputQueue.push(base64ToArrayBuffer(part.inlineData.data));
-        }
-        if (part.text) {
-          this.onTranscript(part.text);
-        }
-      }
-      if (hasAudio) {
+    switch (msg.type) {
+      case 'audio':
+        this._queueAudio(msg.data);
         this._setState('teaching');
         this._drainAudioQueue();
-      }
-    }
+        break;
 
-    if (sc.interrupted) {
-      this._stopAudio();
-      this._setState('listening');
-    }
+      case 'transcript':
+        this.onTranscript(msg.text || '');
+        break;
 
-    if (sc.turnComplete && !this.isPlayingAudio) {
-      this._setState('listening');
+      case 'user_transcript':
+        this.onUserTranscript(msg.text || '');
+        break;
+
+      case 'tool_call':
+        // Optimistic: show loading state in UI immediately
+        this.onToolCall({ functionCalls: msg.calls || [] });
+        break;
+
+      case 'tool_result':
+        // Real result from backend hybrid executor — update UI
+        this.onToolResult({ name: msg.name, result: msg.result || {} });
+        break;
+
+      case 'interrupted':
+        this._stopAudio();
+        this._setState('listening');
+        break;
+
+      case 'turn_complete':
+        if (!this.isPlayingAudio) this._setState('listening');
+        break;
+
+      case 'error':
+        this.onError(msg.message || 'Unknown error');
+        this._setState('error');
+        break;
+
+      case 'ended':
+        if (!this._closed) this._setState('ended');
+        break;
     }
   }
 
-  // ── Audio output ──────────────────────────────────────────────────────────
+  // ── Private: audio output ──────────────────────────────────────────────────
+
+  _queueAudio(base64Data) {
+    try {
+      this.outputQueue.push(base64ToArrayBuffer(base64Data));
+    } catch {}
+  }
 
   async _drainAudioQueue() {
     if (this.isPlayingAudio || this.outputQueue.length === 0) return;
@@ -279,14 +259,18 @@ export class GeminiLiveSession {
         if (!this._closed) this._setState('listening');
         return;
       }
-      const float32 = pcm16ToFloat32(this.outputQueue.shift());
-      const buf = this.audioCtx.createBuffer(1, float32.length, OUTPUT_SAMPLE_RATE);
-      buf.getChannelData(0).set(float32);
-      const src = this.audioCtx.createBufferSource();
-      src.buffer = buf;
-      src.connect(this.audioCtx.destination);
-      src.onended = playNext;
-      src.start();
+      try {
+        const f32 = pcm16ToFloat32(this.outputQueue.shift());
+        const buf = this.audioCtx.createBuffer(1, f32.length, OUTPUT_SAMPLE_RATE);
+        buf.getChannelData(0).set(f32);
+        const src = this.audioCtx.createBufferSource();
+        src.buffer = buf;
+        src.connect(this.audioCtx.destination);
+        src.onended = playNext;
+        src.start();
+      } catch {
+        playNext(); // skip bad chunk
+      }
     };
 
     playNext();
@@ -296,12 +280,12 @@ export class GeminiLiveSession {
     this.isPlayingAudio = false;
     this.outputQueue = [];
     if (this.audioCtx) {
-      try { this.audioCtx.close(); } catch (_) { }
+      try { this.audioCtx.close(); } catch {}
       this.audioCtx = null;
     }
   }
 
-  // ── Microphone input ──────────────────────────────────────────────────────
+  // ── Private: microphone input ──────────────────────────────────────────────
 
   async _initMic() {
     this._micStream = await navigator.mediaDevices.getUserMedia({
@@ -320,12 +304,11 @@ export class GeminiLiveSession {
 
     this._micProcessor.onaudioprocess = (e) => {
       if (this._closed || this.ws?.readyState !== WebSocket.OPEN) return;
-      const pcm16 = floatTo16BitPCM(e.inputBuffer.getChannelData(0));
-      // Correct format: realtimeInput.mediaChunks (array), not realtimeInput.audio
-      this._sendJSON({
-        realtimeInput: {
-          mediaChunks: [{ mimeType: 'audio/pcm;rate=16000', data: arrayBufferToBase64(pcm16) }],
-        },
+      const pcm = floatTo16BitPCM(e.inputBuffer.getChannelData(0));
+      this._send({
+        type: 'audio',
+        data: arrayBufferToBase64(pcm),
+        mimeType: 'audio/pcm;rate=16000',
       });
     };
 
@@ -334,18 +317,9 @@ export class GeminiLiveSession {
   }
 
   _stopMic() {
-    if (this._micProcessor) {
-      try { this._micProcessor.disconnect(); } catch (_) { }
-      this._micProcessor = null;
-    }
-    if (this._micInputCtx) {
-      try { this._micInputCtx.close(); } catch (_) { }
-      this._micInputCtx = null;
-    }
-    if (this._micStream) {
-      this._micStream.getTracks().forEach(t => t.stop());
-      this._micStream = null;
-    }
+    if (this._micProcessor) { try { this._micProcessor.disconnect(); } catch {} this._micProcessor = null; }
+    if (this._micInputCtx) { try { this._micInputCtx.close(); } catch {} this._micInputCtx = null; }
+    if (this._micStream) { this._micStream.getTracks().forEach(t => t.stop()); this._micStream = null; }
   }
 
   _setState(state) {
@@ -354,118 +328,16 @@ export class GeminiLiveSession {
       this.onStateChange(state);
     }
   }
-
-  // ── Hybrid tool execution ─────────────────────────────────────────────────
-  // Calls the backend /api/gemini/execute-tool endpoint which uses a standard
-  // generative model to handle everything the Live API can't:
-  //   • Structured Mermaid output (schema-constrained JSON)
-  //   • Real-time web search grounding
-  //   • Image generation via Cloudinary pipeline
-  //   • Structured quiz question sets
-  //
-  // After execution, the REAL result is sent back to the Live session via a
-  // second toolResponse so Sage can speak intelligently about what was produced.
-
-  async _executeToolsHybrid(calls) {
-    const API_BASE = import.meta.env.VITE_API_URL || '/api';
-
-    await Promise.all(calls.map(async (fc) => {
-      let result;
-      try {
-        const res = await fetch(`${API_BASE}/gemini/execute-tool`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this._authToken || ''}`,
-          },
-          body: JSON.stringify({
-            toolName: fc.name,
-            args: fc.args || {},
-            context: this.toolContext || {},
-          }),
-        });
-        const data = await res.json();
-        result = data.result || { status: 'done' };
-        console.log(`[GeminiLive/Hybrid] ${fc.name} result:`, result);
-      } catch (err) {
-        console.error(`[GeminiLive/Hybrid] ${fc.name} fetch failed:`, err.message);
-        result = { error: true, explanation: 'Tool execution failed, continuing session.' };
-      }
-
-      // Notify the UI with real results (replaces the loading state)
-      this.onToolResult?.({ name: fc.name, id: fc.id, result });
-
-      // Send real result back to Live session — Sage uses this to speak about it
-      this._sendJSON({
-        toolResponse: {
-          functionResponses: [{
-            name: fc.name,
-            id: fc.id,
-            response: { output: result },
-          }],
-        },
-      });
-    }));
-  }
 }
 
-// ── Teacher tool declarations ────────────────────────────────────────────────
-
-const TEACHER_TOOLS = [
-  {
-    name: 'render_diagram',
-    description: 'Visualize a concept using a Mermaid.js diagram. Use this whenever explaining cycles, hierarchies, processes, or relationships between concepts.',
-    parameters: {
-      type: 'object',
-      properties: {
-        code: { type: 'string', description: 'Valid Mermaid.js diagram code.' },
-        title: { type: 'string', description: 'Short title for the diagram.' },
-      },
-      required: ['code'],
-    },
-  },
-  {
-    name: 'generate_illustration',
-    description: 'Generate an AI illustration to help visualize a complex or abstract topic.',
-    parameters: {
-      type: 'object',
-      properties: {
-        prompt: { type: 'string', description: 'Detailed descriptive prompt for the illustration.' },
-      },
-      required: ['prompt'],
-    },
-  },
-  {
-    name: 'search_external_knowledge',
-    description: 'Search textbooks, research papers, and web resources to verify facts or bring in external perspectives.',
-    parameters: {
-      type: 'object',
-      properties: {
-        query: { type: 'string', description: 'The search query.' },
-      },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'start_lightning_round',
-    description: 'Start a fast-paced interactive quiz to test the student\'s understanding of a topic.',
-    parameters: {
-      type: 'object',
-      properties: {
-        topic: { type: 'string', description: 'The topic to quiz on.' },
-      },
-    },
-  },
-];
-
-// ── System instruction builder ───────────────────────────────────────────────
+// ── System instruction builder ────────────────────────────────────────────────
 
 export function buildTeachingInstruction({ moduleTitle, moduleTopic, content, teachingLevel = 'intermediate', userName }) {
   const levelGuide = {
-    dummy: 'everyday language, zero jargon, pure analogies — explain as if to a curious 8-year-old',
-    beginner: 'clear definitions, simple examples, define every term on first use',
+    dummy:        'everyday language, zero jargon — explain like to a curious 8-year-old',
+    beginner:     'clear definitions, simple examples, define every term on first use',
     intermediate: 'standard academic language, balanced depth',
-    advanced: 'technical and rigorous — explore nuances, edge cases, and deeper implications',
+    advanced:     'technical and rigorous — edge cases, nuances, theoretical depth',
   };
 
   return `You are Sage, a world-class live AI tutor conducting a real-time audio teaching session.
@@ -474,23 +346,22 @@ STUDENT: ${userName || 'the student'} | LEVEL: ${teachingLevel} (${levelGuide[te
 LESSON: ${moduleTitle || 'this lesson'}${moduleTopic ? ` — ${moduleTopic}` : ''}
 
 TEACHING RULES:
-- You are speaking live — keep sentences short and natural, as a real teacher would
-- Never just lecture. Use the whiteboard: call render_diagram constantly for any process, hierarchy, or concept map
+- You are speaking live — keep sentences short and natural, as a real teacher would speak
+- Use the whiteboard constantly: call render_diagram for any process, hierarchy, or concept map
 - For analogies and mental images, call generate_illustration
-- If unsure about a fact or want external depth, call search_external_knowledge
+- For real-time facts or to verify information, call search_external_knowledge
 - End each section with a check-in question before moving on
-- If the student seems confused, slow down — use a simpler analogy before re-explaining
 - Use the student's name (${userName || 'friend'}) occasionally for personal connection
 - Adapt complexity to their teaching level at all times
 
-TOOL USAGE MANDATE:
-- render_diagram: Use within the FIRST 2 minutes and after every major concept
-- generate_illustration: Use for abstract ideas, analogies, and mental models
-- search_external_knowledge: Use when citing statistics, current events, or technical facts
-- start_lightning_round: Use at end of each major section to test retention
+TOOL USAGE MANDATE (use these — don't just talk):
+- render_diagram: within the first 2 minutes AND after every major concept
+- generate_illustration: for abstract ideas, analogies, and mental models
+- search_external_knowledge: when citing statistics, current events, or technical facts
+- start_lightning_round: at the end of each major section to test retention
 
-LESSON CONTENT (ground all teaching in this):
-${content ? content.substring(0, 12000) : 'No content loaded — teach from general knowledge on the topic.'}
+LESSON CONTENT:
+${content ? content.substring(0, 12000) : 'Teach from general knowledge on this topic.'}
 
-Start by greeting ${userName || 'the student'} warmly (1-2 sentences), then open with the most interesting or surprising fact about ${moduleTitle || 'this topic'} to hook their attention. Then ask if they are ready to begin.`;
+Start with a 1-2 sentence warm greeting using the student's name, then give the single most surprising or counterintuitive fact about this topic to hook their attention. Then ask if they're ready to begin.`;
 }
