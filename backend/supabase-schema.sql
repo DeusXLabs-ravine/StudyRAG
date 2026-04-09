@@ -583,6 +583,10 @@ CREATE TABLE IF NOT EXISTS profiles (
   teaching_level TEXT NOT NULL DEFAULT 'intermediate',
   interests TEXT[] DEFAULT '{}',
   onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE,
+  subscription_tier TEXT NOT NULL DEFAULT 'free',
+  subscription_status TEXT NOT NULL DEFAULT 'active',
+  subscription_end_date TIMESTAMPTZ,
+  document_count INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -599,6 +603,27 @@ ALTER TABLE solver_sessions ADD COLUMN IF NOT EXISTS user_id UUID;
 ALTER TABLE exam_prep_sessions ADD COLUMN IF NOT EXISTS user_id UUID;
 ALTER TABLE module_progress ADD COLUMN IF NOT EXISTS user_id UUID;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS user_id UUID;
+
+-- ============================================================
+-- TRANSACTIONS / PAYMENTS
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS transactions (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  payment_reference TEXT NOT NULL UNIQUE,
+  transaction_reference TEXT UNIQUE,
+  amount DECIMAL(10,2) NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'NGN',
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  payment_method TEXT,
+  description TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_ref ON transactions(payment_reference);
 
 -- ============================================================
 -- LEARNING STYLE & PACE DETECTION
@@ -796,3 +821,67 @@ CREATE TABLE IF NOT EXISTS user_game_stats (
   daily_xp_date DATE,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- ============================================================
+-- SHARED RESEARCH CACHE
+-- ============================================================
+
+-- 1. Shared topic research results (cross-user cache)
+--    Stores the full curriculum text generated for a topic so any user
+--    researching the same topic (exact or semantically similar) skips
+--    the expensive AI pipeline and gets the cached result instantly.
+CREATE TABLE IF NOT EXISTS shared_topic_research (
+  id TEXT PRIMARY KEY,
+  topic_normalised TEXT NOT NULL UNIQUE,      -- normalised for exact match
+  topic_original TEXT NOT NULL,               -- original casing/punctuation
+  topic_embedding vector(3072),               -- for cosine similarity lookup
+  text TEXT NOT NULL,                         -- full curriculum markdown
+  sources JSONB NOT NULL DEFAULT '[]',        -- verified source URLs
+  method TEXT,                                -- deep-research|doc-grounded|search-grounded|…
+  domain TEXT,                                -- medical|mathematics|law|…
+  hit_count INTEGER NOT NULL DEFAULT 0,       -- how many times this was served from cache
+  last_hit_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_shared_topic_norm ON shared_topic_research(topic_normalised);
+-- NOTE: pgvector ivfflat/HNSW indexes cap at 2000 dims; Gemini embeddings are 3072-dim.
+-- Vector index skipped — similarity search uses a full scan (table stays small).
+
+-- 2. Content hash on documents — enables duplicate-doc detection across users
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS content_hash TEXT;
+CREATE INDEX IF NOT EXISTS idx_documents_content_hash ON documents(content_hash)
+  WHERE content_hash IS NOT NULL;
+
+-- Helper: atomic integer increment used by hit_count updates
+CREATE OR REPLACE FUNCTION increment(x INTEGER)
+RETURNS INTEGER
+LANGUAGE sql IMMUTABLE
+AS $$
+  SELECT x + 1;
+$$;
+
+-- ============================================================
+-- SECTION PODCASTS
+-- ============================================================
+
+-- Stores auto-generated section-level podcast episodes.
+-- One row per document section (derived from page index tree structure).
+-- Audio WAV files are stored in Supabase Storage under podcasts/{doc_id}/{section_index}.wav
+-- and audio_path holds only the storage path (signed URLs are generated on-demand).
+CREATE TABLE IF NOT EXISTS section_podcasts (
+  id TEXT PRIMARY KEY,
+  document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  section_index INTEGER NOT NULL,
+  section_heading TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',  -- pending | generating | ready | failed
+  transcript TEXT,
+  audio_path TEXT,          -- Supabase Storage path, not a full URL
+  duration_secs INTEGER,
+  char_count INTEGER,
+  error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (document_id, section_index)
+);
+CREATE INDEX IF NOT EXISTS idx_section_podcasts_doc ON section_podcasts(document_id);

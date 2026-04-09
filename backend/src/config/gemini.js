@@ -143,10 +143,11 @@ const FALLBACK_MODELS = {
   fast: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash-lite'],
   standard: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'],
   advanced: [
-    'gemini-3-pro-preview',     // Previous Pro (still works until Mar 9)
-    'gemini-2.5-pro',           // Older Pro
-    'gemini-3-flash-preview',   // Cross-tier: Flash (free tier!)
-    'gemini-2.5-flash',         // Older Flash (free tier!)
+    'gemini-3-flash-preview',   // Flash: free tier, reliable — try before burning paid-only quota
+    'gemini-2.5-flash',         // Flash fallback
+    'gemini-2.5-flash-lite',    // Flash lite fallback
+    'gemini-3-pro-preview',     // Pro: only works with paid keys
+    'gemini-2.5-pro',           // Pro: only works with paid keys
   ],
 };
 
@@ -350,9 +351,10 @@ function markImageModelWorking(modelName) {
 }
 
 function selectModelTier(contentHints = {}) {
-  const { hasMath, hasScience, hasCode, isComplex, isAptitudeTest } = contentHints;
-  if (isAptitudeTest || hasMath || hasCode || isComplex) return 'advanced';
-  if (hasScience) return 'advanced';
+  // 'advanced' primary model (gemini-3.1-pro-preview) requires paid API keys.
+  // On free-tier keys it has limit:0 and fails immediately every time.
+  // Return 'standard' (flash) for all content — the advanced fallback chain
+  // already includes Pro models as last-resort when paid keys become available.
   return 'standard';
 }
 

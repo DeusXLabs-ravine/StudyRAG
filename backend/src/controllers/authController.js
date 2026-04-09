@@ -1,4 +1,5 @@
 const supabase = require('../config/database');
+const { getSubscriptionSnapshotForUser } = require('../services/subscriptionService');
 
 async function getProfile(req, res, next) {
   try {
@@ -13,6 +14,8 @@ async function getProfile(req, res, next) {
     }
     if (error) throw error;
 
+    const subscription = await getSubscriptionSnapshotForUser(req.user.id, req.user.email);
+
     res.json({
       profile: {
         id: data.id,
@@ -24,6 +27,12 @@ async function getProfile(req, res, next) {
         interests: data.interests || [],
         onboardingCompleted: data.onboarding_completed,
         createdAt: data.created_at,
+        subscription_tier: subscription.tier,
+        subscription_status: subscription.status,
+        subscription_end_date: subscription.endDate,
+        document_count: data.document_count || 0,
+        isAdminGranted: subscription.isAdminGranted,
+        feature_access: subscription.featureAccess,
       },
     });
   } catch (error) {
@@ -53,7 +62,6 @@ async function createProfile(req, res, next) {
 
     if (error) throw error;
 
-    // Respond immediately — profile is created
     res.json({
       profile: {
         id: data.id,
@@ -68,16 +76,16 @@ async function createProfile(req, res, next) {
       },
     });
 
-    // Sync teaching_level into user_settings for backward compat (non-blocking)
     syncTeachingLevel(teachingLevel || 'intermediate');
 
-    // Send welcome email (non-blocking)
     try {
       const { sendWelcomeEmail } = require('../services/emailService');
-      sendWelcomeEmail(req.user.email, displayName).catch(err =>
+      sendWelcomeEmail(req.user.email, displayName).catch((err) =>
         console.warn('[Email] Welcome email failed (non-critical):', err.message)
       );
-    } catch { /* email service not configured */ }
+    } catch {
+      // Email service is optional in local/dev environments.
+    }
   } catch (error) {
     next(error);
   }
@@ -104,7 +112,6 @@ async function updateProfile(req, res, next) {
 
     if (error) throw error;
 
-    // Respond immediately — profile is updated
     res.json({
       profile: {
         id: data.id,
@@ -119,7 +126,6 @@ async function updateProfile(req, res, next) {
       },
     });
 
-    // Sync teaching_level to user_settings for backward compat (non-blocking)
     if (teachingLevel !== undefined) {
       syncTeachingLevel(teachingLevel);
     }
@@ -128,14 +134,51 @@ async function updateProfile(req, res, next) {
   }
 }
 
-/** Non-blocking sync of teaching_level to user_settings table */
 function syncTeachingLevel(level) {
-  supabase.rpc('upsert_user_setting', {
-    p_key: 'teaching_level',
-    p_value: level,
-  }).then(({ error }) => {
-    if (error) console.warn('Non-critical: failed to sync teaching_level:', error.message);
-  });
+  supabase
+    .rpc('upsert_user_setting', {
+      p_key: 'teaching_level',
+      p_value: level,
+    })
+    .then(({ error }) => {
+      if (error) {
+        console.warn('Non-critical: failed to sync teaching_level:', error.message);
+      }
+    });
 }
 
-module.exports = { getProfile, createProfile, updateProfile };
+async function adminGrantTier(req, res, next) {
+  try {
+    const { email, tier } = req.body;
+    const validTiers = ['free', 'basic', 'pro', 'max'];
+
+    if (!email || !tier || !validTiers.includes(tier)) {
+      return res.status(400).json({ error: 'email and tier (free/basic/pro/max) are required' });
+    }
+
+    const { data: userData, error: userErr } = await supabase.auth.admin.getUserByEmail(email);
+    if (userErr || !userData?.user) {
+      return res.status(404).json({ error: `No user found with email: ${email}` });
+    }
+
+    const userId = userData.user.id;
+
+    const { error: profileErr } = await supabase
+      .from('profiles')
+      .update({
+        subscription_tier: tier,
+        subscription_status: tier === 'free' ? 'inactive' : 'active',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId);
+
+    if (profileErr) throw profileErr;
+
+    console.log(`[Admin] Granted tier '${tier}' to ${email} by ${req.user.email}`);
+    res.json({ success: true, message: `Granted '${tier}' tier to ${email}` });
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = { getProfile, createProfile, updateProfile, adminGrantTier };

@@ -1,317 +1,662 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mic, MicOff, GraduationCap, Volume2, VolumeX, AlertCircle, Send, Loader2, Brain, Sparkles, MessageSquare, Zap, Search, Image as ImageIcon, BookOpen } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, Suspense, Component } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { PerspectiveCamera } from '@react-three/drei';
+import { AnimatePresence, motion } from 'framer-motion'; // eslint-disable-line no-unused-vars
+import { X, Mic, MicOff, Send, Loader2, MessageSquare, AlertCircle } from 'lucide-react';
+import * as THREE from 'three';
 import mermaid from 'mermaid';
 import useGeminiLive from '../../hooks/useGeminiLive';
 import { getGeneratedDiagramImageUrl } from '../../services/diagramService';
 
-// Initialize mermaid
-mermaid.initialize({ startOnLoad: false, theme: 'neutral' });
+mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+let _mid = 0;
 
-// Unique ID counter so each render call gets a fresh element ID (Mermaid 11.x requirement)
-let _mermaidIdCounter = 0;
+// ── Canvas dimensions for the board texture ───────────────────────────────────
+const BW = 2048; // board texture pixel width
+const BH = 768;  // board texture pixel height
+const PAD = 64;
+const PAD_B = 48; // bottom padding
+const MAX_W = BW - PAD * 2;
 
-function DiagramDisplay({ code, title }) {
-  const ref = useRef(null);
+// Font sizes — calibrated so ~5-6 lines of transcript fit comfortably
+const FS = {
+  label:     18,  // "SAGE" / "YOU ASKED"
+  heading:   22,  // module title small cap
+  topic:     40,  // topic title
+  transcript:52,  // main speech text  ← was 96, now fits ~5 lines
+  question:  44,  // user question
+  empty:     44,  // idle placeholder
+  lqLabel:   22,  // lightning label
+  lq:        38,  // lightning question
+  hint:      28,  // lightning hint
+  research:  30,  // research query / summary
+};
 
+// ── chalk helpers ─────────────────────────────────────────────────────────────
+const CHALK_FONT = (size, w = '900') =>
+  `${w} ${size}px "Segoe Script","Comic Sans MS","Chalkboard SE",cursive`;
+
+function wrapLines(ctx, text, maxW, size) {
+  ctx.font = CHALK_FONT(size);
+  const words = text.split(' ');
+  const lines = [];
+  let cur = '';
+  for (const word of words) {
+    const test = cur ? cur + ' ' + word : word;
+    if (ctx.measureText(test).width <= maxW || !cur) { cur = test; }
+    else { lines.push(cur); cur = word; }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+function drawChalk(ctx, text, x, y, size, { color = '#FFFFFF', alpha = 1, align = 'left', maxW = 0 } = {}) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = CHALK_FONT(size);
+  ctx.fillStyle = color;
+  ctx.textAlign = align;
+  ctx.textBaseline = 'alphabetic';
+  ctx.shadowColor = color + '55';
+  ctx.shadowBlur = Math.max(4, size * 0.08);
+  if (maxW > 0) {
+    const lines = wrapLines(ctx, text, maxW, size);
+    lines.forEach((ln, i) => ctx.fillText(ln, x, y + i * size * 1.45));
+    ctx.restore();
+    return lines.length;
+  }
+  ctx.fillText(text, x, y);
+  ctx.restore();
+  return 1;
+}
+
+function drawRule(ctx, y) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(PAD, y);
+  ctx.lineTo(BW - PAD, y);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Measure total content height without drawing anything
+function measureHeight(ctx, { transcript, userTranscript, toolData,
+  lightningQuestions, moduleTitle, moduleTopic, isSpeaking, cursorOn }) {
+  let y = PAD;
+  if (moduleTitle || moduleTopic) {
+    y += FS.heading + 8;
+    const tl = wrapLines(ctx, moduleTopic || 'Current Topic', MAX_W, FS.topic);
+    y += tl.length * FS.topic * 1.45 + 12 + 20 + 24;
+  }
+  if (transcript) {
+    y += FS.label + 10;
+    const cursor = isSpeaking && cursorOn ? ' |' : '';
+    const tl = wrapLines(ctx, transcript + cursor, MAX_W, FS.transcript);
+    y += tl.length * FS.transcript * 1.45 + 20;
+  }
+  if (userTranscript) {
+    y += FS.label + 10;
+    const ql = wrapLines(ctx, `\u201C${userTranscript}\u201D`, MAX_W, FS.question);
+    y += ql.length * FS.question * 1.45 + 16;
+  }
+  if (toolData?.type === 'diagram' || toolData?.type === 'illustration' ||
+      toolData?.type === 'research') {
+    y += 260; // rough block height
+  }
+  if (lightningQuestions?.length) {
+    y += FS.lqLabel + 20;
+    for (const q of lightningQuestions) {
+      const ql = wrapLines(ctx, `${q.question}`, MAX_W - 20, FS.lq);
+      y += ql.length * FS.lq * 1.45 + 10;
+      if (q.hint) y += FS.hint * 1.45 + 10;
+    }
+  }
+  return y + PAD_B;
+}
+
+// ── Board canvas texture hook ─────────────────────────────────────────────────
+function useBoardTexture({ transcript, userTranscript, toolData, isSpeaking,
+  lightningQuestions, moduleTitle, moduleTopic }) {
+
+  const stateRef = useRef(null);
+  const cursorRef = useRef(true);
+
+  if (!stateRef.current) {
+    const canvas = document.createElement('canvas');
+    canvas.width = BW;
+    canvas.height = BH;
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    stateRef.current = { canvas, texture };
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, BW, BH);
+    texture.needsUpdate = true;
+  }
+
+  const paint = useCallback(() => {
+    const { canvas, texture } = stateRef.current;
+    const ctx = canvas.getContext('2d');
+
+    // Measure first to compute scroll offset (always show latest/bottom content)
+    const totalH = measureHeight(ctx, {
+      transcript, userTranscript, toolData, lightningQuestions,
+      moduleTitle, moduleTopic, isSpeaking, cursorOn: cursorRef.current,
+    });
+    const scrollY = Math.max(0, totalH - BH);
+
+    ctx.clearRect(0, 0, BW, BH);
+    ctx.save();
+    // Clip to canvas bounds so nothing bleeds outside the board
+    ctx.beginPath(); ctx.rect(0, 0, BW, BH); ctx.clip();
+    ctx.translate(0, -scrollY);
+
+    const isEmpty = !transcript && !userTranscript && !toolData && !lightningQuestions?.length;
+    let y = PAD;
+
+    // ── Header ───────────────────────────────────────────────────────────
+    if (moduleTitle || moduleTopic) {
+      drawChalk(ctx, (moduleTitle || 'Lesson').toUpperCase(), PAD, y, FS.heading, { alpha: 0.55 });
+      y += FS.heading + 8;
+      const tl = drawChalk(ctx, moduleTopic || 'Current Topic', PAD, y, FS.topic, { maxW: MAX_W });
+      y += tl * FS.topic * 1.45 + 12;
+      drawRule(ctx, y);
+      y += 24;
+    }
+
+    // ── Empty state ───────────────────────────────────────────────────────
+    if (isEmpty) {
+      const cx = BW / 2, cy = scrollY + BH / 2;
+      ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(cx - 70, cy - 24); ctx.lineTo(cx + 70, cy - 24); ctx.stroke();
+      ctx.restore();
+      drawChalk(ctx, 'Sage is preparing your lesson...', cx, cy + 42, FS.empty,
+        { alpha: 0.35, align: 'center' });
+      ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(cx - 70, cy + 84); ctx.lineTo(cx + 70, cy + 84); ctx.stroke();
+      ctx.restore();
+    }
+
+    // ── Transcript ────────────────────────────────────────────────────────
+    if (transcript) {
+      drawChalk(ctx, 'SAGE', PAD, y, FS.label, { alpha: 0.48 });
+      y += FS.label + 10;
+      const cursor = isSpeaking && cursorRef.current ? ' |' : '';
+      const tl = drawChalk(ctx, transcript + cursor, PAD, y, FS.transcript, { maxW: MAX_W });
+      y += tl * FS.transcript * 1.45 + 20;
+    }
+
+    // ── User transcript ───────────────────────────────────────────────────
+    if (userTranscript) {
+      drawChalk(ctx, 'YOU ASKED', PAD, y, FS.label, { alpha: 0.48, color: '#a8d8a8' });
+      y += FS.label + 10;
+      const ql = drawChalk(ctx, `\u201C${userTranscript}\u201D`, PAD, y, FS.question,
+        { color: '#a8d8a8', alpha: 0.82, maxW: MAX_W });
+      y += ql * FS.question * 1.45 + 16;
+    }
+
+    // ── Diagram ───────────────────────────────────────────────────────────
+    if (toolData?.type === 'diagram') {
+      if (toolData.loading) {
+        drawChalk(ctx, '\u23F3  Drawing diagram...', PAD, y, 36, { alpha: 0.5 });
+      } else if (toolData._img) {
+        if (toolData.title) {
+          drawChalk(ctx, `\u2500\u2500 ${toolData.title} \u2500\u2500`, BW / 2, y, 26, { alpha: 0.6, align: 'center' });
+          y += 38;
+        }
+        const img = toolData._img;
+        const maxH = BH * 0.6;
+        const ratio = Math.min(MAX_W / img.width, maxH / img.height);
+        ctx.drawImage(img, PAD, y, img.width * ratio, img.height * ratio);
+      }
+    }
+
+    // ── Illustration ──────────────────────────────────────────────────────
+    if (toolData?.type === 'illustration') {
+      if (toolData.loading) {
+        drawChalk(ctx, '\u23F3  Illustrating...', PAD, y, 36, { alpha: 0.5 });
+      } else if (toolData._img) {
+        const img = toolData._img;
+        const maxH = BH * 0.6;
+        const ratio = Math.min(MAX_W / img.width, maxH / img.height);
+        const dw = img.width * ratio, dh = img.height * ratio;
+        const ix = PAD + (MAX_W - dw) / 2;
+        ctx.save(); ctx.fillStyle = 'rgba(255,255,200,0.72)';
+        ctx.save(); ctx.translate(ix + 32, y - 8); ctx.rotate(-0.1); ctx.fillRect(-16, -6, 32, 11); ctx.restore();
+        ctx.save(); ctx.translate(ix + dw - 32, y - 8); ctx.rotate(0.1); ctx.fillRect(-16, -6, 32, 11); ctx.restore();
+        ctx.restore();
+        ctx.drawImage(img, ix, y, dw, dh);
+        if (toolData.prompt)
+          drawChalk(ctx, `\u201C${toolData.prompt}\u201D`, BW / 2, y + dh + 24, 24, { alpha: 0.42, align: 'center' });
+      }
+    }
+
+    // ── Research ──────────────────────────────────────────────────────────
+    if (toolData?.type === 'research') {
+      ctx.save(); ctx.strokeStyle = 'rgba(168,216,168,0.3)'; ctx.lineWidth = 2;
+      ctx.strokeRect(PAD - 6, y - 24, MAX_W + 12, 240);
+      ctx.restore();
+      drawChalk(ctx, `\uD83D\uDD0D  RESEARCH${toolData.loading ? ' ...' : ''}`, PAD, y, FS.label,
+        { color: '#a8d8a8', alpha: 0.75 });
+      y += FS.label + 16;
+      const ql = drawChalk(ctx, `\u201C${toolData.query}\u201D`, PAD, y, FS.research, { maxW: MAX_W });
+      y += ql * FS.research * 1.45 + 10;
+      if (toolData.summary)
+        drawChalk(ctx, toolData.summary, PAD, y, FS.research - 4, { alpha: 0.8, maxW: MAX_W });
+    }
+
+    // ── Lightning round ───────────────────────────────────────────────────
+    if (lightningQuestions?.length > 0) {
+      drawChalk(ctx, '\u26A1  LIGHTNING ROUND', PAD, y, FS.lqLabel, { color: '#FCD34D', alpha: 0.95 });
+      y += FS.lqLabel + 16;
+      for (const [i, q] of lightningQuestions.entries()) {
+        const ql = drawChalk(ctx, `${i + 1}.  ${q.question}`, PAD + 16, y, FS.lq, { maxW: MAX_W - 16 });
+        y += ql * FS.lq * 1.45 + 8;
+        if (q.hint) {
+          drawChalk(ctx, `Hint: ${q.hint}`, PAD + 32, y, FS.hint, { alpha: 0.4, maxW: MAX_W - 32 });
+          y += FS.hint * 1.45 + 8;
+        }
+      }
+    }
+
+    ctx.restore();
+    texture.needsUpdate = true;
+  }, [transcript, userTranscript, toolData, isSpeaking, lightningQuestions, moduleTitle, moduleTopic]);
+
+  // Re-paint whenever content changes
+  useEffect(() => { paint(); }, [paint]);
+
+  // Blinking cursor when speaking
   useEffect(() => {
-    if (!ref.current || !code) return;
-    const id = `mermaid-live-${++_mermaidIdCounter}`;
-    mermaid.render(id, code)
-      .then(({ svg }) => { if (ref.current) ref.current.innerHTML = svg; })
-      .catch(err => { console.warn('[DiagramDisplay] Mermaid render failed:', err.message); });
-  }, [code]);
+    if (!isSpeaking) return;
+    const id = setInterval(() => { cursorRef.current = !cursorRef.current; paint(); }, 550);
+    return () => clearInterval(id);
+  }, [isSpeaking, paint]);
 
+  // Load diagram SVG → Image when code becomes available
+  useEffect(() => {
+    if (toolData?.type !== 'diagram' || toolData.loading || !toolData.code || toolData._img) return;
+    const id = `bd-${++_mid}`;
+    mermaid.render(id, toolData.code).then(({ svg }) => {
+      const img = new Image();
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      img.onload = () => {
+        toolData._img = img; // mutate in-place; paint picks it up
+        paint();
+      };
+    }).catch(() => { });
+  }, [toolData, paint]);
+
+  // Load illustration URL → Image
+  useEffect(() => {
+    if (toolData?.type !== 'illustration' || toolData.loading || !toolData.url || toolData._img) return;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = toolData.url;
+    img.onload = () => { toolData._img = img; paint(); };
+  }, [toolData, paint]);
+
+  // Cleanup on unmount
+  useEffect(() => () => { stateRef.current?.texture.dispose(); }, []);
+
+  return stateRef.current.texture;
+}
+
+// ── Chalkboard mesh with canvas texture ───────────────────────────────────────
+function Chalkboard(props) {
+  const texture = useBoardTexture(props);
   return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="bg-white p-6 rounded-3xl border border-blue-100 shadow-xl w-full max-w-md my-4"
-    >
-      <div className="flex items-center gap-2 mb-4">
-        <Zap className="h-3 w-3 text-primary fill-current" />
-        <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">{title || 'Sage Whiteboard'}</h4>
-      </div>
-      <div ref={ref} className="overflow-auto flex justify-center" />
-    </motion.div>
+    <group position={[0, 1.8, -6.7]}>
+      {/* Wood frame */}
+      <mesh castShadow>
+        <boxGeometry args={[22, 8.5, 0.18]} />
+        <meshStandardMaterial color="#7B5A2A" roughness={0.6} metalness={0.1} />
+      </mesh>
+      {/* Green board surface */}
+      <mesh position={[0, 0, 0.1]}>
+        <boxGeometry args={[21.5, 8, 0.05]} />
+        <meshStandardMaterial color="#2D5A24" roughness={0.95} />
+      </mesh>
+      {/* Canvas texture plane — exactly covers green surface */}
+      <mesh position={[0, 0, 0.14]}>
+        <planeGeometry args={[21.5, 8]} />
+        <meshBasicMaterial map={texture} transparent />
+      </mesh>
+      {/* Chalk tray */}
+      <mesh position={[0, -4.1, 0.2]}>
+        <boxGeometry args={[21.5, 0.25, 0.3]} />
+        <meshStandardMaterial color="#8B6914" roughness={0.5} />
+      </mesh>
+    </group>
   );
 }
 
-function IllustrationDisplay({ prompt, url, loading }) {
+// ── 3-D Classroom room ────────────────────────────────────────────────────────
+function ClassroomRoom() {
   return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="bg-white p-4 rounded-3xl border border-purple-100 shadow-xl w-full max-w-sm my-4 overflow-hidden"
-    >
-      <div className="flex items-center gap-2 mb-3">
-        <Sparkles className="h-3 w-3 text-purple-500 fill-current" />
-        <h4 className="text-[10px] font-black uppercase text-purple-500 tracking-widest">Sage Visualization</h4>
-      </div>
-      
-      <div className="relative aspect-video rounded-2xl bg-purple-50 flex items-center justify-center overflow-hidden border border-purple-100/50">
-        {loading ? (
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-6 w-6 text-purple-400 animate-spin" />
-            <p className="text-[9px] font-bold text-purple-300 uppercase tracking-tighter">Painting concepts...</p>
-          </div>
-        ) : url ? (
-          <img src={url} alt="Educational illustration" className="w-full h-full object-cover" />
-        ) : (
-          <ImageIcon className="h-8 w-8 text-purple-200" />
-        )}
-      </div>
-      {prompt && <p className="mt-3 text-[10px] text-gray-400 italic leading-tight px-1">"{prompt}"</p>}
-    </motion.div>
+    <group>
+      <mesh receiveShadow position={[0, -3.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[28, 18]} />
+        <meshStandardMaterial color="#6B4C2A" roughness={0.85} metalness={0.05} />
+      </mesh>
+      <mesh receiveShadow position={[0, 2.5, -7]}>
+        <boxGeometry args={[28, 14, 0.2]} />
+        <meshStandardMaterial color="#C8B89A" roughness={0.9} />
+      </mesh>
+      <mesh receiveShadow position={[-14, 2.5, 0]}>
+        <boxGeometry args={[0.2, 14, 18]} />
+        <meshStandardMaterial color="#BFB090" roughness={0.9} />
+      </mesh>
+      <mesh receiveShadow position={[14, 2.5, 0]}>
+        <boxGeometry args={[0.2, 14, 18]} />
+        <meshStandardMaterial color="#BFB090" roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 9.5, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[28, 18]} />
+        <meshStandardMaterial color="#E8DCC8" roughness={1} />
+      </mesh>
+      <mesh position={[0, -2.2, -6.9]}>
+        <boxGeometry args={[28, 2.6, 0.15]} />
+        <meshStandardMaterial color="#8B6914" roughness={0.7} metalness={0.1} />
+      </mesh>
+    </group>
   );
 }
 
-function KnowledgeCard({ query, results, summary, loading }) {
+// ── Windows ───────────────────────────────────────────────────────────────────
+function ClassroomWindows() {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-white p-5 rounded-3xl border border-emerald-100 shadow-xl w-full max-w-md my-4"
-    >
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <BookOpen className="h-3 w-3 text-emerald-500 fill-current" />
-          <h4 className="text-[10px] font-black uppercase text-emerald-500 tracking-widest">External Research</h4>
-        </div>
-        {loading && <Loader2 className="h-3 w-3 text-emerald-400 animate-spin" />}
-      </div>
-
-      <div className="space-y-3">
-        <p className="text-xs font-bold text-gray-700 bg-emerald-50/50 p-2 rounded-xl border border-emerald-100/50 italic">
-          <Search className="h-3 w-3 inline mr-2 opacity-40" />
-          {query}
-        </p>
-
-        {/* Summary from search grounding — the standard model's answer */}
-        {!loading && summary && (
-          <p className="text-xs text-gray-600 leading-relaxed px-1">{summary}</p>
-        )}
-
-        {!loading && results?.length > 0 && (
-          <div className="space-y-2 max-h-36 overflow-y-auto pr-2">
-            {results.slice(0, 4).map((res, i) => (
-              <a
-                key={i}
-                href={res.url}
-                target="_blank"
-                rel="noreferrer"
-                className="block p-2.5 rounded-xl hover:bg-emerald-50 transition-colors border border-transparent hover:border-emerald-100 group"
-              >
-                <p className="text-[11px] font-bold text-emerald-700 truncate group-hover:underline">{res.title}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5 truncate opacity-80">{res.url}</p>
-              </a>
-            ))}
-          </div>
-        )}
-      </div>
-    </motion.div>
+    <group>
+      {[-1.5, 1.5].map((z, i) => (
+        <group key={i} position={[13.9, 2.5, z * 2]}>
+          <mesh>
+            <boxGeometry args={[0.12, 3.5, 2.8]} />
+            <meshStandardMaterial color="#87CEEB" emissive="#87CEEB" emissiveIntensity={0.4} />
+          </mesh>
+          <mesh>
+            <boxGeometry args={[0.2, 4, 3.2]} />
+            <meshStandardMaterial color="#F5F0E8" roughness={0.6} />
+          </mesh>
+        </group>
+      ))}
+    </group>
   );
 }
 
-function LightningRound({ topic, questions, loading }) {
+// ── Ceiling lights ────────────────────────────────────────────────────────────
+function CeilingLights() {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-amber-50 p-5 rounded-3xl border border-amber-200 shadow-xl w-full my-4"
-    >
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Zap className="h-3.5 w-3.5 text-amber-500 fill-current" />
-          <h4 className="text-[10px] font-black uppercase text-amber-600 tracking-widest">
-            Lightning Round{topic ? ` — ${topic}` : ''}
-          </h4>
-        </div>
-        {loading && <Loader2 className="h-3 w-3 text-amber-400 animate-spin" />}
-      </div>
+    <>
+      {[-4, 0, 4].map((x, i) => (
+        <group key={i} position={[x, 9.2, -3]}>
+          <mesh>
+            <boxGeometry args={[2.2, 0.12, 0.4]} />
+            <meshStandardMaterial color="#f5f0e8" emissive="#fff8e8" emissiveIntensity={0.6} />
+          </mesh>
+          <pointLight color="#FFF5E0" intensity={18} distance={14} decay={2} castShadow />
+        </group>
+      ))}
+    </>
+  );
+}
 
-      {loading && (
-        <p className="text-xs text-amber-400 font-bold animate-pulse">Generating questions...</p>
-      )}
+// ── Scene lighting ────────────────────────────────────────────────────────────
+function SceneLighting() {
+  return (
+    <>
+      <ambientLight color="#FFF8F0" intensity={0.55} />
+      <directionalLight
+        color="#FFF5DC" intensity={1.6} position={[4, 10, 2]} castShadow
+        shadow-mapSize={[2048, 2048]}
+        shadow-camera-far={40} shadow-camera-left={-15} shadow-camera-right={15}
+        shadow-camera-top={12} shadow-camera-bottom={-8}
+      />
+      <pointLight color="#87CEEB" intensity={6} position={[13, 3, 0]} distance={20} decay={2} />
+      <spotLight color="#FFFBE8" intensity={12} position={[0, 6, -2]} angle={0.8}
+        penumbra={0.4} target-position={[0, 1.8, -6.7]} />
+    </>
+  );
+}
 
-      {!loading && questions?.length > 0 && (
-        <div className="space-y-2">
-          {questions.map((q, i) => (
-            <div key={i} className="bg-white rounded-2xl p-3 border border-amber-100">
-              <div className="flex items-start gap-2">
-                <span className="text-[10px] font-black text-amber-400 mt-0.5 w-4 flex-shrink-0">{i + 1}.</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-gray-800">{q.question}</p>
-                  {q.hint && (
-                    <p className="text-[10px] text-gray-400 mt-1 italic">Hint: {q.hint}</p>
-                  )}
-                </div>
-                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0 ${
-                  q.difficulty === 'easy' ? 'bg-green-100 text-green-600' :
-                  q.difficulty === 'hard' ? 'bg-red-100 text-red-600' :
-                  'bg-amber-100 text-amber-600'
-                }`}>{q.difficulty}</span>
-              </div>
-            </div>
+// ── Procedural lecturer ───────────────────────────────────────────────────────
+function ProceduralLecturer({ isSpeaking }) {
+  const bodyRef  = useRef(null);
+  const headRef  = useRef(null);
+  const armRRef  = useRef(null);
+  const armLRef  = useRef(null);
+  const chalkRef = useRef(null);
+
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    if (bodyRef.current)  bodyRef.current.rotation.z  = Math.sin(t * 0.55) * 0.018;
+    if (headRef.current) {
+      headRef.current.rotation.x = isSpeaking ? Math.sin(t * 2.2) * 0.09 : Math.sin(t * 0.4) * 0.025;
+      headRef.current.rotation.y = Math.sin(t * 0.3) * 0.06 - 0.1;
+    }
+    if (armRRef.current) {
+      armRRef.current.rotation.z = -(Math.PI * 0.4) + Math.sin(t * 1.1) * 0.18;
+      armRRef.current.rotation.x = Math.sin(t * 0.9) * 0.08;
+    }
+    if (armLRef.current) armLRef.current.rotation.z = 0.18 + Math.sin(t * 0.7) * 0.06;
+    if (chalkRef.current) chalkRef.current.rotation.z = Math.sin(t * 1.1) * 0.15;
+  });
+
+  const skin = '#C68642', suit = '#2C3A52', shirt = '#F5F5F0';
+  const tie = '#8B1A1A', hair = '#1C110A', shoe = '#111111';
+
+  return (
+    <group position={[9.5, -3.5, -5.0]} rotation={[0, Math.PI * 1.2, 0]}>
+      <group ref={bodyRef}>
+        {/* Legs */}
+        {[-0.18, 0.18].map((x) => (
+          <mesh key={x} position={[x, 0.55, 0]} castShadow>
+            <capsuleGeometry args={[0.155, 1.05, 6, 14]} />
+            <meshStandardMaterial color={suit} roughness={0.8} />
+          </mesh>
+        ))}
+        {/* Shoes */}
+        {[-0.18, 0.18].map((x) => (
+          <mesh key={x} position={[x, 0.02, 0.14]} castShadow>
+            <boxGeometry args={[0.21, 0.1, 0.42]} />
+            <meshStandardMaterial color={shoe} roughness={0.45} metalness={0.25} />
+          </mesh>
+        ))}
+        {/* Torso */}
+        <mesh position={[0, 1.35, 0]} castShadow>
+          <capsuleGeometry args={[0.31, 0.95, 8, 16]} />
+          <meshStandardMaterial color={suit} roughness={0.72} />
+        </mesh>
+        {/* Shirt */}
+        <mesh position={[0, 1.38, 0.27]}>
+          <boxGeometry args={[0.2, 0.65, 0.04]} />
+          <meshStandardMaterial color={shirt} roughness={0.9} />
+        </mesh>
+        {/* Tie */}
+        <mesh position={[0, 1.25, 0.3]}>
+          <boxGeometry args={[0.065, 0.42, 0.035]} />
+          <meshStandardMaterial color={tie} roughness={0.85} />
+        </mesh>
+        <mesh position={[0, 1.5, 0.3]}>
+          <boxGeometry args={[0.08, 0.07, 0.04]} />
+          <meshStandardMaterial color={tie} roughness={0.85} />
+        </mesh>
+        {/* Lapels */}
+        {[[-0.14, 0.45], [0.14, -0.45]].map(([x, rz]) => (
+          <mesh key={x} position={[x, 1.55, 0.24]} rotation={[0, 0, rz]} castShadow>
+            <boxGeometry args={[0.08, 0.28, 0.04]} />
+            <meshStandardMaterial color={suit} roughness={0.7} />
+          </mesh>
+        ))}
+        {/* Pocket square */}
+        <mesh position={[-0.24, 1.65, 0.28]} rotation={[0, 0, 0.3]}>
+          <boxGeometry args={[0.07, 0.05, 0.02]} />
+          <meshStandardMaterial color="#FAFAFA" roughness={0.9} />
+        </mesh>
+        {/* Neck */}
+        <mesh position={[0, 1.9, 0]} castShadow>
+          <cylinderGeometry args={[0.1, 0.13, 0.22, 14]} />
+          <meshStandardMaterial color={skin} roughness={0.7} />
+        </mesh>
+        {/* Head group */}
+        <group ref={headRef} position={[0, 2.22, 0]}>
+          <mesh castShadow>
+            <sphereGeometry args={[0.26, 22, 18]} />
+            <meshStandardMaterial color={skin} roughness={0.72} />
+          </mesh>
+          {/* Hair */}
+          <mesh position={[0, 0.17, -0.04]}>
+            <sphereGeometry args={[0.24, 14, 10]} />
+            <meshStandardMaterial color={hair} roughness={0.88} />
+          </mesh>
+          {[-0.22, 0.22].map((x) => (
+            <mesh key={x} position={[x, 0.06, 0]}>
+              <sphereGeometry args={[0.1, 10, 8]} />
+              <meshStandardMaterial color={hair} roughness={0.88} />
+            </mesh>
           ))}
-        </div>
-      )}
-    </motion.div>
+          {/* Eye whites */}
+          {[-0.09, 0.09].map((x) => (
+            <mesh key={x} position={[x, 0.03, 0.222]}>
+              <sphereGeometry args={[0.04, 10, 10]} />
+              <meshStandardMaterial color="#FFFDF8" />
+            </mesh>
+          ))}
+          {/* Pupils */}
+          {[-0.09, 0.09].map((x) => (
+            <mesh key={x} position={[x, 0.03, 0.237]}>
+              <sphereGeometry args={[0.024, 10, 10]} />
+              <meshStandardMaterial color="#1A0F00" />
+            </mesh>
+          ))}
+          {/* Glasses */}
+          {[-0.09, 0.09].map((x) => (
+            <mesh key={x} position={[x, 0.03, 0.258]} rotation={[Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[0.052, 0.007, 6, 18]} />
+              <meshStandardMaterial color="#5C3D1A" metalness={0.75} roughness={0.25} />
+            </mesh>
+          ))}
+          <mesh position={[0, 0.03, 0.261]}>
+            <boxGeometry args={[0.055, 0.007, 0.006]} />
+            <meshStandardMaterial color="#5C3D1A" metalness={0.75} roughness={0.25} />
+          </mesh>
+          {/* Nose */}
+          <mesh position={[0, -0.04, 0.255]} rotation={[0.3, 0, 0]}>
+            <boxGeometry args={[0.04, 0.055, 0.045]} />
+            <meshStandardMaterial color={skin} roughness={0.8} />
+          </mesh>
+          {/* Mouth */}
+          <mesh position={[0, -0.1, 0.245]}>
+            <boxGeometry args={[0.1, 0.018, 0.02]} />
+            <meshStandardMaterial color="#8B4513" roughness={0.9} />
+          </mesh>
+          {/* Ears */}
+          {[-0.26, 0.26].map((x) => (
+            <mesh key={x} position={[x, 0, 0]} rotation={[0, 0, x < 0 ? 0.1 : -0.1]}>
+              <capsuleGeometry args={[0.04, 0.1, 4, 8]} />
+              <meshStandardMaterial color={skin} roughness={0.75} />
+            </mesh>
+          ))}
+        </group>
+
+        {/* Right arm — points toward board */}
+        <group ref={armRRef} position={[-0.38, 1.68, 0]}>
+          <mesh position={[0, -0.26, 0]} castShadow>
+            <capsuleGeometry args={[0.1, 0.45, 6, 12]} />
+            <meshStandardMaterial color={suit} roughness={0.72} />
+          </mesh>
+          <mesh position={[0, -0.72, 0.08]} rotation={[-0.3, 0, 0]} castShadow>
+            <capsuleGeometry args={[0.08, 0.42, 6, 12]} />
+            <meshStandardMaterial color={shirt} roughness={0.85} />
+          </mesh>
+          <mesh position={[0, -1.06, 0.14]} castShadow>
+            <sphereGeometry args={[0.085, 12, 10]} />
+            <meshStandardMaterial color={skin} roughness={0.75} />
+          </mesh>
+          <group ref={chalkRef} position={[0, -1.18, 0.17]} rotation={[0.4, 0, 0.15]}>
+            <mesh castShadow>
+              <cylinderGeometry args={[0.022, 0.022, 0.28, 10]} />
+              <meshStandardMaterial color="#ECECEC" roughness={0.95} />
+            </mesh>
+            <mesh position={[0, 0.15, 0]}>
+              <cylinderGeometry args={[0.015, 0.022, 0.04, 8]} />
+              <meshStandardMaterial color="#FFE082" roughness={0.9} />
+            </mesh>
+          </group>
+        </group>
+
+        {/* Left arm — relaxed */}
+        <group ref={armLRef} position={[0.38, 1.68, 0]}>
+          <mesh position={[0, -0.26, 0]} castShadow>
+            <capsuleGeometry args={[0.1, 0.45, 6, 12]} />
+            <meshStandardMaterial color={suit} roughness={0.72} />
+          </mesh>
+          <mesh position={[0.04, -0.72, 0]} castShadow>
+            <capsuleGeometry args={[0.08, 0.42, 6, 12]} />
+            <meshStandardMaterial color={shirt} roughness={0.85} />
+          </mesh>
+          <mesh position={[0.06, -1.06, 0]} castShadow>
+            <sphereGeometry args={[0.085, 12, 10]} />
+            <meshStandardMaterial color={skin} roughness={0.75} />
+          </mesh>
+        </group>
+      </group>
+    </group>
   );
 }
 
-// ── Waveform visualizer ────────────────────────────────────────────────────
-
-function AudioWave({ active, color = '#3b82f6' }) {
-  const bars = 32;
+// ── Audio waveform ────────────────────────────────────────────────────────────
+function WaveBar({ active, color }) {
   return (
-    <div className="flex items-center justify-center gap-[3px]" style={{ height: 60 }}>
-      {Array.from({ length: bars }).map((_, i) => (
+    <div className="flex items-end justify-center gap-[2px]" style={{ height: 28 }}>
+      {Array.from({ length: 18 }).map((_, i) => (
         <motion.div
           key={i}
-          style={{ width: 4, borderRadius: 4, background: color }}
-          animate={active ? {
-            height: [8, Math.random() * 45 + 10, 8],
-            opacity: [0.6, 1, 0.6],
-          } : { height: 4, opacity: 0.2 }}
-          transition={active ? {
-            duration: 0.5 + (i % 4) * 0.1,
-            repeat: Infinity,
-            repeatType: 'mirror',
-            delay: (i % 8) * 0.04,
-            ease: 'easeInOut',
-          } : { duration: 0.3 }}
+          style={{ width: 3, borderRadius: 3, background: color, originY: 1 }}
+          animate={active
+            ? { scaleY: [0.15, 0.5 + (i % 5) * 0.18, 0.15], opacity: [0.5, 1, 0.5] }
+            : { scaleY: 0.12, opacity: 0.2 }}
+          transition={active
+            ? { duration: 0.38 + (i % 5) * 0.08, repeat: Infinity, repeatType: 'mirror', delay: i * 0.025, ease: 'easeInOut' }
+            : { duration: 0.3 }}
         />
       ))}
     </div>
   );
 }
 
-// ── Mic pulse indicator ────────────────────────────────────────────────────
-
-function MicPulse({ active }) {
-  return (
-    <div className="relative flex items-center justify-center w-16 h-16">
-      {active && (
-        <>
-          <motion.div
-            className="absolute inset-0 rounded-full bg-primary/20"
-            animate={{ scale: [1, 1.8, 1], opacity: [0.5, 0, 0.5] }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'easeOut' }}
-          />
-          <motion.div
-            className="absolute inset-0 rounded-full bg-primary/10"
-            animate={{ scale: [1, 2.5, 1], opacity: [0.3, 0, 0.3] }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'easeOut', delay: 0.4 }}
-          />
-        </>
-      )}
-      <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 ${
-        active
-          ? 'bg-primary shadow-xl shadow-primary/30'
-          : 'bg-gray-100 border border-gray-200'
-      }`}>
-        {active ? (
-          <Mic className="h-7 w-7 text-white" />
-        ) : (
-          <MicOff className="h-7 w-7 text-gray-400" />
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Status badge ───────────────────────────────────────────────────────────
-
-const STATUS_CONFIG = {
-  connecting: { label: 'Connecting to Sage...', color: 'text-amber-600', dot: 'bg-amber-500', bg: 'bg-amber-50' },
-  ready:      { label: 'Initializing Audio...',   color: 'text-blue-600',  dot: 'bg-blue-500', bg: 'bg-blue-50' },
-  teaching:   { label: 'Sage is explaining', color: 'text-primary-700', dot: 'bg-primary-500', bg: 'bg-primary-50' },
-  listening:  { label: 'Listening to you', color: 'text-emerald-600', dot: 'bg-emerald-500', bg: 'bg-emerald-50' },
-  thinking:   { label: 'Sage is thinking...', color: 'text-indigo-600', dot: 'bg-indigo-500', bg: 'bg-indigo-50' },
-  error:      { label: 'Connection Lost', color: 'text-red-600', dot: 'bg-red-500', bg: 'bg-red-50' },
+const STATE_LABELS = {
+  connecting: { text: 'Connecting to Sage...', color: '#FCD34D' },
+  ready:      { text: 'Initialising...',        color: '#93C5FD' },
+  teaching:   { text: 'Sage is explaining',     color: '#6EE7B7' },
+  listening:  { text: 'Listening to you',       color: '#C4B5FD' },
+  thinking:   { text: 'Sage is thinking...',    color: '#93C5FD' },
+  error:      { text: 'Connection lost',        color: '#FCA5A5' },
 };
 
-function StatusBadge({ state }) {
-  const cfg = STATUS_CONFIG[state] || STATUS_CONFIG.connecting;
-  return (
-    <div className={`flex items-center gap-2.5 px-4 py-2 rounded-full ${cfg.bg} border border-current/10 transition-all duration-500`}>
-      <span className={`w-2.5 h-2.5 rounded-full ${cfg.dot} animate-pulse shadow-sm`} />
-      <span className={`text-[10px] font-black uppercase tracking-[0.15em] ${cfg.color}`}>{cfg.label}</span>
-    </div>
-  );
-}
-
-// ── Dialogue Transcript display ──────────────────────────────────────────────
-
-function DialogueDisplay({ transcript, userTranscript, isSpeaking, isListening }) {
-  const bottomRef = useRef(null);
-  
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [transcript, userTranscript]);
-
-  if (!transcript && !userTranscript) {
-    return (
-      <div className="h-32 flex flex-col items-center justify-center text-gray-300 gap-3 italic">
-        <Sparkles className="h-5 w-5 opacity-20" />
-        <p className="text-xs">Your live teaching session will appear here</p>
-      </div>
-    );
+// ── WebGL error boundary ──────────────────────────────────────────────────────
+class WebGLErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { crashed: false }; }
+  static getDerivedStateFromError() { return { crashed: true }; }
+  componentDidCatch(err) { console.warn('[3D Classroom] WebGL error:', err?.message); }
+  render() {
+    if (this.state.crashed) {
+      return (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#2A1E0E]">
+          <p className="text-amber-100/40 text-sm">3D scene unavailable — reload to try again</p>
+        </div>
+      );
+    }
+    return this.props.children;
   }
-
-  return (
-    <div className="h-48 overflow-y-auto px-1 space-y-4 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent">
-      {/* User portion (if active) */}
-      {userTranscript && (
-        <div className="flex justify-end">
-          <div className="bg-primary/5 border border-primary/10 rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-[85%] shadow-sm">
-             <div className="flex items-center gap-2 mb-1">
-               <span className="text-[10px] font-black text-primary/60 uppercase tracking-widest">You</span>
-             </div>
-             <p className="text-gray-700 text-sm font-medium leading-relaxed">{userTranscript}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Sage portion */}
-      {transcript && (
-        <div className="flex justify-start">
-          <div className="bg-white border border-gray-100 rounded-2xl rounded-tl-sm px-4 py-2.5 max-w-[85%] shadow-sm">
-             <div className="flex items-center gap-2 mb-1">
-               <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sage</span>
-             </div>
-             <p className="text-gray-800 text-sm font-medium leading-relaxed">
-               {transcript}
-               {isSpeaking && (
-                 <motion.span
-                   animate={{ opacity: [1, 0] }}
-                   transition={{ duration: 0.6, repeat: Infinity, repeatType: 'reverse' }}
-                   className="inline-block w-[2px] h-4 bg-primary/40 ml-1 align-middle rounded"
-                 />
-               )}
-             </p>
-          </div>
-        </div>
-      )}
-      <div ref={bottomRef} />
-    </div>
-  );
 }
 
-// ── Main GeminiLiveTeacher component ──────────────────────────────────────
-
+// ── Main component ────────────────────────────────────────────────────────────
 export default function GeminiLiveTeacher({
-  isOpen,
-  onClose,
-  moduleTitle = '',
-  moduleTopic = '',
-  content = '',
-  teachingLevel = 'intermediate',
-  userName = '',
-  contextLabel = '',
-  documentId = null,
-  moduleId = null,
+  isOpen, onClose,
+  moduleTitle = '', moduleTopic = '', content = '',
+  teachingLevel = 'intermediate', userName = '',
+  contextLabel = '', documentId = null, moduleId = null,
 }) {
   const [interruptInput, setInterruptInput] = useState('');
   const [showInterrupt, setShowInterrupt] = useState(false);
@@ -320,337 +665,247 @@ export default function GeminiLiveTeacher({
   const [isLightningRound, setIsLightningRound] = useState(false);
   const inputRef = useRef(null);
 
-  // Optimistic handler — fires immediately when Live API announces a tool call.
-  // Shows a loading state in the tool panel before the hybrid executor finishes.
-  const onToolCall = useCallback((call) => {
-    const calls = call?.functionCalls;
-    if (!calls?.length) return;
-    const fc = calls[0];
+  // ── Tool cache (localStorage) ────────────────────────────────────────────
+  const TOOL_CACHE_KEY = 'sage_tool_result_cache';
+  const getToolCache = () => {
+    try { return JSON.parse(localStorage.getItem(TOOL_CACHE_KEY) || '{}'); } catch { return {}; }
+  };
+  const setToolCache = (key, data) => {
+    try {
+      const c = getToolCache(); c[key] = { ...data, ts: Date.now() };
+      localStorage.setItem(TOOL_CACHE_KEY, JSON.stringify(c));
+    } catch { /* quota */ }
+  };
 
-    if (fc.name === 'render_diagram') {
-      setToolData({ type: 'diagram', loading: true, title: fc.args.title || 'Building diagram...' });
-    } else if (fc.name === 'generate_illustration') {
+  const onToolCall = useCallback((call) => {
+    const fc = call?.functionCalls?.[0];
+    if (!fc) return;
+    const cache = getToolCache();
+    const cacheKey = fc.name === 'render_diagram' ? fc.args.title
+      : fc.name === 'generate_illustration' ? (fc.args.prompt || fc.args.description) : null;
+    if (cacheKey && cache[cacheKey] && Date.now() - cache[cacheKey].ts < 86_400_000) {
+      setToolData(cache[cacheKey].data); return;
+    }
+    if (fc.name === 'render_diagram')
+      setToolData({ type: 'diagram', loading: true, title: fc.args.title || '' });
+    else if (fc.name === 'generate_illustration')
       setToolData({ type: 'illustration', loading: true, prompt: fc.args.prompt || fc.args.description });
-    } else if (fc.name === 'search_external_knowledge') {
+    else if (fc.name === 'search_external_knowledge')
       setToolData({ type: 'research', loading: true, query: fc.args.query });
-    } else if (fc.name === 'start_lightning_round') {
-      setIsLightningRound(true);
-      setLightningQuestions([]);
-      setToolData({ type: 'lightning', loading: true, topic: fc.args.topic });
+    else if (fc.name === 'start_lightning_round') {
+      setIsLightningRound(true); setLightningQuestions([]); setToolData({ type: 'lightning', loading: true });
     }
   }, []);
 
-  // Real result handler — fires after the backend hybrid model finishes.
-  // Replaces loading states with actual content.
   const onToolResult = useCallback(async ({ name, result }) => {
-    if (result?.error) {
-      setToolData(null);
-      return;
-    }
-
+    if (result?.error) { setToolData(null); return; }
+    let newData = null;
     if (name === 'render_diagram') {
-      setToolData({ type: 'diagram', loading: false, code: result.mermaidCode, title: result.title });
-    }
-
-    else if (name === 'generate_illustration') {
-      // Fetch the generated image URL via the existing service
+      newData = { type: 'diagram', loading: false, code: result.mermaidCode, title: result.title };
+      setToolData(newData);
+      if (result.title) setToolCache(result.title, { data: newData });
+    } else if (name === 'generate_illustration') {
       try {
-        const imageUrl = await getGeneratedDiagramImageUrl(result.diagramId);
-        setToolData({ type: 'illustration', loading: false, prompt: result.prompt, url: imageUrl });
+        const url = await getGeneratedDiagramImageUrl(result.diagramId);
+        newData = { type: 'illustration', loading: false, prompt: result.prompt, url };
+        setToolData(newData);
+        if (result.prompt) setToolCache(result.prompt, { data: newData });
       } catch {
         setToolData({ type: 'illustration', loading: false, prompt: result.prompt, url: null });
       }
-    }
-
-    else if (name === 'search_external_knowledge') {
-      setToolData({
-        type: 'research',
-        loading: false,
-        query: result.query || toolData?.query || '',
-        results: result.sources || [],
-        summary: result.summary || '',
-      });
-    }
-
-    else if (name === 'start_lightning_round') {
+    } else if (name === 'search_external_knowledge') {
+      setToolData({ type: 'research', loading: false, query: result.query || '', summary: result.summary || '' });
+    } else if (name === 'start_lightning_round') {
       setLightningQuestions(result.questions || []);
-      setToolData({ type: 'lightning', loading: false, topic: result.topic, questions: result.questions });
-      // Auto-clear lightning mode after 90s
+      setToolData(null);
       setTimeout(() => { setIsLightningRound(false); setLightningQuestions([]); }, 90_000);
     }
-  }, [toolData]);
+  }, []);
 
   const {
-    state,
-    isActive,
-    isConnecting,
-    isSpeaking,
-    isListening,
-    transcript,
-    userTranscript,
-    error,
-    start,
-    stop,
-    sendTextInterruption,
+    state, isActive, isConnecting, isSpeaking, isListening,
+    transcript, userTranscript, error, start, stop, sendTextInterruption,
   } = useGeminiLive({
     moduleTitle, moduleTopic, content, teachingLevel, userName,
-    moduleId, documentId,
-    onToolCall,
-    onToolResult,
+    moduleId, documentId, onToolCall, onToolResult,
   });
 
-  // Auto-start when opened
   useEffect(() => {
-    if (isOpen && state === 'idle') {
-      start();
-    }
-    // Cleanup on close
-    if (!isOpen && isActive) {
-      stop();
-    }
+    if (isOpen && state === 'idle') start();
+    if (!isOpen && isActive) stop();
   }, [isOpen]);
 
-  // Focus interrupt input when shown
   useEffect(() => {
-    if (showInterrupt) {
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
+    if (showInterrupt) setTimeout(() => inputRef.current?.focus(), 100);
   }, [showInterrupt]);
 
-  const handleClose = () => {
-    stop();
-    onClose();
+  const handleClose = () => { stop(); onClose(); };
+  const handleSend = () => {
+    const t = interruptInput.trim(); if (!t) return;
+    sendTextInterruption(t); setInterruptInput(''); setShowInterrupt(false);
   };
 
-  const handleSendInterrupt = () => {
-    const text = interruptInput.trim();
-    if (!text) return;
-    sendTextInterruption(text);
-    setInterruptInput('');
-    setShowInterrupt(false);
-  };
+  const stateLabel = STATE_LABELS[state] || STATE_LABELS.connecting;
 
   return (
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.3 }}
-          className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-          style={{ backdropFilter: 'blur(32px)', backgroundColor: 'rgba(255, 255, 255, 0.7)' }}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          transition={{ duration: 0.5 }}
+          className="fixed inset-0 z-[200] flex flex-col"
+          style={{ fontFamily: "'Outfit', sans-serif" }}
         >
-          {/* Main card - Sleek White Design */}
-          <motion.div
-            initial={{ scale: 0.95, y: 30, opacity: 0 }}
-            animate={{ scale: 1, y: 0, opacity: 1 }}
-            exit={{ scale: 0.95, y: 30, opacity: 0 }}
-            transition={{ type: 'spring', damping: 26, stiffness: 220 }}
-            className="relative w-full max-w-lg rounded-[2.5rem] overflow-hidden bg-white shadow-2xl border border-gray-100"
-            style={{
-              boxShadow: '0 32px 120px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.02)',
-              fontFamily: "'Outfit', sans-serif"
-            }}
-          >
-            {/* Header / Top bar */}
-            <div className="flex items-center justify-between px-8 pt-8 pb-4">
-              <div className="flex items-center gap-3.5">
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-primary/10 shadow-sm">
-                  <Brain className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h2 className="text-gray-900 font-black text-lg leading-none tracking-tight">Sage Live</h2>
-                  <p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1.5">Personal AI Tutor</p>
-                </div>
-              </div>
-              <button
-                onClick={handleClose}
-                className="w-10 h-10 rounded-2xl flex items-center justify-center hover:bg-gray-50 text-gray-400 hover:text-gray-600 transition-all border border-transparent hover:border-gray-100"
+          {/* ── 3D Canvas ──────────────────────────────────────────────── */}
+          <WebGLErrorBoundary>
+            <div className="absolute inset-0">
+              <Canvas
+                shadows={{ type: THREE.PCFShadowMap }}
+                gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 0.9, powerPreference: 'high-performance' }}
+                dpr={Math.min(window.devicePixelRatio, 1.5)}
               >
-                <X className="h-5 w-5" />
-              </button>
+                <PerspectiveCamera makeDefault fov={54} position={[0, 2.2, 9.0]} />
+                <Suspense fallback={null}>
+                  <SceneLighting />
+                  <ClassroomRoom />
+                  <ClassroomWindows />
+                  <CeilingLights />
+                  <Chalkboard
+                    transcript={transcript}
+                    userTranscript={userTranscript}
+                    toolData={toolData}
+                    isSpeaking={isSpeaking}
+                    isListening={isListening}
+                    lightningQuestions={lightningQuestions}
+                    isLightningRound={isLightningRound}
+                    moduleTitle={moduleTitle}
+                    moduleTopic={moduleTopic}
+                  />
+                  <ProceduralLecturer isSpeaking={isSpeaking} />
+                </Suspense>
+              </Canvas>
             </div>
+          </WebGLErrorBoundary>
 
-            {/* Context label */}
-            {(contextLabel || moduleTitle) && (
-              <div className="px-8 pb-2">
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-50 border border-gray-100">
-                  <GraduationCap className="h-4 w-4 text-primary/60" />
-                  <span className="text-gray-600 text-[11px] font-black truncate max-w-[280px]">
+          {/* ── Top bar ────────────────────────────────────────────────── */}
+          <div className="relative z-10 flex items-center justify-between px-5 py-3 flex-shrink-0">
+            <div className="flex items-center gap-3">
+              {(contextLabel || moduleTitle) && (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/40 border border-white/10 backdrop-blur-sm">
+                  <span className="text-xs font-bold truncate max-w-[180px] text-amber-100/70">
                     {contextLabel || moduleTitle}
                   </span>
                 </div>
+              )}
+              <motion.div
+                key={state} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/40 border border-white/10 backdrop-blur-sm"
+              >
+                <motion.span
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ background: stateLabel.color }}
+                  animate={{ opacity: [1, 0.3, 1] }}
+                  transition={{ duration: 1.5, repeat: Infinity }}
+                />
+                <span className="text-[10px] font-black uppercase tracking-[0.15em]" style={{ color: stateLabel.color }}>
+                  {stateLabel.text}
+                </span>
+              </motion.div>
+            </div>
+            <button
+              onClick={handleClose}
+              className="w-9 h-9 rounded-full flex items-center justify-center bg-black/40 border border-white/10 backdrop-blur-sm hover:bg-red-900/50 hover:border-red-500/30 text-white/60 hover:text-red-300 transition-all"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="flex-1 pointer-events-none" />
+
+          {/* ── Bottom control bar ─────────────────────────────────────── */}
+          <div className="relative z-10 mx-4 mb-4 rounded-2xl overflow-hidden flex-shrink-0"
+            style={{ background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(14px)' }}
+          >
+            {state === 'error' && error && (
+              <div className="px-5 py-3 flex items-center gap-3 border-b border-red-500/20 bg-red-900/20">
+                <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
+                <p className="text-red-300 text-xs font-medium">{error}</p>
               </div>
             )}
 
-            {/* Central visualizer area */}
-            <div className="flex flex-col items-center justify-center px-8 py-10 gap-8 relative">
-              {isLightningRound && (
-                <motion.div 
-                  initial={{ opacity: 0, y: -20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="absolute top-0 flex items-center gap-2 bg-amber-500 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-tighter shadow-lg z-10"
+            <AnimatePresence>
+              {showInterrupt && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }} className="overflow-hidden border-b border-white/10"
                 >
-                  <Zap className="h-3 w-3 fill-current" />
-                  Lightning Round!
+                  <div className="flex items-center gap-3 px-5 py-3">
+                    <MessageSquare className="h-4 w-4 text-white/30 flex-shrink-0" />
+                    <input
+                      ref={inputRef}
+                      value={interruptInput}
+                      onChange={e => setInterruptInput(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleSend()}
+                      placeholder="Ask Sage a question..."
+                      className="flex-1 bg-transparent text-white/80 placeholder:text-white/20 text-sm outline-none"
+                    />
+                    <button
+                      onClick={handleSend} disabled={!interruptInput.trim()}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center bg-primary/80 text-white disabled:opacity-30 active:scale-95 transition-all"
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </motion.div>
-              )}
-
-              {/* Waveform visualizer */}
-              <div className="w-full relative py-2">
-                 {/* Ambient decorative circle */}
-                <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
-                   <div className="w-48 h-48 rounded-full border-4 border-primary animate-pulse" />
-                </div>
-                <AudioWave active={isSpeaking} color={isSpeaking ? (isLightningRound ? '#f59e0b' : '#3b82f6') : '#e2e8f0'} />
-              </div>
-
-              {/* Status Indicator */}
-              <StatusBadge state={state} />
-
-              {/* Interaction visualizer */}
-              <div className="flex flex-col items-center gap-4">
-                 <MicPulse active={isListening} />
-                 
-                 <p className="text-gray-400 text-[11px] text-center font-bold max-w-[240px] leading-relaxed uppercase tracking-wider">
-                  {isConnecting
-                    ? 'Connecting to secure channel...'
-                    : isSpeaking
-                      ? (isLightningRound ? 'Sage is firing questions!' : 'Sage is explaining — Speak anytime to interrupt')
-                      : isListening
-                        ? 'Mic active — Ask a question or say "continue"'
-                        : 'Calibrating AI voice...'}
-                </p>
-              </div>
-            </div>
-
-            {/* Multimodal Tool Display (Diagrams, Illustrations, Research) */}
-            <AnimatePresence mode="wait">
-              {toolData?.type === 'diagram' && (
-                <div key="diagram" className="px-8 flex justify-center w-full">
-                  <DiagramDisplay code={toolData.code} title={toolData.title} />
-                </div>
-              )}
-              {toolData?.type === 'illustration' && (
-                <div key="illustration" className="px-8 flex justify-center w-full">
-                  <IllustrationDisplay prompt={toolData.prompt} url={toolData.url} loading={toolData.loading} />
-                </div>
-              )}
-              {toolData?.type === 'research' && (
-                <div key="research" className="px-8 flex justify-center w-full">
-                  <KnowledgeCard
-                    query={toolData.query}
-                    results={toolData.results}
-                    summary={toolData.summary}
-                    loading={toolData.loading}
-                  />
-                </div>
-              )}
-              {toolData?.type === 'lightning' && (
-                <div key="lightning" className="px-8 w-full">
-                  <LightningRound
-                    topic={toolData.topic}
-                    questions={toolData.questions}
-                    loading={toolData.loading}
-                  />
-                </div>
               )}
             </AnimatePresence>
 
-            {/* Transcript Area */}
-            <div className="px-8 pb-4">
-              <div className="bg-gray-50/50 rounded-3xl p-5 border border-gray-100/50">
-                <DialogueDisplay 
-                  transcript={transcript} 
-                  userTranscript={userTranscript} 
-                  isSpeaking={isSpeaking} 
-                  isListening={isListening} 
-                />
-              </div>
-            </div>
-
-            {/* Error Message */}
-            {state === 'error' && error && (
-              <div className="mx-8 mb-4 p-4 rounded-2xl flex items-center gap-4 bg-red-50 border border-red-100">
-                <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
-                  <AlertCircle className="h-5 w-5 text-red-600" />
+            <div className="flex items-center gap-3 px-5 py-4">
+              <div className="relative flex-shrink-0">
+                <div className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${isListening ? 'bg-primary shadow-lg shadow-primary/40' : 'bg-white/10'}`}>
+                  {isListening ? <Mic className="h-5 w-5 text-white" /> : <MicOff className="h-5 w-5 text-white/40" />}
                 </div>
-                <div>
-                  <p className="text-red-900 text-xs font-black uppercase tracking-widest mb-0.5">Connection Problem</p>
-                  <p className="text-red-600 text-xs font-medium">{error}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Bottom actions row */}
-            <div className="px-8 pb-10 space-y-4">
-              {/* Text interruption drawer */}
-              <AnimatePresence>
-                {showInterrupt && (
+                {isListening && (
                   <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="flex items-center gap-3 p-2.5 rounded-2xl mb-4 bg-gray-50 border border-gray-100 shadow-inner focus-within:border-primary/30 transition-all">
-                      <MessageSquare className="h-4 w-4 text-gray-400 ml-2" />
-                      <input
-                        ref={inputRef}
-                        value={interruptInput}
-                        onChange={e => setInterruptInput(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && handleSendInterrupt()}
-                        placeholder="Type a question or comment..."
-                        className="flex-1 bg-transparent text-gray-700 text-sm placeholder:text-gray-300 outline-none font-medium"
-                      />
-                      <button
-                        onClick={handleSendInterrupt}
-                        disabled={!interruptInput.trim()}
-                        className="w-10 h-10 rounded-xl flex items-center justify-center bg-primary text-white shadow-lg shadow-primary/20 disabled:opacity-30 active:scale-95 transition-all"
-                      >
-                        <Send className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </motion.div>
+                    className="absolute inset-0 rounded-full border-2 border-primary"
+                    animate={{ scale: [1, 1.7], opacity: [0.6, 0] }}
+                    transition={{ duration: 1.2, repeat: Infinity, ease: 'easeOut' }}
+                  />
                 )}
-              </AnimatePresence>
-
-              {/* Main action buttons */}
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setShowInterrupt(v => !v)}
-                  disabled={!isActive || isConnecting}
-                  className={`flex-1 flex items-center justify-center gap-3 py-4 rounded-3xl text-[11px] font-black uppercase tracking-widest transition-all active:scale-[0.98] disabled:opacity-40 border ${
-                    showInterrupt 
-                      ? 'bg-primary/5 border-primary text-primary' 
-                      : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50 shadow-sm'
-                  }`}
-                >
-                  {isConnecting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <MessageSquare className="h-4 w-4" />
-                  )}
-                  {isConnecting ? 'Syncing...' : (showInterrupt ? 'Hide Input' : 'Type Question')}
-                </button>
-
-                <button
-                  onClick={handleClose}
-                  className="flex-1 flex items-center justify-center gap-3 py-4 rounded-3xl text-[11px] font-black uppercase tracking-widest bg-red-50 border border-red-100 text-red-600 hover:bg-red-100 active:scale-[0.98] transition-all"
-                >
-                  <X className="h-4 w-4" />
-                  End Session
-                </button>
               </div>
 
-              {/* Informational tip */}
-              <p className="text-center text-gray-300 text-[10px] font-bold uppercase tracking-[0.1em] flex items-center justify-center gap-2">
-                <Sparkles className="h-3 w-3" />
-                Sage will hear you automatically while the mic is active
+              <div className="flex-1">
+                <WaveBar active={isSpeaking} color={isSpeaking ? (isLightningRound ? '#FCD34D' : '#6EE7B7') : '#FFFFFF'} />
+              </div>
+
+              <p className="hidden sm:block text-xs text-white/30 font-medium w-44 text-center">
+                {isConnecting ? 'Connecting...'
+                  : isSpeaking ? 'Speak to interrupt'
+                    : isListening ? 'Mic active — ask anything'
+                      : 'Calibrating...'}
               </p>
+
+              <button
+                onClick={() => setShowInterrupt(v => !v)}
+                disabled={!isActive || isConnecting}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-30 ${showInterrupt
+                  ? 'bg-primary/20 text-primary border border-primary/30'
+                  : 'bg-white/10 text-white/60 hover:bg-white/15 border border-white/10'
+                }`}
+              >
+                {isConnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageSquare className="h-3.5 w-3.5" />}
+                <span className="hidden sm:inline">{showInterrupt ? 'Hide' : 'Ask'}</span>
+              </button>
+
+              <button
+                onClick={handleClose}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-red-900/40 text-red-400 border border-red-500/20 hover:bg-red-900/60 transition-all"
+              >
+                <X className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Leave</span>
+              </button>
             </div>
-          </motion.div>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

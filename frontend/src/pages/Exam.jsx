@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Timer, AlertTriangle, CheckCircle, XCircle, Trophy, ArrowRight, ArrowLeft,
   GraduationCap, Plus, Brain, Sparkles, BookOpen, HelpCircle, ClipboardList,
-  Upload, FileText, Trash2, ChevronDown, ChevronUp, X,
+  Upload, FileText, Trash2, ChevronDown, ChevronUp, X, Dna, Zap, LineChart,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
@@ -717,7 +717,16 @@ export default function Exam() {
               <XCircle className="h-10 w-10 text-red-500" />
             </div>
             <h2 className="text-2xl font-black text-gray-900 tracking-tight mb-3">Generation Failed</h2>
-            <p className="text-sm text-gray-500 font-medium leading-relaxed mb-8">{prepSession?.errorMessage || 'The AI encountered an obstacle while building your prep material.'}</p>
+            <p className="text-sm text-gray-500 font-medium leading-relaxed mb-8">{
+              (() => {
+                const msg = prepSession?.errorMessage || '';
+                if (msg.includes('503') || msg.includes('high demand') || msg.includes('Service Unavailable') || msg.includes('overload'))
+                  return 'The AI is experiencing high demand right now. Please wait a moment and retry.';
+                if (msg.includes('429') || msg.includes('rate') || msg.includes('quota'))
+                  return "You've hit the AI rate limit. Please wait a minute before retrying.";
+                return msg || 'The AI encountered an obstacle while building your prep material.';
+              })()
+            }</p>
             <button
               onClick={() => setPhase('configure')}
               className="w-full px-8 py-4 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-primary/90 shadow-xl shadow-primary/20 active:scale-95"

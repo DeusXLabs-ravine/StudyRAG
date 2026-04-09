@@ -1,9 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
-import { BookOpen, FileText, MessageCircle, ClipboardCheck, Layers, Home, Menu, X, BarChart3, Settings, LogOut, User, ChevronRight, FlaskConical } from 'lucide-react';
+import { BookOpen, FileText, MessageCircle, ClipboardCheck, Layers, Home, Menu, X, BarChart3, Settings, LogOut, User, ChevronRight, FlaskConical, Lock } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Logo from '../common/Logo';
 import useAuthStore from '../../store/authStore';
+import { useSubscription } from '../../hooks/useSubscription';
 
 const icons = { Home, FileText, BookOpen, MessageCircle, ClipboardCheck, Layers, BarChart3, Settings, FlaskConical };
 
@@ -50,6 +51,8 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const { profile, user, signOut } = useAuthStore();
+  const { isPro } = useSubscription();
+  const PREMIUM_PATHS = ['/simulations'];
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -81,17 +84,23 @@ export default function Navbar() {
             {navItems.map(item => {
               const Icon = icons[item.icon];
               const isActive = location.pathname === item.path;
+              const isLocked = PREMIUM_PATHS.includes(item.path) && !isPro;
               return (
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive
+                  className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive
                     ? 'bg-primary-50 text-sky-700'
-                    : 'text-gray-600 hover:text-sky-600 hover:bg-sky-50'
+                    : isLocked
+                      ? 'text-gray-400 hover:text-gray-500 hover:bg-gray-50'
+                      : 'text-gray-600 hover:text-sky-600 hover:bg-sky-50'
                     }`}
                 >
                   <Icon className="h-4 w-4" />
                   {item.label}
+                  {isLocked && (
+                    <Lock className="h-2.5 w-2.5 text-amber-400 absolute -top-0.5 -right-0.5" />
+                  )}
                 </Link>
               );
             })}

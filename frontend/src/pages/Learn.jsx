@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { BookOpen, CheckCircle, Lock, ChevronRight, Calculator, FlaskConical, Cpu, Atom, Globe, Lightbulb, Sparkles, Send, Volume2, Loader2, MessageSquareText, X, Menu, PanelLeftClose, PanelLeftOpen, Maximize2, Minimize2, Image as ImageIcon, GraduationCap, Mic, ArrowUp, ListTodo, FolderOpen, RotateCcw } from 'lucide-react';
+import { BookOpen, CheckCircle, Lock, ChevronRight, Calculator, FlaskConical, Cpu, Atom, Globe, Lightbulb, Sparkles, Send, Volume2, Loader2, MessageSquareText, X, Menu, PanelLeftClose, PanelLeftOpen, Maximize2, Minimize2, Image as ImageIcon, GraduationCap, Mic, ArrowUp, ListTodo, FolderOpen, RotateCcw, Radio } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import useModuleStore from '../store/moduleStore';
 import useDocumentStore from '../store/documentStore';
@@ -8,6 +8,8 @@ import useSettingsStore from '../store/settingsStore';
 import useTutorStore from '../store/tutorStore';
 import useCourseStore from '../store/courseStore';
 import useGameStore from '../store/gameStore';
+import { useSubscription } from '../hooks/useSubscription';
+import UpgradeModal from '../components/paywall/UpgradeModal';
 import useVoiceInput from '../hooks/useVoiceInput';
 import { MorphingSquare } from '../components/ui/morphing-square';
 import { AILoader } from '../components/ui/ai-loader';
@@ -24,12 +26,14 @@ import { getTutorGreeting, sendTutorMessage } from '../services/moduleService';
 import { prefetchAllChunks } from '../services/ttsService';
 import { listDiagrams, getModuleDiagrams, generateDiagramForTopic } from '../services/diagramService';
 import { getModuleMedicalResources } from '../services/medicalResourceService';
+import api from '../services/api';
 import { getAestheticPhoto } from '../utils/imageHelpers';
 import { recordLearningInteraction } from '../services/analyticsService';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import GeminiLiveTeacher from '../components/teach/GeminiLiveTeacher';
+import PodcastPlayer from '../components/learn/PodcastPlayer';
 
 // Stable reference to avoid Zustand infinite re-render loop
 const EMPTY_MESSAGES = [];
@@ -53,6 +57,9 @@ export default function Learn() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isTutorMaximized, setIsTutorMaximized] = useState(false);
   const [isTeachOpen, setIsTeachOpen] = useState(false);
+  const [isPodcastOpen, setIsPodcastOpen] = useState(false);
+  const [upgradeModal, setUpgradeModal] = useState(null); // 'teach' | 'games' | 'podcast'
+  const { canTeach, canGame, canPodcast } = useSubscription();
   const [moduleStartTime, setModuleStartTime] = useState(null);
 
   // Set start time when a module is selected
@@ -72,6 +79,8 @@ export default function Learn() {
   const [generatedDiagrams, setGeneratedDiagrams] = useState([]);
   const [generatingDiagram, setGeneratingDiagram] = useState(false);
   const [medicalResources, setMedicalResources] = useState([]);
+  const [sectionPodcasts, setSectionPodcasts] = useState([]);
+  const [activeSectionPodcast, setActiveSectionPodcast] = useState(null); // { sectionIndex, heading, audioUrl, transcript }
 
   // Sage Tutor State (persisted in Zustand store across navigations)
   const { getConversation, setGreeting, addMessage, tutorInput, setTutorInput, tutorLoading, setTutorLoading } = useTutorStore();
@@ -90,17 +99,25 @@ export default function Learn() {
 
   useEffect(() => {
     if (viewMode === 'course' && selectedCourseId) {
+      setCurrentModule(null); // clear stale module from previous doc/course
       if (fetchCourseModules) fetchCourseModules(selectedCourseId);
       setDiagrams([]);
+      setSectionPodcasts([]);
     } else if (selectedDocId) {
+      setCurrentModule(null); // clear immediately so board doesn't show old doc's content
       fetchModules(selectedDocId);
       listDiagrams(selectedDocId).then(setDiagrams).catch(() => setDiagrams([]));
+      // Fetch section podcasts for this document
+      api.get(`/podcast/sections/${selectedDocId}`)
+        .then(r => setSectionPodcasts(r.data || []))
+        .catch(() => setSectionPodcasts([]));
     } else {
       setDiagrams([]);
+      setSectionPodcasts([]);
       stopPolling();
     }
     return () => stopPolling();
-  }, [selectedDocId, selectedCourseId, viewMode, fetchModules, fetchCourseModules, stopPolling]);
+  }, [selectedDocId, selectedCourseId, viewMode, fetchModules, fetchCourseModules, stopPolling, setCurrentModule]);
 
   // Fetch generated diagrams and medical resources when module changes
   useEffect(() => {
@@ -117,23 +134,22 @@ export default function Learn() {
     }
   }, [currentModule?.id]);
 
-  // Smart Resume: Auto-select first incomplete module on load
-  const lastSelectedDocRef = useRef(null);
+  // Smart Resume: Auto-select the last opened / first incomplete module
+  // whenever modules load for a newly selected document or course.
   useEffect(() => {
-    if (modules?.length > 0 && (selectedDocId || selectedCourseId)) {
-      const currentRef = selectedDocId || selectedCourseId;
-      if (lastSelectedDocRef.current !== currentRef) {
-        lastSelectedDocRef.current = currentRef;
-        // Only auto-select if no module is currently active for this specific document/course
-        if (!currentModule || (currentModule.documentId !== selectedDocId && currentModule.courseId !== selectedCourseId)) {
-          const firstIncomplete = modules.find(m => !m.progress?.completed) || modules[0];
-          if (firstIncomplete) {
-            setCurrentModule(firstIncomplete);
-          }
-        }
-      }
+    if (!modules?.length) return;
+    // Check if the current module actually belongs to the loaded modules list
+    const moduleInList = currentModule && modules.some(m => m.id === currentModule.id);
+    if (!moduleInList) {
+      // Pick the last accessed (highest progress attempts) or first incomplete
+      const lastAccessed = modules.reduce((best, m) =>
+        (m.progress?.attempts ?? 0) > (best?.progress?.attempts ?? -1) ? m : best
+      , null);
+      const firstIncomplete = modules.find(m => !m.progress?.completed);
+      const pick = lastAccessed?.progress?.attempts > 0 ? lastAccessed : (firstIncomplete || modules[0]);
+      if (pick) setCurrentModule(pick);
     }
-  }, [modules, selectedDocId, selectedCourseId, currentModule, setCurrentModule]);
+  }, [modules]);
 
   // Background prefetch TTS audio chunks when module changes
   useEffect(() => {
@@ -194,6 +210,11 @@ export default function Learn() {
     setShowQuiz(false);
     // Track reading interaction (non-blocking)
     recordLearningInteraction('text_explanation', 'view').catch(() => { });
+  };
+
+  const handleSectionPodcastClick = (sp) => {
+    setActiveSectionPodcast(sp);
+    setIsPodcastOpen(true);
   };
 
   const handleTutorSend = async (messageText) => {
@@ -286,6 +307,7 @@ export default function Learn() {
   // ─── Game Request Handler ─────────────────────────────────
   const handleGameRequest = async (moduleId, gameType) => {
     if (!moduleId) return;
+    if (!canGame) { setUpgradeModal('games'); return; }
     if (tutorLoading) {
       // Don't block game requests — just skip the loading guard
       // Game request while loading, proceeding anyway
@@ -562,10 +584,20 @@ export default function Learn() {
             </div>
           </div>
         ) : (
-          <div className="sleek-card p-20 text-center">
-            <Sparkles className="h-12 w-12 text-primary/30 mx-auto mb-4" />
-            <h3 className="text-lg font-bold text-gray-900">No modules yet</h3>
-            <p className="text-gray-500">We're still processing this document. Check back in a few moments!</p>
+          <div className="sleek-card p-12 md:p-20 flex flex-col items-center justify-center gap-4 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center">
+              <Sparkles className="h-7 w-7 text-amber-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">No study modules generated</h3>
+              <p className="text-gray-500 text-sm max-w-md mx-auto mb-3">
+                This can happen when a document is a <strong>scanned image PDF</strong> with no readable text layer.
+              </p>
+              <p className="text-gray-400 text-xs max-w-sm mx-auto">
+                💡 Try re-uploading as a text-based PDF, or copy-paste the content as a <code className="bg-gray-100 px-1 rounded">.txt</code> file. You can still{' '}
+                <a href="/chat" className="text-primary font-bold hover:underline">chat with the document</a> if it was indexed.
+              </p>
+            </div>
           </div>
         )
       ) : (
@@ -589,6 +621,8 @@ export default function Learn() {
                     getTopicIcon={getTopicIcon}
                     generating={generating}
                     bridgeGeneratingModuleId={bridgeGeneratingModuleId}
+                    sectionPodcasts={sectionPodcasts}
+                    onSectionPodcastClick={handleSectionPodcastClick}
                   />
                 </div>
               </motion.div>
@@ -625,7 +659,6 @@ export default function Learn() {
                   onGenerateDiagram={handleGenerateDiagram}
                   generatingDiagram={generatingDiagram}
                   medicalResources={medicalResources}
-                  onTeach={() => setIsTeachOpen(true)}
                   onStartQuiz={async () => {
                     // Track quiz start as kinesthetic interaction
                     recordLearningInteraction('quiz', 'click').catch(() => { });
@@ -681,13 +714,83 @@ export default function Learn() {
                   onDiagramRequest={handleGenerateDiagram}
                   onGameRequest={handleGameRequest}
                   onGameComplete={handleGameComplete}
-                  onTeach={() => setIsTeachOpen(true)}
+                  onTeach={() => canTeach ? setIsTeachOpen(true) : setUpgradeModal('teach')}
                 />
               </motion.div>
             )}
           </AnimatePresence>
         </div>
       )}
+
+      {/* Upgrade Modal */}
+      {upgradeModal && (
+        <UpgradeModal feature={upgradeModal} onClose={() => setUpgradeModal(null)} />
+      )}
+
+      {/* ── Floating Control Centre — only shown when a module is selected ── */}
+      <AnimatePresence>
+        {currentModule && !showQuiz && (
+          <motion.div
+            initial={{ opacity: 0, y: 24, scale: 0.92 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.95 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="fixed bottom-6 right-6 z-[90] flex flex-col items-end gap-2"
+          >
+            {/* Label */}
+            <p className="text-[9px] font-black tracking-[0.35em] uppercase text-white/30 pr-1">
+              Control Centre
+            </p>
+
+            <div
+              className="flex items-center gap-2 p-2 rounded-2xl"
+              style={{
+                background: 'rgba(10,10,18,0.88)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                backdropFilter: 'blur(20px)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              }}
+            >
+              {/* Podcast button */}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => canPodcast ? setIsPodcastOpen(true) : setUpgradeModal('podcast')}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors"
+                style={{
+                  background: isPodcastOpen ? 'rgba(124,58,237,0.3)' : 'rgba(124,58,237,0.12)',
+                  color: '#c084fc',
+                  border: '1px solid rgba(192,132,252,0.2)',
+                }}
+                title="Listen to a podcast episode about this module"
+              >
+                <Volume2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Podcast</span>
+              </motion.button>
+
+              {/* Divider */}
+              <div className="w-px h-6 bg-white/10" />
+
+              {/* Teach Me button */}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => canTeach ? setIsTeachOpen(true) : setUpgradeModal('teach')}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors"
+                style={{
+                  background: isTeachOpen ? 'rgba(99,102,241,0.3)' : 'rgba(99,102,241,0.12)',
+                  color: '#a5b4fc',
+                  border: '1px solid rgba(165,180,252,0.2)',
+                }}
+                title="Start a live AI teaching session with Sage"
+              >
+                <GraduationCap className="h-4 w-4" />
+                <span className="hidden sm:inline">Teach Me</span>
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Gemini Live Teacher Modal */}
       <GeminiLiveTeacher
@@ -700,6 +803,19 @@ export default function Learn() {
         contextLabel={currentModule ? `Module ${(currentModule.orderIndex ?? 0) + 1}: ${currentModule.title}` : ''}
         documentId={selectedDocId}
         moduleId={currentModule?.id}
+      />
+
+      {/* Study Break Podcast Player */}
+      <PodcastPlayer
+        isOpen={isPodcastOpen}
+        onClose={() => { setIsPodcastOpen(false); setActiveSectionPodcast(null); }}
+        moduleTitle={currentModule?.title || ''}
+        moduleTopic={currentModule?.topic || ''}
+        content={currentModule?.content || ''}
+        documentId={selectedDocId}
+        moduleId={currentModule?.id}
+        teachingLevel={settings.teaching_level || 'intermediate'}
+        activeSectionPodcast={activeSectionPodcast}
       />
 
       {/* Module Selector (Mobile Drawer) */}
@@ -738,6 +854,11 @@ export default function Learn() {
                   getTopicIcon={getTopicIcon}
                   generating={generating}
                   bridgeGeneratingModuleId={bridgeGeneratingModuleId}
+                  sectionPodcasts={sectionPodcasts}
+                  onSectionPodcastClick={(sp) => {
+                    handleSectionPodcastClick(sp);
+                    setIsMobileMenuOpen(false);
+                  }}
                 />
               </div>
             </motion.div>
@@ -787,7 +908,7 @@ export default function Learn() {
                   <div className="flex items-center gap-2">
                     {currentModule && (
                       <button
-                        onClick={() => { setMobileAssistantOpen(false); setIsTeachOpen(true); }}
+                        onClick={() => { setMobileAssistantOpen(false); canTeach ? setIsTeachOpen(true) : setUpgradeModal('teach'); }}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all active:scale-95"
                         style={{
                           background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
@@ -817,7 +938,7 @@ export default function Learn() {
                     onDiagramRequest={handleGenerateDiagram}
                     onGameRequest={handleGameRequest}
                     onGameComplete={handleGameComplete}
-                    onTeach={() => { setMobileAssistantOpen(false); setIsTeachOpen(true); }}
+                    onTeach={() => { setMobileAssistantOpen(false); canTeach ? setIsTeachOpen(true) : setUpgradeModal('teach'); }}
                   />
                 </div>
               </motion.div>
@@ -829,7 +950,7 @@ export default function Learn() {
   );
 }
 
-function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSelect, getTopicIcon, generating, bridgeGeneratingModuleId }) {
+function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSelect, getTopicIcon, generating, bridgeGeneratingModuleId, sectionPodcasts, onSectionPodcastClick }) {
   const moduleCount = (modules || []).length;
   return (
     <div className="flex flex-col gap-4">
@@ -966,6 +1087,40 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
               );
             })}
           </div>
+
+          {/* Section Podcast — injected after last module in this group */}
+          {(() => {
+            const sp = (sectionPodcasts || []).find(p => p.section_index === idx);
+            if (!sp) return null;
+            const isReady = sp.status === 'ready';
+            const isGenerating = sp.status === 'generating';
+            return (
+              <button
+                key={`sp-${idx}`}
+                onClick={() => isReady && onSectionPodcastClick(sp)}
+                disabled={!isReady}
+                className={`w-full mt-1 flex items-center gap-3 px-3 py-3 rounded-xl text-left text-sm transition-all border ${
+                  isReady
+                    ? 'bg-violet-50 border-violet-200 text-violet-800 hover:bg-violet-100 hover:translate-x-1 cursor-pointer'
+                    : 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                <div className="flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center bg-violet-100">
+                  {isGenerating
+                    ? <Loader2 className="h-3 w-3 text-violet-500 animate-spin" />
+                    : <Radio className="h-3 w-3 text-violet-600" />
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="truncate font-semibold block">Section Podcast</span>
+                  {sp.duration_secs && (
+                    <span className="text-[10px] text-violet-500">{Math.floor(sp.duration_secs / 60)}m {sp.duration_secs % 60}s</span>
+                  )}
+                  {isGenerating && <span className="text-[10px] text-gray-400">Generating...</span>}
+                </div>
+              </button>
+            );
+          })()}
         </div>
       ))}
     </div>

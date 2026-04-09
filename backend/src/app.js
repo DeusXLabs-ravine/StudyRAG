@@ -26,6 +26,8 @@ const gameRoutes = require('./routes/gameRoutes');
 const simulationRoutes = require('./routes/simulationRoutes');
 const webhookRoutes = require('./routes/webhookRoutes');
 const geminiRoutes = require('./routes/geminiRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+const podcastRoutes = require('./routes/podcastRoutes');
 
 const app = express();
 
@@ -58,9 +60,19 @@ app.use(cors({
   credentials: true,
 }));
 
+// Keep TCP connections alive to eliminate per-request TLS/TCP setup overhead
+app.use((_req, res, next) => {
+  res.set('Connection', 'keep-alive');
+  res.set('Keep-Alive', 'timeout=60');
+  next();
+});
+
 app.set('trust proxy', 1);
 
-app.use(express.json({ limit: '200mb' }));
+app.use(express.json({
+  limit: '200mb',
+  verify: (req, _res, buf) => { req.rawBody = buf.toString('utf8'); },
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // ─── Rate Limiting ────────────────────────────────────────────
@@ -94,6 +106,12 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Ultra-lightweight ping for latency measurement — no auth, no processing
+app.get('/api/ping', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ pong: true, t: Date.now() });
+});
+
 app.get('/api/cache-stats', (req, res) => {
   const { requestQueue } = require('./config/gemini');
   res.json({
@@ -115,6 +133,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api', requireAuth);
 
 // ─── Application Routes ───────────────────────────────────────
+// Generation-heavy endpoints get their own rate limiter BEFORE the route handler.
 
 app.use('/api/documents', documentRoutes);
 app.use('/api/modules', moduleRoutes);
@@ -126,31 +145,47 @@ app.use('/api/aptitude', aptitudeRoutes);
 app.use('/api/exam', examRoutes);
 app.use('/api/solver', solverRoutes);
 app.use('/api/tts', ttsRoutes);
+// Generation limiters applied per-router before the handler is registered
+app.use('/api/diagrams/generate', generationLimiter);
 app.use('/api/diagrams', diagramRoutes);
 app.use('/api/courses', courseRoutes);
+app.use('/api/medical/enrich', generationLimiter);
 app.use('/api/medical', medicalResourceRoutes);
+app.use('/api/games/generate', generationLimiter);
 app.use('/api/games', gameRoutes);
+app.use('/api/simulations/generate-params', generationLimiter);
 app.use('/api/simulations', simulationRoutes);
 app.use('/api/gemini', geminiRoutes);
-
-// Strict rate limit for expensive generation endpoints
-app.use('/api/diagrams/generate', generationLimiter);
-app.use('/api/medical/enrich', generationLimiter);
-app.use('/api/games/generate', generationLimiter);
-app.use('/api/simulations/generate-params', generationLimiter);
+app.use('/api/payment', paymentRoutes);
+app.use('/api/podcast/generate', generationLimiter);
+app.use('/api/podcast', podcastRoutes);
 
 // ─── Static & SPA Fallback ───────────────────────────────────
 
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.join(__dirname, '../../frontend/dist');
+
+  // Vite hashes asset filenames — serve with long-lived immutable cache.
+  // Anything under /assets/ is safe to cache for 1 year.
+  app.use('/assets', express.static(path.join(distPath, 'assets'), {
+    maxAge: '1y',
+    immutable: true,
+    etag: false,       // not needed with immutable
+    lastModified: false,
+  }));
+
+  // All other static files (index.html, robots.txt, etc.) — short cache.
   app.use(express.static(distPath, {
-    maxAge: '1d',
+    maxAge: '5m',
     etag: true,
   }));
+
   app.get('/{*path}', (req, res, next) => {
     if (req.path.startsWith('/api') || req.path.startsWith('/webhooks')) {
       return next();
     }
+    // index.html must not be cached aggressively (contains no hash)
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }

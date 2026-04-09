@@ -17,7 +17,19 @@ const supabase = require('../config/database');
 const { allowedFileTypes } = require('../config/env');
 const path = require('path');
 
+const { responseCache } = require('../config/cache');
+const { storeDocumentHash, findDocumentByHash, cloneDocumentArtefacts } = require('../services/sharedResearchCache');
 const STORAGE_BUCKET = 'documents';
+
+/**
+ * Invalidate any cached document list responses for a user.
+ * Called after mutations (upload, delete, register) so the next
+ * GET /api/documents returns fresh data.
+ */
+function invalidateDocListCache(userId) {
+  if (!userId) return;
+  responseCache.invalidatePrefix(`res:${userId}:/api/documents`);
+}
 
 /**
  * Ensure the Supabase Storage bucket exists (lazy, runs once).
@@ -175,6 +187,28 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
   const log = (step, startTime) =>
     console.log(`${prefix} ${step}: ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
 
+  // ── Shared document cache: skip full pipeline if another user already processed this exact doc ──
+  try {
+    const hash = await storeDocumentHash(docId, text);
+    const existing = await findDocumentByHash(hash, docId);
+    if (existing) {
+      console.log(`${prefix} Content hash match → cloning artefacts from ${existing.id.slice(0, 8)}`);
+      const cloned = await cloneDocumentArtefacts(existing.id, docId, userId);
+      if (cloned) {
+        await vectorStore.updateDocumentStatus(docId, {
+          status: 'ready',
+          processedDate: new Date().toISOString(),
+          extractedMetadata: metadata,
+        });
+        console.log(`${prefix} Clone complete (${cloned.moduleCount} modules, ${cloned.questionCount} questions) — skipping full pipeline`);
+        invalidateDocListCache(userId);
+        return;
+      }
+    }
+  } catch (err) {
+    console.warn(`${prefix} Document hash check failed (continuing with full pipeline): ${err.message}`);
+  }
+
   // Phase 1: Critical path — page index + initial modules run in parallel,
   // but document becomes "ready" as soon as the page index succeeds.
   // The page index is all the chat system needs; modules are only for Learn.
@@ -192,6 +226,19 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
     await vectorStore.addPages(docId, pagesWithIds);
     await vectorStore.addPageIndex(docId, tree, pages.length);
     log('Page index + store', t);
+
+    // Background: generate section podcasts from raw page text (fire-and-forget)
+    setImmediate(async () => {
+      try {
+        const { generateSectionPodcasts } = require('../services/sectionPodcastService');
+        const { getUserTeachingLevel } = require('../services/userProfileService');
+        const tl = await getUserTeachingLevel(userId);
+        await generateSectionPodcasts(docId, tree, pages, userId, tl);
+      } catch (err) {
+        console.error(`${prefix} Section podcast generation failed: ${err.message}`);
+      }
+    });
+
     return pages.length;
   })();
 
@@ -204,10 +251,18 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
 
   // Wait for both page index AND initial modules before marking ready.
   // This ensures the user sees modules immediately when redirected to Learn.
+  let moduleGenError = null;
   const [pageCount] = await Promise.all([
     pageIndexPromise,
     modulesPromise.catch(err => {
-      console.error(`${prefix} Initial module generation failed (non-fatal): ${err.message}`);
+      // Distinguish user-facing errors (scanned PDF, empty text) from infra errors
+      const isContentError = err.message?.includes('Unable to generate study modules');
+      if (isContentError) {
+        moduleGenError = err.message;
+        console.warn(`${prefix} Module generation skipped: ${err.message}`);
+      } else {
+        console.error(`${prefix} Initial module generation failed (non-fatal): ${err.message}`);
+      }
     }),
   ]);
 
@@ -216,6 +271,8 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
     processedDate: new Date().toISOString(),
     chunkCount: pageCount,
     extractedMetadata: metadata,
+    // Surface content-extraction errors so the frontend can show a helpful message
+    ...(moduleGenError ? { error: moduleGenError } : {}),
   });
 
   log('READY (modules + chat available)', pipelineStart);
@@ -370,6 +427,7 @@ async function deleteDocument(req, res, next) {
       console.error(`Failed to delete diagrams for ${id}: ${err.message}`)
     );
 
+    invalidateDocListCache(req.user?.id);
     res.json({ message: 'Document deleted successfully' });
   } catch (error) {
     next(error);
@@ -526,6 +584,7 @@ async function registerDocument(req, res, next) {
       userId: req.user?.id || null,
     });
 
+    invalidateDocListCache(req.user?.id);
     res.status(202).json({
       id: docId,
       originalName,

@@ -343,3 +343,73 @@ body.a11y-focus .board-spiral {
   z-index: 99998;
   transition: top 0.05s linear;
 }
+
+/* ─── Extended Accessibility Settings ─────────────────────── */
+
+/* Font scale — applied via CSS variable set on <html> */
+html {
+  font-size: var(--a11y-font-scale, 16px);
+}
+
+/* Line height modes */
+body.a11y-line-relaxed * { line-height: 1.9 !important; }
+body.a11y-line-loose    * { line-height: 2.4 !important; }
+
+/* Word spacing modes */
+body.a11y-word-wide   * { word-spacing: 0.16em !important; }
+body.a11y-word-wider  * { word-spacing: 0.32em !important; }
+
+/* WCAG 2.1 Success Criterion 1.4.12 Text Spacing */
+body.a11y-text-spacing p,
+body.a11y-text-spacing li,
+body.a11y-text-spacing h1,
+body.a11y-text-spacing h2,
+body.a11y-text-spacing h3,
+body.a11y-text-spacing span {
+  line-height: 1.5 !important;
+  letter-spacing: 0.12em !important;
+  word-spacing: 0.16em !important;
+}
+body.a11y-text-spacing p { margin-bottom: 2em !important; }
+
+/* Enhanced focus indicators */
+body.a11y-focus-enhanced *:focus-visible {
+  outline: 3px solid #2563eb !important;
+  outline-offset: 3px !important;
+  border-radius: 4px;
+}
+
+/* Large cursor — uses a CSS cursor override */
+body.a11y-cursor-large  { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath fill='%23000' d='M8 2L8 26L14 20L18 30L21 29L17 19L25 19Z'/%3E%3Cpath fill='%23fff' d='M9 4L9 23L14 17L18.5 28L20 27.5L15.5 17L23 17Z'/%3E%3C/svg%3E") 4 2, auto !important; }
+body.a11y-cursor-xlarge { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath fill='%23000' d='M10 2L10 38L18 28L24 44L28 42L22 26L36 26Z'/%3E%3Cpath fill='%23fff' d='M12 6L12 34L18 24L24.5 40L26.5 39L20 23L32 23Z'/%3E%3C/svg%3E") 6 2, auto !important; }
+
+/* Dark mode — invert trick (works universally, images are re-inverted) */
+body.a11y-dark {
+  filter: invert(1) hue-rotate(180deg);
+}
+body.a11y-dark img,
+body.a11y-dark video,
+body.a11y-dark canvas,
+body.a11y-dark [style*="background-image"] {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Saturation reduction for visual sensitivity */
+body.a11y-desaturate     { filter: saturate(0.4); }
+body.a11y-grayscale      { filter: grayscale(1); }
+
+/* Colour-blind simulation filters (applied to <html> to include scrollbars) */
+/* Protanopia (red-blind) */
+html.a11y-cb-protanopia {
+  filter: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><defs><filter id='p'><feColorMatrix type='matrix' values='0.567 0.433 0 0 0  0.558 0.442 0 0 0  0 0.242 0.758 0 0  0 0 0 1 0'/></filter></defs></svg>#p");
+}
+/* Deuteranopia (green-blind) */
+html.a11y-cb-deuteranopia {
+  filter: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><defs><filter id='d'><feColorMatrix type='matrix' values='0.625 0.375 0 0 0  0.7 0.3 0 0 0  0 0.3 0.7 0 0  0 0 0 1 0'/></filter></defs></svg>#d");
+}
+/* Tritanopia (blue-blind) */
+html.a11y-cb-tritanopia {
+  filter: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><defs><filter id='t'><feColorMatrix type='matrix' values='0.95 0.05 0 0 0  0 0.433 0.567 0 0  0 0.475 0.525 0 0  0 0 0 1 0'/></filter></defs></svg>#t");
+}
+/* Achromatopsia (full colour-blind) */
+html.a11y-cb-achromatopsia { filter: grayscale(1); }

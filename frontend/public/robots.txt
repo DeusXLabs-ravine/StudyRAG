@@ -1,13 +1,14 @@
-# StudyRAG Robots.txt
-# Master Your Knowledge - Optimized for StudyRAG.co
+# StudyRAG robots.txt
+# Public marketing pages are available to search crawlers and AI crawlers.
 
 User-agent: *
 Allow: /
 Allow: /about
 Allow: /features
 Allow: /pricing
+Allow: /llms.txt
 
-# Disallow protected app routes to focus crawl budget on public marketing pages
+# Keep protected and product-internal routes out of the public crawl budget.
 Disallow: /documents
 Disallow: /learn
 Disallow: /chat
@@ -17,6 +18,8 @@ Disallow: /analytics
 Disallow: /exam
 Disallow: /simulations
 Disallow: /settings
+Disallow: /payment
+Disallow: /login
+Disallow: /signup
 
-# Sitemap location
 Sitemap: https://studyrag.co/sitemap.xml

@@ -8,6 +8,8 @@ import { listModules } from '../services/moduleService';
 
 import ProgressBar from '../components/common/ProgressBar';
 import { FileUpload } from '@/components/ui/file-upload';
+import { useSubscription } from '../hooks/useSubscription';
+import UpgradeModal from '../components/paywall/UpgradeModal';
 import { TextLoop } from '@/components/ui/text-loop';
 import { MorphingSquare } from '../components/ui/morphing-square';
 import { AILoader } from '../components/ui/ai-loader';
@@ -74,6 +76,8 @@ export default function Documents() {
   } = useDocumentStore();
 
   const { courses, fetchCourses } = useCourseStore();
+  const { docLimit, docCount, isAtDocLimit } = useSubscription();
+  const [showDocUpgradeModal, setShowDocUpgradeModal] = useState(false);
 
   const [activeTab, setActiveTab] = useState('file');
   const [urlInput, setUrlInput] = useState('');
@@ -141,8 +145,9 @@ export default function Documents() {
   }, [documents, refreshDocument, navigate]);
 
   const handleFilesSelected = useCallback((newFiles) => {
+    if (isAtDocLimit) { setShowDocUpgradeModal(true); return; }
     newFiles.forEach(file => uploadDocument(file).catch(() => { }));
-  }, [uploadDocument]);
+  }, [uploadDocument, isAtDocLimit]);
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this document?')) {
@@ -220,9 +225,34 @@ export default function Documents() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-6 py-8 md:py-12">
+      {showDocUpgradeModal && (
+        <UpgradeModal feature="documents" onClose={() => setShowDocUpgradeModal(false)} />
+      )}
       <div className="mb-8 md:mb-10">
-        <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">Document Library</h1>
-        <p className="text-sm md:text-base text-gray-500 mt-2 font-medium">Manage study materials: upload files, add web links, or type notes.</p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">Document Library</h1>
+            <p className="text-sm md:text-base text-gray-500 mt-2 font-medium">Manage study materials: upload files, add web links, or type notes.</p>
+          </div>
+          {/* Document quota */}
+          <div className="flex flex-col items-end gap-1 min-w-[120px]">
+            <span className="text-xs font-bold text-gray-500">{docCount} / {docLimit} documents</span>
+            <div className="w-32 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${isAtDocLimit ? 'bg-red-400' : docCount / docLimit > 0.75 ? 'bg-amber-400' : 'bg-primary'}`}
+                style={{ width: `${Math.min((docCount / docLimit) * 100, 100)}%` }}
+              />
+            </div>
+            {isAtDocLimit && (
+              <button
+                onClick={() => setShowDocUpgradeModal(true)}
+                className="text-[10px] font-bold text-primary hover:underline"
+              >
+                Upgrade for more
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Tabbed input area */}
@@ -640,7 +670,7 @@ export default function Documents() {
                           </TextLoop>
                         </div>
                       )}
-                      {doc.status === 'failed' && doc.error && (
+                      {doc.error && (
                         <p className="mt-1 text-[9px] font-medium text-red-500 max-w-[200px] text-right">
                           {doc.error}
                         </p>
@@ -659,6 +689,16 @@ export default function Documents() {
                     >
                       <Star className={`h-4 w-4 md:h-5 md:w-5 ${doc.isPrimarySource ? 'fill-amber-500' : ''}`} />
                     </button>
+
+                    {doc.status === 'ready' && (
+                      <button
+                        onClick={() => navigate(`/learn/${doc.id}`)}
+                        className="w-9 h-9 md:w-10 md:h-10 flex items-center justify-center text-primary/50 hover:text-primary hover:bg-primary/10 rounded-xl transition-all"
+                        title="Open in Learn"
+                      >
+                        <BookOpen className="h-4 w-4 md:h-5 md:w-5" />
+                      </button>
+                    )}
 
                     <button
                       onClick={() => handleDelete(doc.id)}

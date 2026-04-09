@@ -123,4 +123,246 @@ function timingSafeCompare(a, b) {
   return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
-module.exports = { handleEmailWebhook };
+/**
+ * Handle Monnify Webhooks
+ */
+async function handleMonnifyWebhook(req, res) {
+  try {
+    const signature = req.headers['monnify-signature'];
+    if (!signature) {
+      console.warn('[Monnify Webhook] Rejected — Missing signature.');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const payload = req.body;
+    const rawBody = req.rawBody || JSON.stringify(payload);
+    const monnifyService = require('../services/monnifyService');
+
+    // Verify signature against raw request body
+    if (!monnifyService.verifyWebhookSignature(rawBody, signature)) {
+      console.warn('[Monnify Webhook] Rejected — Invalid signature.');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Acknowledge receipt
+    res.status(200).json({ received: true });
+
+    const eventType = payload.eventType;
+
+    // ── Successful payment ──────────────────────────────────────────
+    if (eventType === 'SUCCESSFUL_TRANSACTION') {
+      const paymentReference = payload.eventData?.paymentReference;
+      console.log(`[Monnify Webhook] Successful Payment: ${paymentReference}`);
+
+      const { data: transaction, error: txError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('payment_reference', paymentReference)
+        .single();
+
+      if (txError || !transaction) {
+        console.error(`[Monnify Webhook] Transaction not found for ref: ${paymentReference}`);
+        return;
+      }
+
+      if (transaction.status === 'PAID') {
+        console.log(`[Monnify Webhook] Already processed: ${paymentReference}`);
+        return;
+      }
+
+      let newTier = 'free';
+      if (transaction.amount == 5000)  newTier = 'basic';
+      if (transaction.amount == 20000) newTier = 'pro';
+      if (transaction.amount == 30000) newTier = 'max';
+
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 30);
+
+      await supabase
+        .from('transactions')
+        .update({ status: 'PAID', updated_at: new Date() })
+        .eq('id', transaction.id);
+
+      await supabase
+        .from('profiles')
+        .update({
+          subscription_tier: newTier,
+          subscription_status: 'active',
+          subscription_end_date: endDate,
+          updated_at: new Date()
+        })
+        .eq('id', transaction.user_id);
+
+      console.log(`[Monnify Webhook] Upgraded user ${transaction.user_id} to ${newTier.toUpperCase()}.`);
+    }
+
+    // ── Refund completed ────────────────────────────────────────────
+    else if (eventType === 'SUCCESSFUL_REFUND') {
+      const { transactionReference, refundStatus, customerNote } = payload.eventData || {};
+      console.log(`[Monnify Webhook] Refund completed for txn: ${transactionReference}`);
+
+      if (refundStatus !== 'COMPLETED') return;
+
+      // Look up by transaction_reference (the Monnify-side ref stored at checkout)
+      const { data: transaction } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('transaction_reference', transactionReference)
+        .single();
+
+      if (!transaction) {
+        console.warn(`[Monnify Webhook] No transaction found for txn ref: ${transactionReference}`);
+        return;
+      }
+
+      // Mark transaction refunded
+      await supabase
+        .from('transactions')
+        .update({ status: 'REFUNDED', updated_at: new Date() })
+        .eq('id', transaction.id);
+
+      // Downgrade user back to free
+      await supabase
+        .from('profiles')
+        .update({
+          subscription_tier: 'free',
+          subscription_status: 'inactive',
+          subscription_end_date: null,
+          updated_at: new Date()
+        })
+        .eq('id', transaction.user_id);
+
+      console.log(`[Monnify Webhook] Refund processed — user ${transaction.user_id} downgraded to free.`);
+    }
+
+    else {
+      console.log(`[Monnify Webhook] Unhandled event type: ${eventType}`);
+    }
+
+  } catch (error) {
+    console.error('[Monnify Webhook] Processing error:', error);
+  }
+}
+
+/**
+ * Handle Paystack Webhooks
+ */
+async function handlePaystackWebhook(req, res) {
+  try {
+    const signature = req.headers['x-paystack-signature'];
+    if (!signature) {
+      console.warn('[Paystack Webhook] Rejected — Missing signature.');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const payload = req.body;
+    const rawBody = req.rawBody || JSON.stringify(payload);
+    const paystackService = require('../services/paystackService');
+
+    // Verify signature against raw request body (Paystack requirement)
+    if (!paystackService.verifyWebhookSignature(rawBody, signature)) {
+      console.warn('[Paystack Webhook] Rejected — Invalid signature.');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Acknowledge receipt immediately (Paystack requirement)
+    res.status(200).json({ received: true });
+
+    // Process payment success
+    if (payload.event === 'charge.success') {
+      const paymentData = payload.data;
+      const paymentReference = paymentData.reference;
+      
+      console.log(`[Paystack Webhook] Successful Payment: ${paymentReference}`);
+
+      // 1. Get the transaction from DB
+      const { data: transaction, error: txError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('payment_reference', paymentReference)
+        .single();
+        
+      if (txError || !transaction) {
+        console.error(`[Paystack Webhook] Transaction not found for ref: ${paymentReference}`);
+        return;
+      }
+
+      // Check if already processed
+      if (transaction.status === 'PAID') {
+        console.log(`[Paystack Webhook] Transaction ${paymentReference} already processed.`);
+        return;
+      }
+
+      // 2. Determine Tier based on amount or description
+      let newTier = 'free';
+      if (transaction.amount == 5000) newTier = 'basic';
+      if (transaction.amount == 20000) newTier = 'pro';
+      if (transaction.amount == 30000) newTier = 'max';
+
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 30); // 30 days subscription
+
+      // 3. Update Transaction Status
+      await supabase
+        .from('transactions')
+        .update({ status: 'PAID', updated_at: new Date() })
+        .eq('id', transaction.id);
+
+      // 4. Update User Profile
+      await supabase
+        .from('profiles')
+        .update({
+          subscription_tier: newTier,
+          subscription_status: 'active',
+          subscription_end_date: endDate,
+          updated_at: new Date()
+        })
+        .eq('id', transaction.user_id);
+      
+      console.log(`[Paystack Webhook] Upgraded user ${transaction.user_id} to ${newTier.toUpperCase()} tier.`);
+    }
+
+    // ── Refund completed ────────────────────────────────────────────
+    else if (payload.event === 'refund.processed') {
+      const paymentReference = payload.data?.transaction_reference;
+      console.log(`[Paystack Webhook] Refund processed for ref: ${paymentReference}`);
+
+      const { data: transaction } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('payment_reference', paymentReference)
+        .single();
+
+      if (!transaction) {
+        console.warn(`[Paystack Webhook] No transaction found for refund ref: ${paymentReference}`);
+        return;
+      }
+
+      await supabase
+        .from('transactions')
+        .update({ status: 'REFUNDED', updated_at: new Date() })
+        .eq('id', transaction.id);
+
+      await supabase
+        .from('profiles')
+        .update({
+          subscription_tier: 'free',
+          subscription_status: 'inactive',
+          subscription_end_date: null,
+          updated_at: new Date()
+        })
+        .eq('id', transaction.user_id);
+
+      console.log(`[Paystack Webhook] Refund — user ${transaction.user_id} downgraded to free.`);
+    }
+
+    else {
+      console.log(`[Paystack Webhook] Unhandled event: ${payload.event}`);
+    }
+
+  } catch (error) {
+    console.error('[Paystack Webhook] Processing error:', error);
+  }
+}
+
+module.exports = { handleEmailWebhook, handleMonnifyWebhook, handlePaystackWebhook };

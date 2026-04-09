@@ -14,6 +14,7 @@ import Simulations from './pages/Simulations';
 import About from './pages/About';
 import Features from './pages/Features';
 import Pricing from './pages/Pricing';
+import PaymentVerify from './pages/PaymentVerify';
 import { Toaster } from 'sonner';
 import AccessibilityEffects from './components/accessibility/AccessibilityEffects';
 import ReadingRuler from './components/accessibility/ReadingRuler';
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/features" element={<Features />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route element={<ProtectedLayout />}>
+          <Route path="/payment/verify" element={<PaymentVerify />} />
           <Route path="/documents" element={<Documents />} />
           <Route path="/learn" element={<Learn />} />
           <Route path="/learn/:documentId" element={<Learn />} />

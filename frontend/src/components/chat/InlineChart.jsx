@@ -142,8 +142,8 @@ function FunctionPlotter({ block }) {
           </button>
         </div>
       </div>
-      <div className="w-full px-2 pb-2" style={{ height: 280 }}>
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="w-full px-2 pb-2" style={{ height: 280, minWidth: 0 }}>
+        <ResponsiveContainer width="100%" height="100%" debounce={50}>
           <LineChart data={mergedData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis dataKey="x" tick={{ fontSize: 10, fontWeight: 600 }} type="number" domain={[xMin, xMax]} />
@@ -290,8 +290,8 @@ export default function InlineChart({ block }) {
       {title && (
         <h4 className="text-xs font-black text-gray-700 uppercase tracking-wider mb-3">{title}</h4>
       )}
-      <div className="w-full" style={{ height: 250 }}>
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="w-full" style={{ height: 250, minWidth: 0 }}>
+        <ResponsiveContainer width="100%" height="100%" debounce={50}>
           {renderChart()}
         </ResponsiveContainer>
       </div>

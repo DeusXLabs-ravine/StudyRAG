@@ -73,11 +73,13 @@ export class GeminiLiveSession {
     onError,
     onToolCall,
     onToolResult,
+    listenOnly = false,
   }) {
     this.wsUrl = wsUrl;
     this.authToken = authToken;
     this.systemInstruction = systemInstruction;
     this.toolContext = toolContext || {};
+    this.listenOnly = listenOnly;
     this.onTranscript = onTranscript || (() => {});
     this.onUserTranscript = onUserTranscript || (() => {});
     this.onStateChange = onStateChange || (() => {});
@@ -100,7 +102,7 @@ export class GeminiLiveSession {
     this._setState('connecting');
     try {
       await this._connect();
-      await this._initMic();
+      if (!this.listenOnly) await this._initMic();
     } catch (err) {
       console.error('[GeminiLive] Start error:', err);
       this._setState('ended');
@@ -367,3 +369,66 @@ ${content ? content.substring(0, 12000) : 'Teach from general knowledge on this 
 
 Start with a 1-2 sentence warm greeting using the student's name, then give the single most surprising or counterintuitive fact about this topic to hook their attention. Then ask if they're ready to begin.`;
 }
+
+// ── Podcast instruction builder ───────────────────────────────────────────────
+
+const INTEREST_PERSONAS = {
+  sports:       { name: 'Alex',   voice: 'Fenrir',  style: 'a sports commentator',   analogyDomain: 'sports, games, team dynamics, and athletic training' },
+  music:        { name: 'Maya',   voice: 'Aoede',   style: 'a music producer',        analogyDomain: 'music, rhythm, composition, and the recording studio' },
+  gaming:       { name: 'Kai',    voice: 'Puck',    style: 'a game developer',        analogyDomain: 'video games, mechanics, quests, and level design' },
+  cooking:      { name: 'Sofia',  voice: 'Sulafat', style: 'a food critic',           analogyDomain: 'cooking, flavors, recipes, and culinary technique' },
+  movies:       { name: 'Jordan', voice: 'Charon',  style: 'a film director',         analogyDomain: 'cinema, storytelling, plot arcs, and character development' },
+  travel:       { name: 'Nadia',  voice: 'Zephyr',  style: 'a travel journalist',     analogyDomain: 'geography, cultures, exploration, and adventure' },
+  fitness:      { name: 'Marcus', voice: 'Kore',    style: 'a personal trainer',      analogyDomain: 'fitness, workouts, muscle memory, and endurance' },
+  technology:   { name: 'Priya',  voice: 'Iapetus', style: 'a tech startup founder',  analogyDomain: 'startups, code, software architecture, and tech culture' },
+  art:          { name: 'Lucia',  voice: 'Leda',    style: 'an artist',               analogyDomain: 'painting, design, creativity, and visual storytelling' },
+  finance:      { name: 'Dean',   voice: 'Achird',  style: 'a hedge fund analyst',    analogyDomain: 'markets, investing, risk, and financial strategy' },
+  medicine:     { name: 'Sam',    voice: 'Charon',  style: 'a physician',             analogyDomain: 'medicine, anatomy, diagnosis, and patient care' },
+  history:      { name: 'Evie',   voice: 'Leda',    style: 'a historian',             analogyDomain: 'historical events, civilisations, and timelines' },
+  default_a:    { name: 'Alex',   voice: 'Fenrir',  style: 'a curious generalist',    analogyDomain: 'everyday life, pop culture, and common experiences' },
+  default_b:    { name: 'Jamie',  voice: 'Achird',  style: 'a science enthusiast',    analogyDomain: 'science, nature, the universe, and discovery' },
+};
+
+function interestToPersona(interest) {
+  if (!interest) return null;
+  const key = interest.toLowerCase().trim();
+  return INTEREST_PERSONAS[key] || null;
+}
+
+export function resolvePodcastHosts(interests = []) {
+  const personas = interests
+    .map(i => interestToPersona(i))
+    .filter(Boolean);
+
+  const hostA = personas[0] || INTEREST_PERSONAS.default_a;
+  const hostB = personas[1] || INTEREST_PERSONAS.default_b;
+  return { hostA, hostB };
+}
+
+export function buildPodcastInstruction({ moduleTitle, moduleTopic, content, userName, hostA, hostB }) {
+  return `You are producing a lively, insightful podcast episode about a study topic. You will play BOTH podcast hosts alternately in the same conversation.
+
+HOSTS:
+- [${hostA.name.toUpperCase()}]: ${hostA.style}. Uses analogies from ${hostA.analogyDomain}.
+- [${hostB.name.toUpperCase()}]: ${hostB.style}. Uses analogies from ${hostB.analogyDomain}.
+
+LISTENER: ${userName || 'a student'} is tuning in.
+
+EPISODE TOPIC: "${moduleTitle || moduleTopic || 'this lesson'}"${moduleTopic ? ` — specifically ${moduleTopic}` : ''}
+
+FORMAT RULES — CRITICAL, follow exactly:
+1. Every single spoken line MUST start with [${hostA.name.toUpperCase()}]: or [${hostB.name.toUpperCase()}]:
+2. Alternate between hosts every 2-4 sentences — do not let one host monologue for more than 5 sentences
+3. Make it feel like a REAL podcast: use "you know what?", "hold on—", "wait actually—", "exactly!", "I never thought about it that way", interruptions, laughter cues like "(laughs)", reactions
+4. Each host MUST use at least 3 analogies from their domain throughout the episode
+5. Cover the topic from multiple angles: definitions → surprising facts → real-world implications → debate a nuance → takeaway
+6. Occasionally reference ${userName ? userName + ' who is listening' : 'the listener'} — "If you're tuning in and wondering about X..."
+7. Total episode: aim for a rich, 6-8 minute conversation
+8. End with both hosts giving their single best takeaway, then a sign-off
+
+CONTENT TO COVER:
+${content ? content.substring(0, 14000) : `Discuss ${moduleTitle || moduleTopic} from general knowledge.`}
+
+Begin with ${hostA.name} doing a short podcast intro (the show name is "The Study Break") and teasing what today's episode covers, then ${hostB.name} jumps in with the most wild or surprising fact about this topic to hook the listener.`;
+}
+

@@ -51,6 +51,24 @@ function extractGroundingData(result) {
  * ONLY returns resources that have real URLs from grounding metadata — never hallucinated titles.
  */
 async function researchTopic(topic, searchQuery) {
+  // Check if we already have resources for this topic from any previous document.
+  // The document_resources table acts as a shared topic resource cache.
+  try {
+    const { data: existing } = await supabase
+      .from('document_resources')
+      .select('title, url, snippet, topic, resource_type')
+      .eq('topic', topic)
+      .not('url', 'is', null)
+      .limit(8);
+
+    if (existing && existing.length >= 3) {
+      console.log(`[WebResearch] Topic cache hit for "${topic}" — reusing ${existing.length} existing resources`);
+      return existing;
+    }
+  } catch (err) {
+    console.warn(`[WebResearch] Topic cache lookup failed (continuing): ${err.message}`);
+  }
+
   const prompt = WEB_RESEARCH_PROMPT
     .replace('{topic}', topic)
     .replace('{search_query}', searchQuery);

@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "StudyRAG",
+    "slug": "studyrag-mobile",
+    "version": "1.0.0",
+    "scheme": "studyrag",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-audio"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "permissions": [
+        "com.android.vending.BILLING",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      }
+    }
+  }
+}

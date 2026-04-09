@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Volume2, Check, Shapes, User, GraduationCap, Heart, Save, Palette, Brain, Gauge, ChevronDown, BookOpen, Search, Eye, Headphones, MousePointer2, Turtle, Scale, Zap, Info, Flame, Trophy, Play, X, Type, Eraser, Monitor, Mic, Ruler } from 'lucide-react';
+import { Volume2, Check, Shapes, User, GraduationCap, Heart, Save, Palette, Brain, Gauge, ChevronDown, BookOpen, Search, Eye, Headphones, MousePointer2, Turtle, Scale, Zap, Info, Flame, Trophy, Play, X, Type, Eraser, Monitor, Mic, Ruler, Sun, Moon, MousePointer, Rows3, Baseline, Focus, Contrast, AlignJustify, Pointer } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
-import useSettingsStore from '../store/settingsStore';
+import useSettingsStore, { FONT_SCALE_STEPS } from '../store/settingsStore';
 import useAuthStore from '../store/authStore';
 import { fetchVoices, fetchSpeechAudio } from '../services/ttsService';
 import { MorphingSquare } from '../components/ui/morphing-square';
@@ -42,14 +42,53 @@ const LEARNING_STYLES = [
 ];
 
 const A11Y_TOGGLES = [
-  { key: 'dyslexia_mode', label: 'Dyslexia Mode', desc: 'OpenDyslexic font, wider spacing, warm tint', icon: Type, bg: 'bg-violet-50', text: 'text-violet-600', active: 'bg-violet-500' },
-  { key: 'adhd_focus_mode', label: 'Focus Mode', desc: 'Hide decorations, enable break reminders', icon: Brain, bg: 'bg-indigo-50', text: 'text-indigo-600', active: 'bg-indigo-500' },
-  { key: 'bionic_reading', label: 'Bionic Reading', desc: 'Bold the first half of each word', icon: Eye, bg: 'bg-indigo-50', text: 'text-indigo-600', active: 'bg-indigo-500' },
-  { key: 'high_contrast', label: 'High Contrast', desc: 'Increase contrast for text and borders', icon: Monitor, bg: 'bg-slate-100', text: 'text-slate-700', active: 'bg-slate-700' },
-  { key: 'large_text', label: 'Large Text', desc: 'Increase base font size to 120%', icon: Type, bg: 'bg-violet-50', text: 'text-violet-600', active: 'bg-violet-500' },
-  { key: 'reduced_motion', label: 'Reduced Motion', desc: 'Disable animations and transitions', icon: Zap, bg: 'bg-indigo-50', text: 'text-indigo-600', active: 'bg-indigo-500' },
-  { key: 'voice_input', label: 'Voice Input', desc: 'Microphone button in chat for speech-to-text', icon: Mic, bg: 'bg-violet-50', text: 'text-violet-600', active: 'bg-violet-500' },
-  { key: 'reading_ruler', label: 'Reading Ruler', desc: 'Horizontal guide that follows your cursor', icon: Ruler, bg: 'bg-indigo-50', text: 'text-indigo-600', active: 'bg-indigo-500' },
+  { key: 'dyslexia_mode',   label: 'Dyslexia Mode',    desc: 'OpenDyslexic font, wider spacing, warm tint',         icon: Type,    bg: 'bg-violet-50',  text: 'text-violet-600', active: 'bg-violet-500' },
+  { key: 'adhd_focus_mode', label: 'Focus Mode',        desc: 'Strip decorative elements, enable break reminders',   icon: Brain,   bg: 'bg-indigo-50',  text: 'text-indigo-600', active: 'bg-indigo-500' },
+  { key: 'bionic_reading',  label: 'Bionic Reading',    desc: 'Bold first half of each word for faster tracking',    icon: Eye,     bg: 'bg-indigo-50',  text: 'text-indigo-600', active: 'bg-indigo-500' },
+  { key: 'high_contrast',   label: 'High Contrast',     desc: 'Increase contrast for text and UI borders',           icon: Monitor, bg: 'bg-slate-100',  text: 'text-slate-700',  active: 'bg-slate-700'  },
+  { key: 'large_text',      label: 'Large Text (120%)', desc: 'Scale base font size up by 20%',                      icon: Type,    bg: 'bg-violet-50',  text: 'text-violet-600', active: 'bg-violet-500' },
+  { key: 'reduced_motion',  label: 'Reduced Motion',    desc: 'Disable animations and transitions (WCAG 2.3.3)',     icon: Zap,     bg: 'bg-indigo-50',  text: 'text-indigo-600', active: 'bg-indigo-500' },
+  { key: 'voice_input',     label: 'Voice Input',       desc: 'Show microphone button in chat for speech-to-text',   icon: Mic,     bg: 'bg-violet-50',  text: 'text-violet-600', active: 'bg-violet-500' },
+  { key: 'reading_ruler',   label: 'Reading Ruler',     desc: 'Horizontal guide that follows your cursor',           icon: Ruler,   bg: 'bg-indigo-50',  text: 'text-indigo-600', active: 'bg-indigo-500' },
+  { key: 'text_spacing',    label: 'WCAG Text Spacing', desc: 'WCAG 2.1 §1.4.12 — standardised text spacing',       icon: AlignJustify, bg: 'bg-teal-50', text: 'text-teal-600', active: 'bg-teal-500'   },
+  { key: 'focus_enhanced',  label: 'Enhanced Focus Ring', desc: 'Thick high-visibility keyboard focus outlines',     icon: Focus,   bg: 'bg-blue-50',    text: 'text-blue-600',   active: 'bg-blue-500'   },
+  { key: 'dark_mode',       label: 'Dark Mode (Invert)', desc: 'Invert colours — useful for light sensitivity',      icon: Moon,    bg: 'bg-gray-100',   text: 'text-gray-700',   active: 'bg-gray-800'   },
+  { key: 'desaturate',      label: 'Low Saturation',    desc: 'Reduce colour intensity for visual comfort',          icon: Sun,     bg: 'bg-amber-50',   text: 'text-amber-600',  active: 'bg-amber-500'  },
+];
+
+const COLORBLIND_MODES = [
+  { id: 'none',           label: 'None' },
+  { id: 'protanopia',     label: 'Protanopia (red)' },
+  { id: 'deuteranopia',   label: 'Deuteranopia (green)' },
+  { id: 'tritanopia',     label: 'Tritanopia (blue)' },
+  { id: 'achromatopsia',  label: 'Achromatopsia' },
+];
+
+const LINE_HEIGHT_OPTIONS = [
+  { id: 'default',  label: 'Default' },
+  { id: 'relaxed',  label: 'Relaxed (1.9)' },
+  { id: 'loose',    label: 'Loose (2.4)' },
+];
+
+const WORD_SPACING_OPTIONS = [
+  { id: 'default', label: 'Default' },
+  { id: 'wide',    label: 'Wide' },
+  { id: 'wider',   label: 'Wider' },
+];
+
+const CURSOR_SIZE_OPTIONS = [
+  { id: 'default', label: 'Default' },
+  { id: 'large',   label: 'Large' },
+  { id: 'xlarge',  label: 'X-Large' },
+];
+
+const RULER_COLORS = [
+  { id: '#8b5cf6', label: 'Purple',  hex: '#8b5cf6' },
+  { id: '#3b82f6', label: 'Blue',    hex: '#3b82f6' },
+  { id: '#10b981', label: 'Green',   hex: '#10b981' },
+  { id: '#f59e0b', label: 'Amber',   hex: '#f59e0b' },
+  { id: '#ef4444', label: 'Red',     hex: '#ef4444' },
+  { id: '#ec4899', label: 'Pink',    hex: '#ec4899' },
 ];
 
 function BoardPreview({ themeConfig, isLarge = false }) {
@@ -460,10 +499,12 @@ export default function Settings() {
             </div>
             <div>
               <h2 className="text-lg font-bold text-gray-900">Accessibility</h2>
-              <p className="text-xs text-gray-400">Adjust your experience for comfort and focus.</p>
+              <p className="text-xs text-gray-400">Adjust your experience for comfort, focus, and visual needs.</p>
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+          {/* ── Toggle grid ─────────────────────────────────── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
             {A11Y_TOGGLES.map((toggle) => {
               const Icon = toggle.icon;
               const isOn = settings[`a11y_${toggle.key}`] === 'true';
@@ -487,18 +528,160 @@ export default function Settings() {
                     }}
                     role="switch"
                     aria-checked={isOn}
+                    aria-label={toggle.label}
                     className={`relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ml-3 ${isOn ? toggle.active : 'bg-gray-200'}`}
                   >
                     <motion.div
                       animate={{ x: isOn ? 22 : 2 }}
                       initial={false}
-                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                       className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm"
                     />
                   </button>
                 </div>
               );
             })}
+          </div>
+
+          {/* ── Font size slider ────────────────────────────── */}
+          <div className="p-6 bg-gray-50 rounded-2xl mb-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <Baseline size={14} className="text-gray-400" />
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                Base Font Size — {settings.a11y_font_size_px || 16}px
+              </label>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={FONT_SCALE_STEPS.length - 1}
+              step={1}
+              value={FONT_SCALE_STEPS.indexOf(parseInt(settings.a11y_font_size_px, 10) || 16)}
+              onChange={async (e) => {
+                const px = FONT_SCALE_STEPS[e.target.value];
+                await setSetting('a11y_font_size_px', String(px));
+                applyA11yClasses();
+              }}
+              className="w-full accent-violet-500"
+              aria-label="Base font size"
+            />
+            <div className="flex justify-between text-[9px] text-gray-300 font-bold">
+              {FONT_SCALE_STEPS.map(s => <span key={s}>{s}</span>)}
+            </div>
+          </div>
+
+          {/* ── Granular text controls ──────────────────────── */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            {/* Line height */}
+            <div className="p-5 bg-gray-50 rounded-2xl space-y-3">
+              <div className="flex items-center gap-2">
+                <Rows3 size={13} className="text-gray-400" />
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Line Height</label>
+              </div>
+              <div className="space-y-1.5">
+                {LINE_HEIGHT_OPTIONS.map(opt => {
+                  const isS = (settings.a11y_line_height || 'default') === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={async () => { await setSetting('a11y_line_height', opt.id); applyA11yClasses(); }}
+                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all ${isS ? 'bg-violet-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Word spacing */}
+            <div className="p-5 bg-gray-50 rounded-2xl space-y-3">
+              <div className="flex items-center gap-2">
+                <AlignJustify size={13} className="text-gray-400" />
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Word Spacing</label>
+              </div>
+              <div className="space-y-1.5">
+                {WORD_SPACING_OPTIONS.map(opt => {
+                  const isS = (settings.a11y_word_spacing || 'default') === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={async () => { await setSetting('a11y_word_spacing', opt.id); applyA11yClasses(); }}
+                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all ${isS ? 'bg-violet-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Cursor size */}
+            <div className="p-5 bg-gray-50 rounded-2xl space-y-3">
+              <div className="flex items-center gap-2">
+                <Pointer size={13} className="text-gray-400" />
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Cursor Size</label>
+              </div>
+              <div className="space-y-1.5">
+                {CURSOR_SIZE_OPTIONS.map(opt => {
+                  const isS = (settings.a11y_cursor_size || 'default') === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={async () => { await setSetting('a11y_cursor_size', opt.id); applyA11yClasses(); }}
+                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all ${isS ? 'bg-violet-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Colour-blind simulation ─────────────────────── */}
+          <div className="p-5 bg-gray-50 rounded-2xl mb-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Contrast size={13} className="text-gray-400" />
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Colour-Blind Filter</label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {COLORBLIND_MODES.map(mode => {
+                const isS = (settings.a11y_colorblind_mode || 'none') === mode.id;
+                return (
+                  <button
+                    key={mode.id}
+                    onClick={async () => { await setSetting('a11y_colorblind_mode', mode.id); applyA11yClasses(); }}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${isS ? 'bg-teal-500 text-white' : 'bg-white text-gray-500 border border-gray-100 hover:border-teal-200'}`}
+                  >
+                    {mode.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── Reading ruler colour ────────────────────────── */}
+          <div className="p-5 bg-gray-50 rounded-2xl space-y-3">
+            <div className="flex items-center gap-2">
+              <Ruler size={13} className="text-gray-400" />
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Reading Ruler Colour</label>
+            </div>
+            <div className="flex gap-3">
+              {RULER_COLORS.map(c => {
+                const isS = (settings.a11y_ruler_color || '#8b5cf6') === c.id;
+                return (
+                  <button
+                    key={c.id}
+                    title={c.label}
+                    onClick={async () => { await setSetting('a11y_ruler_color', c.id); applyA11yClasses(); }}
+                    className={`w-8 h-8 rounded-full border-4 transition-all ${isS ? 'border-gray-800 scale-110' : 'border-white'}`}
+                    style={{ backgroundColor: c.hex }}
+                    aria-label={`Ruler colour: ${c.label}`}
+                  />
+                );
+              })}
+            </div>
           </div>
         </section>
 

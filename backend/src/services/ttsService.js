@@ -1,9 +1,11 @@
 const { geminiApiKeys, geminiApiKey } = require('../config/env');
 
+// Only these two models support responseModalities: ['AUDIO'] TTS
 const TTS_MODELS = [
   'gemini-2.5-flash-preview-tts',
   'gemini-2.5-pro-preview-tts',
 ];
+
 const DEFAULT_VOICE = 'Kore';
 const MAX_TEXT_LENGTH = 8000;
 const SAMPLE_RATE = 24000;
@@ -11,35 +13,18 @@ const NUM_CHANNELS = 1;
 const BITS_PER_SAMPLE = 16;
 
 const AVAILABLE_VOICES = [
-  { id: 'Kore', name: 'Kore', description: 'Warm, clear female voice' },
-  { id: 'Puck', name: 'Puck', description: 'Friendly, upbeat male voice' },
-  { id: 'Charon', name: 'Charon', description: 'Deep, calm male voice' },
-  { id: 'Aoede', name: 'Aoede', description: 'Bright, expressive female voice' },
-  { id: 'Fenrir', name: 'Fenrir', description: 'Strong, confident male voice' },
-  { id: 'Leda', name: 'Leda', description: 'Gentle, soothing female voice' },
+  { id: 'Kore',     name: 'Kore',     description: 'Firm, clear voice' },
+  { id: 'Puck',     name: 'Puck',     description: 'Upbeat, friendly voice' },
+  { id: 'Charon',   name: 'Charon',   description: 'Informative, calm voice' },
+  { id: 'Aoede',    name: 'Aoede',    description: 'Breezy, expressive voice' },
+  { id: 'Fenrir',   name: 'Fenrir',   description: 'Excitable, strong voice' },
+  { id: 'Leda',     name: 'Leda',     description: 'Youthful, gentle voice' },
+  { id: 'Zephyr',   name: 'Zephyr',   description: 'Bright, energetic voice' },
+  { id: 'Sulafat',  name: 'Sulafat',  description: 'Warm, inviting voice' },
+  { id: 'Achird',   name: 'Achird',   description: 'Friendly, approachable voice' },
+  { id: 'Iapetus',  name: 'Iapetus',  description: 'Clear, precise voice' },
 ];
 
-// Track which TTS model works (same pattern as image gen)
-let _workingTTSModel = null;
-let _failedTTSModels = new Set();
-
-function getApiKey() {
-  // Round-robin through available keys
-  const keys = geminiApiKeys?.length ? geminiApiKeys : (geminiApiKey ? [geminiApiKey] : []);
-  if (keys.length === 0) throw new Error('Gemini API key not configured');
-  return keys[Math.floor(Math.random() * keys.length)];
-}
-
-function getTTSModel() {
-  if (_workingTTSModel) return _workingTTSModel;
-  const candidates = TTS_MODELS.filter(m => !_failedTTSModels.has(m));
-  return candidates[0] || TTS_MODELS[0];
-}
-
-/**
- * Build a WAV header for raw PCM data.
- * Gemini TTS returns 24kHz, 16-bit mono PCM.
- */
 function buildWavHeader(pcmLength) {
   const byteRate = SAMPLE_RATE * NUM_CHANNELS * (BITS_PER_SAMPLE / 8);
   const blockAlign = NUM_CHANNELS * (BITS_PER_SAMPLE / 8);
@@ -60,137 +45,238 @@ function buildWavHeader(pcmLength) {
   return buffer;
 }
 
+function getAllKeys() {
+  const keys = geminiApiKeys?.length ? [...geminiApiKeys] : (geminiApiKey ? [geminiApiKey] : []);
+  if (!keys.length) throw new Error('No Gemini API keys configured');
+  // Shuffle to spread load across keys
+  return keys.sort(() => Math.random() - 0.5);
+}
+
 /**
- * Non-streaming TTS — returns a complete WAV buffer.
- * Used as fallback when streaming isn't supported.
+ * Single-speaker TTS — retries all models × all keys until one succeeds.
+ * Returns a complete WAV buffer.
  */
 async function synthesizeSpeech(text, voiceName = DEFAULT_VOICE) {
-  const apiKey = getApiKey();
-  const model = getTTSModel();
   const truncated = text.length > MAX_TEXT_LENGTH ? text.slice(0, MAX_TEXT_LENGTH) : text;
+  const keys = getAllKeys();
+  let lastError;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  for (const model of TTS_MODELS) {
+    for (const apiKey of keys) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: truncated }] }],
+            generationConfig: {
+              responseModalities: ['AUDIO'],
+              speechConfig: {
+                voiceConfig: { prebuiltVoiceConfig: { voiceName } },
+              },
+            },
+          }),
+        });
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: truncated }] }],
-      generationConfig: {
-        responseModalities: ['AUDIO'],
-        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
-      },
-    }),
-  });
+        if (!response.ok) {
+          const errText = await response.text().catch(() => '');
+          lastError = new Error(`TTS ${response.status} (${model})`);
+          console.warn(`[TTS] ${model} key[...${apiKey.slice(-4)}] → ${response.status}: ${errText.slice(0, 120)}`);
+          continue; // try next key/model
+        }
 
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unknown error');
-    // Try fallback model
-    if (response.status === 429 || response.status === 503) {
-      _failedTTSModels.add(model);
-      console.warn(`[TTS] Model ${model} failed (${response.status}), will try fallback next time`);
+        const json = await response.json();
+        const audioData = json.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (!audioData) {
+          lastError = new Error('No audio data in response');
+          console.warn(`[TTS] ${model} returned no audio data`);
+          continue;
+        }
+
+        console.log(`[TTS] ✓ ${model}`);
+        const pcmBuffer = Buffer.from(audioData, 'base64');
+        return Buffer.concat([buildWavHeader(pcmBuffer.length), pcmBuffer]);
+      } catch (err) {
+        lastError = err;
+        console.warn(`[TTS] ${model} fetch error: ${err.message}`);
+      }
     }
-    throw new Error(`Gemini TTS error (${response.status}): ${errorText}`);
   }
 
-  _workingTTSModel = model;
-  const json = await response.json();
-  const audioData = json.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!audioData) throw new Error('No audio data in Gemini TTS response');
-
-  const pcmBuffer = Buffer.from(audioData, 'base64');
-  return Buffer.concat([buildWavHeader(pcmBuffer.length), pcmBuffer]);
+  throw lastError || new Error('All TTS models and keys exhausted');
 }
 
 /**
- * Streaming TTS — pipes PCM audio chunks to a writable stream as they arrive.
- * Uses Gemini's streamGenerateContent endpoint for real-time audio.
+ * Multi-speaker TTS — takes a transcript and two speaker configs.
+ * Used by the podcast feature.
+ * Returns a complete WAV buffer.
  *
- * @param {string} text - Text to synthesize
- * @param {string} voiceName - Voice ID
- * @param {import('stream').Writable | import('http').ServerResponse} output - Where to write audio
- * @returns {Promise<void>}
+ * @param {string} transcript - Full transcript with "Name: text" lines
+ * @param {string} speakerAName - Exact name as used in transcript
+ * @param {string} speakerAVoice - Voice ID for speaker A
+ * @param {string} speakerBName - Exact name as used in transcript
+ * @param {string} speakerBVoice - Voice ID for speaker B
  */
-async function synthesizeSpeechStream(text, voiceName = DEFAULT_VOICE, output) {
-  const apiKey = getApiKey();
-  const model = getTTSModel();
-  const truncated = text.length > MAX_TEXT_LENGTH ? text.slice(0, MAX_TEXT_LENGTH) : text;
+async function synthesizeMultiSpeakerSpeech(transcript, speakerAName, speakerAVoice, speakerBName, speakerBVoice) {
+  const truncated = transcript.length > MAX_TEXT_LENGTH ? transcript.slice(0, MAX_TEXT_LENGTH) : transcript;
+  const keys = getAllKeys();
+  let lastError;
 
-  // Use the streaming endpoint
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+  const speechConfig = {
+    multiSpeakerVoiceConfig: {
+      speakerVoiceConfigs: [
+        { speaker: speakerAName, voiceConfig: { prebuiltVoiceConfig: { voiceName: speakerAVoice } } },
+        { speaker: speakerBName, voiceConfig: { prebuiltVoiceConfig: { voiceName: speakerBVoice } } },
+      ],
+    },
+  };
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: truncated }] }],
-      generationConfig: {
-        responseModalities: ['AUDIO'],
-        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
-      },
-    }),
-  });
+  for (const model of TTS_MODELS) {
+    for (const apiKey of keys) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: truncated }] }],
+            generationConfig: {
+              responseModalities: ['AUDIO'],
+              speechConfig,
+            },
+          }),
+        });
 
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unknown error');
-    if (response.status === 429 || response.status === 503) {
-      _failedTTSModels.add(model);
-    }
-    throw new Error(`Gemini TTS stream error (${response.status}): ${errorText}`);
-  }
-
-  _workingTTSModel = model;
-
-  // Write WAV header with max size (we don't know total length upfront).
-  // 0xFFFFFFFF signals "unknown length" — browsers/players handle this fine for streaming.
-  const wavHeader = buildWavHeader(0xFFFFFFFF - 36);
-  output.write(wavHeader);
-
-  // Parse the SSE stream and extract PCM audio chunks
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let totalBytes = 0;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      // Process complete SSE events (lines starting with "data: ")
-      const lines = buffer.split('\n');
-      buffer = lines.pop(); // Keep incomplete last line
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const jsonStr = line.slice(6).trim();
-        if (!jsonStr || jsonStr === '[DONE]') continue;
-
-        try {
-          const chunk = JSON.parse(jsonStr);
-          const audioData = chunk.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-          if (audioData) {
-            const pcmChunk = Buffer.from(audioData, 'base64');
-            totalBytes += pcmChunk.length;
-            // Write PCM directly — header is already sent
-            if (!output.destroyed) {
-              output.write(pcmChunk);
-            }
-          }
-        } catch {
-          // Skip malformed chunks
+        if (!response.ok) {
+          const errText = await response.text().catch(() => '');
+          lastError = new Error(`Multi-TTS ${response.status} (${model})`);
+          console.warn(`[TTS Multi] ${model} → ${response.status}: ${errText.slice(0, 120)}`);
+          continue;
         }
+
+        const json = await response.json();
+        const audioData = json.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (!audioData) {
+          lastError = new Error('No audio data in multi-speaker response');
+          continue;
+        }
+
+        console.log(`[TTS Multi] ✓ ${model}`);
+        const pcmBuffer = Buffer.from(audioData, 'base64');
+        return Buffer.concat([buildWavHeader(pcmBuffer.length), pcmBuffer]);
+      } catch (err) {
+        lastError = err;
+        console.warn(`[TTS Multi] ${model} fetch error: ${err.message}`);
       }
     }
-  } finally {
-    reader.releaseLock();
   }
 
-  if (totalBytes === 0) {
-    throw new Error('No audio data received from streaming TTS');
-  }
+  throw lastError || new Error('All multi-speaker TTS attempts failed');
 }
 
-module.exports = { synthesizeSpeech, synthesizeSpeechStream, DEFAULT_VOICE, AVAILABLE_VOICES, SAMPLE_RATE };
+/**
+ * Streaming TTS — streams WAV audio to a writable output.
+ * Falls back to non-streaming if streamGenerateContent isn't supported for TTS.
+ */
+async function synthesizeSpeechStream(text, voiceName = DEFAULT_VOICE, output) {
+  // Try streaming first, fall back to buffered
+  const truncated = text.length > MAX_TEXT_LENGTH ? text.slice(0, MAX_TEXT_LENGTH) : text;
+  const keys = getAllKeys();
+  let lastError;
+
+  for (const model of TTS_MODELS) {
+    for (const apiKey of keys) {
+      try {
+        // Attempt SSE streaming
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: truncated }] }],
+            generationConfig: {
+              responseModalities: ['AUDIO'],
+              speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text().catch(() => '');
+          lastError = new Error(`TTS Stream ${response.status} (${model})`);
+          console.warn(`[TTS Stream] ${model} → ${response.status}: ${errText.slice(0, 120)}`);
+          continue;
+        }
+
+        // Write WAV header with max/unknown length
+        const wavHeader = buildWavHeader(0xFFFFFFFF - 36);
+        output.write(wavHeader);
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let totalBytes = 0;
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              const jsonStr = line.slice(6).trim();
+              if (!jsonStr || jsonStr === '[DONE]') continue;
+              try {
+                const chunk = JSON.parse(jsonStr);
+                const audioData = chunk.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+                if (audioData) {
+                  const pcmChunk = Buffer.from(audioData, 'base64');
+                  totalBytes += pcmChunk.length;
+                  if (!output.destroyed) output.write(pcmChunk);
+                }
+              } catch { /* skip malformed */ }
+            }
+          }
+        } finally {
+          reader.releaseLock();
+        }
+
+        if (totalBytes > 0) {
+          console.log(`[TTS Stream] ✓ ${model} — ${totalBytes} bytes`);
+          return;
+        }
+
+        // If streaming gave 0 bytes, fall back to buffered for this model/key
+        lastError = new Error('Streaming returned 0 bytes — trying buffered');
+        break;
+      } catch (err) {
+        lastError = err;
+        console.warn(`[TTS Stream] ${model} error: ${err.message}`);
+      }
+    }
+
+    // Streaming failed for this model — try buffered as fallback
+    try {
+      console.log(`[TTS Stream] Falling back to buffered for ${model}`);
+      const wavBuffer = await synthesizeSpeech(text, voiceName);
+      if (!output.destroyed) output.write(wavBuffer);
+      return;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('All TTS stream attempts failed');
+}
+
+module.exports = {
+  synthesizeSpeech,
+  synthesizeSpeechStream,
+  synthesizeMultiSpeakerSpeech,
+  DEFAULT_VOICE,
+  AVAILABLE_VOICES,
+  SAMPLE_RATE,
+};

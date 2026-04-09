@@ -1,0 +1,36 @@
+import type { LucideIcon } from 'lucide-react-native';
+import {
+  AudioLines,
+  BookOpen,
+  Brain,
+  ChartColumnBig,
+  FileText,
+  FlaskConical,
+  GraduationCap,
+  LayoutDashboard,
+  LibraryBig,
+  MessageSquareText,
+  Rocket,
+  ScrollText,
+  Sparkles,
+  Trophy,
+  UserRoundCog,
+} from 'lucide-react-native';
+
+export const iconRegistry: Record<string, LucideIcon> = {
+  home: LayoutDashboard,
+  library: LibraryBig,
+  chat: MessageSquareText,
+  practice: Trophy,
+  profile: UserRoundCog,
+  learn: GraduationCap,
+  teach: Rocket,
+  podcast: AudioLines,
+  quiz: Brain,
+  flashcards: BookOpen,
+  exam: ScrollText,
+  analytics: ChartColumnBig,
+  simulations: FlaskConical,
+  documents: FileText,
+  premium: Sparkles,
+};

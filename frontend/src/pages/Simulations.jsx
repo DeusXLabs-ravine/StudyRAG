@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Search, Atom, Beaker, Cpu, Flame, Box, LayoutGrid } from 'lucide-react';
+import { useSubscription } from '../hooks/useSubscription';
+import LockedPage from '../components/paywall/LockedPage';
 import SimulationCard from '../components/simulation/SimulationCard';
 import SimulationViewer from '../components/simulation/SimulationViewer';
 import PhysicsLab3D from '../components/simulation/PhysicsLab3D';
@@ -43,6 +45,7 @@ const LAB_SECTIONS = [
 ];
 
 export default function Simulations() {
+  const { canUseSimulations } = useSubscription();
   const [searchParams, setSearchParams] = useSearchParams();
   const simId = searchParams.get('sim');
   const labSection = searchParams.get('lab');
@@ -95,6 +98,17 @@ export default function Simulations() {
     }
     return p;
   }, [searchParams]);
+
+  if (!canUseSimulations) {
+    return (
+      <LockedPage
+        icon={Atom}
+        title="Physics Lab"
+        description="Run interactive simulations, explore mechanics, waves, and electromagnetism. Upgrade to Pro to unlock the lab."
+        tier="Pro"
+      />
+    );
+  }
 
   // Simulation viewer mode
   if (simId) {

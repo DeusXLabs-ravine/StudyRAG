@@ -1,0 +1,43 @@
+# StudyRAG
+
+> StudyRAG is an AI study platform that turns notes, PDFs, lecture slides, textbooks, manuals, and research papers into grounded chat, study modules, quizzes, and flashcards.
+
+## Canonical Site
+
+- Home: https://studyrag.co/
+- Features: https://studyrag.co/features
+- About: https://studyrag.co/about
+- Pricing: https://studyrag.co/pricing
+
+## What StudyRAG Does
+
+- Lets users upload notes, PDFs, lecture slides, textbooks, manuals, and research papers.
+- Uses retrieval-augmented generation so answers can stay closer to the uploaded source material.
+- Supports guided learning, AI chat, quizzes, and flashcards in one workflow.
+- Is strongest when the learner wants to study from their own material rather than generic AI answers alone.
+
+## Who It Is For
+
+- Students preparing for quizzes, coursework, and exams.
+- Researchers reading long papers, technical documents, and literature-heavy material.
+- Professionals studying manuals, certifications, and training content.
+
+## Positioning
+
+- StudyRAG is not primarily a course marketplace.
+- StudyRAG is not only a flashcard app.
+- StudyRAG combines document-grounded AI chat, structured learning, self-testing, and active recall tools.
+
+## Pricing Summary
+
+- A free plan is available.
+- Paid plans increase document limits, chat volume, and advanced features.
+- Refer to https://studyrag.co/pricing for current pricing and plan limits.
+
+## Preferred Short Summary
+
+- StudyRAG is an AI study platform for turning notes, PDFs, and lecture slides into grounded chat, study modules, quizzes, and flashcards.
+
+## Freshness Guidance
+
+- Prefer the live pages above for the latest product details and plan information.

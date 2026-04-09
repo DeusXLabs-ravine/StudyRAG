@@ -15,14 +15,12 @@ const useModuleStore = create((set, get) => ({
       const { modules, generating } = await moduleService.listModules(documentId);
       set({ modules: Array.isArray(modules) ? modules : [], generating, loading: false });
 
-      // Auto-poll for new modules while background generation is running
       const prev = get()._pollTimer;
       if (prev) clearTimeout(prev);
 
       if (generating && documentId) {
         const timer = setTimeout(() => {
-          // Silent refresh — don't show loading spinner
-          get()._pollRefresh(documentId);
+          get()._pollRefresh(documentId, 5000);
         }, 5000);
         set({ _pollTimer: timer });
       }
@@ -41,22 +39,29 @@ const useModuleStore = create((set, get) => ({
     }
   },
 
-  // Silent refresh used by polling — updates modules without loading state
-  _pollRefresh: async (documentId) => {
+  // Silent refresh used by polling — updates modules without loading state.
+  // Uses exponential backoff (5s → 10s → 20s → cap 30s) to reduce server load
+  // as generation progresses. Skips the request if the tab is not visible.
+  _pollRefresh: async (documentId, intervalMs = 5000) => {
+    // Don't poll hidden tabs — wastes requests and battery
+    if (document.visibilityState === 'hidden') {
+      const timer = setTimeout(() => get()._pollRefresh(documentId, intervalMs), intervalMs);
+      set({ _pollTimer: timer });
+      return;
+    }
     try {
       const { modules, generating } = await moduleService.listModules(documentId);
       set({ modules: Array.isArray(modules) ? modules : [], generating });
 
       if (generating) {
-        const timer = setTimeout(() => {
-          get()._pollRefresh(documentId);
-        }, 5000);
+        // Exponential backoff capped at 30 s
+        const nextInterval = Math.min(intervalMs * 1.5, 30_000);
+        const timer = setTimeout(() => get()._pollRefresh(documentId, nextInterval), nextInterval);
         set({ _pollTimer: timer });
       } else {
         set({ _pollTimer: null });
       }
     } catch {
-      // Silently ignore poll errors
       set({ _pollTimer: null, generating: false });
     }
   },

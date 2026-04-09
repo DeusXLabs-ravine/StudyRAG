@@ -8,7 +8,7 @@ Module content:
 
 For each medical term or concept, provide:
 1. The term as it would be searched in PubMed (formal medical terminology)
-2. A simpler synonym for ICD-10 lookup (disease/condition name)
+2. A simpler synonym for ICD-10 lookup — use the **primary/acute condition name** (e.g. "femoral neck fracture", not "sequela of fracture" or "late effect"). Do NOT include words like sequela, complication, late effect, or subsequent encounter.
 3. The WikiDoc category it would fall under
 
 Return ONLY valid JSON:

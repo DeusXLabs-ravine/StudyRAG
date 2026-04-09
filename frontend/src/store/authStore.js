@@ -4,6 +4,17 @@ import { supabase } from '../lib/supabase';
 import api from '../services/api';
 
 const PROFILE_CACHE_KEY = 'studyrag_cached_profile';
+const PROFILE_CACHE_VERSION = 'v2'; // bump this to invalidate all cached profiles
+const PROFILE_VERSION_KEY = 'studyrag_profile_version';
+
+// One-time cache bust: clear old profile cache when version changes
+if (typeof window !== 'undefined') {
+  const storedVersion = localStorage.getItem(PROFILE_VERSION_KEY);
+  if (storedVersion !== PROFILE_CACHE_VERSION) {
+    localStorage.removeItem(PROFILE_CACHE_KEY);
+    localStorage.setItem(PROFILE_VERSION_KEY, PROFILE_CACHE_VERSION);
+  }
+}
 
 const useAuthStore = create((set, get) => ({
   user: null,

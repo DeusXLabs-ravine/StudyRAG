@@ -142,6 +142,8 @@ export default function Chat() {
   const [isPhotoActive, setIsPhotoActive] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isTeachOpen, setIsTeachOpen] = useState(false);
+  const [selectedTeachDocId, setSelectedTeachDocId] = useState(null);
+  const [showTeachDocPicker, setShowTeachDocPicker] = useState(false);
   const [lastMessageTime, setLastMessageTime] = useState(Date.now());
   const voiceInputEnabled = useSettingsStore(state => state.settings.a11y_voice_input === 'true');
   const { isListening: isVoiceListening, isSupported: isVoiceSupported, toggle: voiceToggle } = useVoiceInput({
@@ -151,6 +153,7 @@ export default function Chat() {
   const scrollContainerRef = useRef(null);
   const fileInputRef = useRef(null);
   const chatTextareaRef = useRef(null);
+  const teachPickerRef = useRef(null);
 
   const activeSession = chatSessions.find(session => session.id === activeSessionId) || null;
   const messages = activeSession?.messages || [];
@@ -200,6 +203,18 @@ export default function Chat() {
   useEffect(() => {
     saveActiveChatSessionId(activeSessionId);
   }, [activeSessionId]);
+
+  // Close teach doc picker when clicking outside
+  useEffect(() => {
+    if (!showTeachDocPicker) return;
+    const handleClickOutside = (e) => {
+      if (teachPickerRef.current && !teachPickerRef.current.contains(e.target)) {
+        setShowTeachDocPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showTeachDocPicker]);
 
   useEffect(() => {
     if (!activeSessionId) return;
@@ -769,25 +784,84 @@ export default function Chat() {
                       </button>
                     )}
 
-                    {/* Live Teach button */}
-                    <button
-                      type="button"
-                      onClick={() => setIsTeachOpen(true)}
-                      className="p-1.5 rounded-lg transition-all flex items-center gap-1.5"
-                      style={{
-                        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                        color: 'white',
-                        borderRadius: '0.5rem',
-                        padding: '0.375rem 0.75rem',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        boxShadow: '0 2px 12px rgba(99,102,241,0.35)',
-                      }}
-                      title="Start live audio teaching with Sage"
-                    >
-                      <GraduationCap className="h-4 w-4" />
-                      <span className="hidden sm:inline">Teach Me</span>
-                    </button>
+                    {/* Live Teach button + document picker */}
+                    <div className="relative" ref={teachPickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedTeachDocId !== null) {
+                            setIsTeachOpen(true);
+                          } else {
+                            setShowTeachDocPicker(v => !v);
+                          }
+                        }}
+                        className="p-1.5 rounded-lg transition-all flex items-center gap-1.5"
+                        style={{
+                          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                          color: 'white',
+                          borderRadius: '0.5rem',
+                          padding: '0.375rem 0.75rem',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          boxShadow: '0 2px 12px rgba(99,102,241,0.35)',
+                        }}
+                        title="Start live audio teaching with Sage"
+                      >
+                        <GraduationCap className="h-4 w-4" />
+                        <span className="hidden sm:inline">Teach Me</span>
+                      </button>
+
+                      {/* Document picker dropdown */}
+                      <AnimatePresence>
+                        {showTeachDocPicker && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 6, scale: 0.97 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 6, scale: 0.97 }}
+                            transition={{ duration: 0.15 }}
+                            className="absolute bottom-full mb-2 right-0 z-50 min-w-[220px] rounded-xl overflow-hidden shadow-2xl"
+                            style={{ background: '#1e1b2e', border: '1px solid rgba(139,92,246,0.25)' }}
+                          >
+                            <div className="px-3 py-2 border-b border-white/10">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-purple-300/70">Choose a document</p>
+                            </div>
+                            <div className="max-h-56 overflow-y-auto">
+                              {/* "All documents" option */}
+                              <button
+                                type="button"
+                                className="w-full text-left px-3 py-2.5 flex items-center justify-between gap-2 hover:bg-white/5 transition-colors group"
+                                onClick={() => {
+                                  setSelectedTeachDocId('');
+                                  setShowTeachDocPicker(false);
+                                  setIsTeachOpen(true);
+                                }}
+                              >
+                                <span className="text-xs font-semibold text-white/70 group-hover:text-white truncate">Knowledge Vault (all)</span>
+                                <span className="text-[10px] font-bold text-purple-400 flex-shrink-0">Start →</span>
+                              </button>
+                              {readyDocs.map(doc => (
+                                <button
+                                  key={doc.id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2.5 flex items-center justify-between gap-2 hover:bg-white/5 transition-colors group"
+                                  onClick={() => {
+                                    setSelectedTeachDocId(doc.id);
+                                    setShowTeachDocPicker(false);
+                                    setIsTeachOpen(true);
+                                  }}
+                                >
+                                  <span className="text-xs font-semibold text-white/70 group-hover:text-white truncate">{doc.originalName || doc.name}</span>
+                                  <span className="text-[10px] font-bold text-purple-400 flex-shrink-0">Start →</span>
+                                </button>
+                              ))}
+                              {readyDocs.length === 0 && (
+                                <p className="px-3 py-3 text-xs text-white/30 italic">No documents ready yet</p>
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-1.5 min-w-0">
@@ -816,21 +890,22 @@ export default function Chat() {
       {/* Gemini Live Teacher Modal */}
       <GeminiLiveTeacher
         isOpen={isTeachOpen}
-        onClose={() => setIsTeachOpen(false)}
-        moduleTitle={selectedDocId
-          ? (readyDocs.find(d => d.id === selectedDocId)?.originalName
-            || readyDocs.find(d => d.id === selectedDocId)?.name
+        onClose={() => { setIsTeachOpen(false); setSelectedTeachDocId(null); }}
+        moduleTitle={selectedTeachDocId
+          ? (readyDocs.find(d => d.id === selectedTeachDocId)?.originalName
+            || readyDocs.find(d => d.id === selectedTeachDocId)?.name
             || 'Your Document')
           : 'Your Knowledge Vault'
         }
         content=""
-        contextLabel={selectedDocId
-          ? readyDocs.find(d => d.id === selectedDocId)?.originalName
-            || readyDocs.find(d => d.id === selectedDocId)?.name
+        moduleTopic=""
+        contextLabel={selectedTeachDocId
+          ? readyDocs.find(d => d.id === selectedTeachDocId)?.originalName
+            || readyDocs.find(d => d.id === selectedTeachDocId)?.name
           : 'Full Knowledge Vault'
         }
         teachingLevel="intermediate"
-        documentId={selectedDocId}
+        documentId={selectedTeachDocId || null}
       />
     </div>
   );

@@ -18,6 +18,39 @@ const NCBI_API_KEY = process.env.NCBI_API_KEY || '';
 // Delay between NCBI calls to respect rate limits (no API key = 3/sec)
 const NCBI_DELAY_MS = NCBI_API_KEY ? 100 : 350;
 
+// ─── Network Circuit Breaker ───────────────────────────────────
+// After CIRCUIT_THRESHOLD consecutive fetch failures, stop trying for
+// CIRCUIT_RESET_MS milliseconds. This prevents log spam when Railway
+// can't reach NIH/NLM external APIs.
+const CIRCUIT_THRESHOLD = 3;
+const CIRCUIT_RESET_MS = 5 * 60 * 1000; // 5 minutes
+const _circuit = { failures: 0, openUntil: 0 };
+
+function isCircuitOpen() {
+  if (_circuit.openUntil > Date.now()) return true;
+  if (_circuit.openUntil > 0) {
+    // Reset after cooldown
+    _circuit.failures = 0;
+    _circuit.openUntil = 0;
+  }
+  return false;
+}
+
+function recordCircuitFailure(label) {
+  _circuit.failures++;
+  if (_circuit.failures >= CIRCUIT_THRESHOLD) {
+    _circuit.openUntil = Date.now() + CIRCUIT_RESET_MS;
+    console.warn(`[MedResources] External API circuit open — NIH/NLM unreachable, pausing for ${CIRCUIT_RESET_MS / 60000}min`);
+  } else {
+    console.warn(`[MedResources] ${label} (failure ${_circuit.failures}/${CIRCUIT_THRESHOLD})`);
+  }
+}
+
+function recordCircuitSuccess() {
+  _circuit.failures = 0;
+  _circuit.openUntil = 0;
+}
+
 // ─── Quick Medical Content Detection (keyword-based) ──────────
 
 const MEDICAL_KEYWORDS = [
@@ -157,10 +190,12 @@ async function searchPubMed(query, maxResults = 5) {
  */
 async function lookupICD10(term, maxResults = 5) {
   try {
+    // Request extra results so we have room to filter out sequela/subsequent codes
+    const fetchCount = maxResults * 4;
     const params = new URLSearchParams({
       sf: 'code,name',
       terms: term,
-      maxList: String(maxResults),
+      maxList: String(fetchCount),
       df: 'code,name',
     });
 
@@ -175,11 +210,17 @@ async function lookupICD10(term, maxResults = 5) {
 
     if (totalCount === 0) return [];
 
-    return displayStrings.map((display, i) => ({
+    const all = displayStrings.map((display, i) => ({
       code: codes[i] || display[0],
       name: display[1] || display[0],
       displayString: `${codes[i] || ''} — ${display[1] || display[0]}`,
     }));
+
+    // Prefer non-sequela (S suffix) and non-subsequent-encounter (D suffix) codes.
+    // These are late-effect / follow-up billing codes — not useful for education.
+    const preferred = all.filter(r => !/[SD]$/.test(r.code));
+    const results = preferred.length > 0 ? preferred : all;
+    return results.slice(0, maxResults);
   } catch (err) {
     console.warn(`[ICD-10] Lookup failed for "${term}": ${err.message}`);
     return [];
@@ -194,12 +235,12 @@ async function lookupICD10(term, maxResults = 5) {
  */
 async function fetchWikiDocArticle(topic) {
   try {
-    // Step 1: Search for the article
+    // Step 1: Search for the article — fetch a few candidates to pick the best match
     const searchParams = new URLSearchParams({
       action: 'query',
       list: 'search',
       srsearch: topic,
-      srlimit: '1',
+      srlimit: '5',
       format: 'json',
       origin: '*',
     });
@@ -211,7 +252,18 @@ async function fetchWikiDocArticle(topic) {
 
     if (results.length === 0) return null;
 
-    const pageTitle = results[0].title;
+    // Pick the result whose title has the most word overlap with the topic.
+    // Falls back to first result if none match at all.
+    const topicWords = new Set(topic.toLowerCase().split(/\W+/).filter(w => w.length > 2));
+    let bestResult = results[0];
+    let bestScore = 0;
+    for (const r of results) {
+      const titleWords = r.title.toLowerCase().split(/\W+/);
+      const overlap = titleWords.filter(w => topicWords.has(w)).length;
+      if (overlap > bestScore) { bestScore = overlap; bestResult = r; }
+    }
+
+    const pageTitle = bestResult.title;
 
     // Step 2: Get article extract
     const extractParams = new URLSearchParams({
@@ -281,9 +333,9 @@ async function searchOpenTextbooks(query, maxResults = 3) {
     }
 
     const data = await res.json();
-    const textbooks = (Array.isArray(data) ? data : data.textbooks || []).slice(0, maxResults);
+    const raw = (Array.isArray(data) ? data : data.textbooks || []);
 
-    if (textbooks.length === 0) {
+    if (raw.length === 0) {
       return [{
         title: `Open Textbook Library — Search: "${query}"`,
         url: `https://open.umn.edu/opentextbooks/textbooks?q=${encodeURIComponent(query)}`,
@@ -292,6 +344,20 @@ async function searchOpenTextbooks(query, maxResults = 3) {
         subjects: [],
       }];
     }
+
+    // Score each textbook by word overlap between the query and title+subjects.
+    // This weeds out completely unrelated results that the API sometimes returns.
+    const queryWords = new Set(query.toLowerCase().split(/\W+/).filter(w => w.length > 2));
+    const scored = raw.map(tb => {
+      const titleWords = (tb.title || '').toLowerCase().split(/\W+/);
+      const subjectWords = (tb.subjects || [])
+        .map(s => (typeof s === 'string' ? s : s.name || '')).join(' ')
+        .toLowerCase().split(/\W+/);
+      const overlap = [...titleWords, ...subjectWords].filter(w => queryWords.has(w)).length;
+      return { tb, overlap };
+    });
+    scored.sort((a, b) => b.overlap - a.overlap);
+    const textbooks = scored.slice(0, maxResults).map(s => s.tb);
 
     return textbooks.map(tb => ({
       title: tb.title || 'Untitled',
@@ -360,26 +426,30 @@ async function enrichModuleWithMedicalResources({ moduleId, documentId, topic, c
     const termResources = [];
 
     // 1. PubMed search
-    try {
-      const articles = await searchPubMed(term.pubmed_query, 3);
-      for (const article of articles) {
-        termResources.push({
-          source_type: 'pubmed',
-          title: article.title,
-          url: article.url,
-          snippet: `${article.authors} — ${article.journal} (${article.pubDate})`,
-          topic: term.display_term,
-          extra_data: { pmid: article.pmid, journal: article.journal, authors: article.authors },
-        });
+    if (!isCircuitOpen()) {
+      try {
+        const articles = await searchPubMed(term.pubmed_query, 3);
+        recordCircuitSuccess();
+        for (const article of articles) {
+          termResources.push({
+            source_type: 'pubmed',
+            title: article.title,
+            url: article.url,
+            snippet: `${article.authors} — ${article.journal} (${article.pubDate})`,
+            topic: term.display_term,
+            extra_data: { pmid: article.pmid, journal: article.journal, authors: article.authors },
+          });
+        }
+      } catch (err) {
+        recordCircuitFailure(`PubMed failed for "${term.pubmed_query}": ${err.message}`);
       }
-    } catch (err) {
-      console.warn(`${prefix} PubMed failed for "${term.pubmed_query}": ${err.message}`);
     }
 
     // 2. ICD-10 lookup
-    if (term.icd10_term) {
+    if (term.icd10_term && !isCircuitOpen()) {
       try {
         const codes = await lookupICD10(term.icd10_term, 3);
+        recordCircuitSuccess();
         for (const code of codes) {
           termResources.push({
             source_type: 'icd10',
@@ -391,7 +461,7 @@ async function enrichModuleWithMedicalResources({ moduleId, documentId, topic, c
           });
         }
       } catch (err) {
-        console.warn(`${prefix} ICD-10 failed for "${term.icd10_term}": ${err.message}`);
+        recordCircuitFailure(`ICD-10 failed for "${term.icd10_term}": ${err.message}`);
       }
     }
 

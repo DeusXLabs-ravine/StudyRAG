@@ -125,6 +125,115 @@ async function generateOutlineForSegment(segmentText, segmentIndex, totalSegment
 }
 
 /**
+ * Sanitize a raw LLM JSON string before parsing:
+ * - Escape literal control characters (actual newlines/tabs) inside string values
+ * - Fix invalid escape sequences (e.g. \q → \\q so the backslash is literal)
+ */
+function sanitizeJSONContent(str) {
+  const VALID_ESCAPE = new Set(['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u']);
+  let out = '';
+  let inStr = false;
+  let esc = false;
+
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    const code = ch.charCodeAt(0);
+
+    if (esc) {
+      esc = false;
+      if (VALID_ESCAPE.has(ch)) {
+        out += ch;
+      } else {
+        // Invalid escape sequence — make the backslash literal
+        out += '\\' + ch;
+      }
+      continue;
+    }
+
+    if (ch === '\\' && inStr) { esc = true; out += ch; continue; }
+    if (ch === '"') { inStr = !inStr; out += ch; continue; }
+
+    // Unescaped control character inside a JSON string — must escape it
+    if (inStr && code < 0x20) {
+      if      (code === 9)  out += '\\t';
+      else if (code === 10) out += '\\n';
+      else if (code === 13) out += '\\r';
+      else if (code === 8)  out += '\\b';
+      else if (code === 12) out += '\\f';
+      else out += `\\u${code.toString(16).padStart(4, '0')}`;
+      continue;
+    }
+
+    out += ch;
+  }
+
+  return out;
+}
+
+/**
+ * Extract as many complete module objects as possible from a (potentially truncated) JSON string.
+ * Returns an array of module objects. Falls back to [] if nothing can be salvaged.
+ */
+function tryExtractModulesFromJSON(jsonStr) {
+  // Sanitize control chars / bad escapes before any parse attempt
+  const sanitized = sanitizeJSONContent(jsonStr);
+
+  // Try full parse on sanitized string
+  try {
+    const result = JSON.parse(sanitized);
+    return result.modules || [];
+  } catch (_) {
+    // Fall through to partial extraction
+  }
+
+  // Locate the modules array in the sanitized string
+  const arrayStart = (() => {
+    const m = sanitized.match(/"modules"\s*:\s*\[/);
+    if (!m) return -1;
+    return sanitized.indexOf('[', m.index);
+  })();
+  if (arrayStart === -1) return [];
+
+  const modules = [];
+  let i = arrayStart + 1;
+
+  while (i < sanitized.length) {
+    // Skip whitespace
+    while (i < sanitized.length && /\s/.test(sanitized[i])) i++;
+    if (i >= sanitized.length || sanitized[i] === ']') break;
+    if (sanitized[i] !== '{') break;
+
+    // Walk to the matching closing brace
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    const objStart = i;
+
+    for (; i < sanitized.length; i++) {
+      const ch = sanitized[i];
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\' && inString) { escaped = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          try { modules.push(JSON.parse(sanitized.slice(objStart, i + 1))); } catch (_) { /* skip malformed */ }
+          i++;
+          break;
+        }
+      }
+    }
+
+    if (depth !== 0) break; // Incomplete object — stop here
+    while (i < sanitized.length && /[\s,]/.test(sanitized[i])) i++;
+  }
+
+  return modules;
+}
+
+/**
  * Phase 2: Generate full module content for a batch of outlined modules.
  * Each batch is typically 3 modules — keeps output manageable per LLM call.
  */
@@ -160,7 +269,12 @@ async function generateModuleBatch(segmentText, fullOutline, batchModules, batch
   }, 3, 1);
   const text = result.response.text();
   const jsonStr = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  return JSON.parse(jsonStr);
+  const modules = tryExtractModulesFromJSON(jsonStr);
+  if (modules.length === 0) {
+    // Nothing salvageable — surface the original parse error for upstream logging
+    JSON.parse(jsonStr);
+  }
+  return { modules };
 }
 
 /**
@@ -275,6 +389,13 @@ async function generateModulesForSegment(segmentText, segmentIndex, totalSegment
   }
 
   console.log(`[moduleGenerator] Segment ${segmentIndex + 1}: ${allModules.length} modules from ${batches.length} batches`);
+
+  // If every batch failed or returned nothing, fall back to the single-call approach
+  if (allModules.length === 0) {
+    console.warn(`[moduleGenerator] All batches returned 0 modules for segment ${segmentIndex + 1}, falling back to legacy single-call`);
+    return generateModulesForSegmentLegacy(segmentText, segmentIndex, totalSegments, teachingLevel, interests, learningStyle, learningPace);
+  }
+
   return { modules: allModules };
 }
 
@@ -359,16 +480,19 @@ async function insertModuleResults(docId, segmentResults, startOrderIndex, opts 
           getUserInterests(userId),
         ]);
 
-        for (const row of allModuleRows) {
-          try {
-            await generateModuleDiagrams(
-              row.id, docId, row.topic || row.title,
-              row.content, teachingLevel, interests, userId
-            );
-          } catch (err) {
-            console.warn(`[moduleGenerator] Background diagram gen failed for module ${row.id.slice(0, 8)}: ${err.message}`);
-          }
-        }
+        await runWithConcurrency(
+          allModuleRows.map(row => async () => {
+            try {
+              await generateModuleDiagrams(
+                row.id, docId, row.topic || row.title,
+                row.content, teachingLevel, interests, userId
+              );
+            } catch (err) {
+              console.warn(`[moduleGenerator] Background diagram gen failed for module ${row.id.slice(0, 8)}: ${err.message}`);
+            }
+          }),
+          3   // max 3 concurrent diagram jobs
+        );
         console.log(`[moduleGenerator] Background diagram generation complete for ${allModuleRows.length} modules`);
       } catch (err) {
         console.error(`[moduleGenerator] Background diagram generation error: ${err.message}`);
@@ -388,19 +512,22 @@ async function insertModuleResults(docId, segmentResults, startOrderIndex, opts 
           return;
         }
 
-        for (const row of allModuleRows) {
-          try {
-            await enrichModuleWithMedicalResources({
-              moduleId: row.id,
-              documentId: docId,
-              topic: row.topic || row.title,
-              content: row.content,
-              userId,
-            });
-          } catch (err) {
-            console.warn(`[moduleGenerator] Medical enrichment failed for module ${row.id.slice(0, 8)}: ${err.message}`);
-          }
-        }
+        await runWithConcurrency(
+          allModuleRows.map(row => async () => {
+            try {
+              await enrichModuleWithMedicalResources({
+                moduleId: row.id,
+                documentId: docId,
+                topic: row.topic || row.title,
+                content: row.content,
+                userId,
+              });
+            } catch (err) {
+              console.warn(`[moduleGenerator] Medical enrichment failed for module ${row.id.slice(0, 8)}: ${err.message}`);
+            }
+          }),
+          2   // max 2 concurrent medical enrichment jobs
+        );
         console.log(`[moduleGenerator] Medical resource enrichment complete for ${allModuleRows.length} modules`);
       } catch (err) {
         console.error(`[moduleGenerator] Medical enrichment error: ${err.message}`);
@@ -418,6 +545,25 @@ async function insertModuleResults(docId, segmentResults, startOrderIndex, opts 
 async function generateInitialModules(docId, documentText, userId = null) {
   // Mark as generating from the very start so the frontend knows modules are in progress
   _generatingDocs.add(docId);
+
+  // ── Guard: detect empty / near-empty text extraction ─────────────────────
+  // This happens with scanned PDFs (image-only, no text layer) or corrupt files.
+  // Without this check the LLM receives an empty prompt and generates generic
+  // garbage about "what a document is" — completely useless to the student.
+  const cleanedText = (documentText || '').trim();
+  const MIN_MEANINGFUL_CHARS = 300;
+
+  if (cleanedText.length < MIN_MEANINGFUL_CHARS) {
+    _generatingDocs.delete(docId);
+    const reason = cleanedText.length === 0
+      ? 'No text could be extracted from this file.'
+      : `Only ${cleanedText.length} characters extracted — the file may be a scanned image PDF with no text layer.`;
+    console.warn(`[moduleGenerator] ${docId.slice(0, 8)} skipped module generation: ${reason}`);
+    throw new Error(
+      `Unable to generate study modules: ${reason} ` +
+      `If this is a scanned document, please use a PDF with a text layer (OCR'd) or copy-paste the text as a .txt file.`
+    );
+  }
 
   const [teachingLevel, interests, learningStyle, learningPace] = await Promise.all([
     getUserTeachingLevel(userId),
@@ -451,6 +597,9 @@ async function generateInitialModules(docId, documentText, userId = null) {
  * Individual segment failures are caught and logged — they don't kill the pipeline.
  */
 async function generateRemainingModules(docId, documentText, userId = null) {
+  // Skip if text is too short (matches guard in generateInitialModules)
+  if (!documentText || documentText.trim().length < 300) return;
+
   const [teachingLevel, interests, learningStyle, learningPace] = await Promise.all([
     getUserTeachingLevel(userId),
     getUserInterests(userId),

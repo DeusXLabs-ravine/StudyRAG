@@ -25,6 +25,14 @@ const config = {
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY,
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET,
   deepseekApiKey: process.env.DEEPSEEK_API_KEY,
+  monnifyKey: process.env.MONNIFY_API_KEY,
+  monnifySecret: process.env.MONNIFY_SECRET_KEY,
+  monnifyContractCode: process.env.MONNIFY_CONTRACT_CODE,
+  paystackSecret: process.env.PAYSTACK_SECRET_KEY,
+  appBaseUrl: process.env.APP_BASE_URL || 'https://studyrag.co',
+  revenueCatWebhookAuth: process.env.REVENUECAT_WEBHOOK_AUTH || null,
+  // Comma-separated emails that always get max tier regardless of payment
+  adminMaxEmails: (process.env.ADMIN_MAX_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean),
 };
 
 console.log(`[Config] Environment: ${config.nodeEnv}`);
@@ -35,4 +43,3 @@ if (process.env.PORT) {
 }
 
 module.exports = config;
-

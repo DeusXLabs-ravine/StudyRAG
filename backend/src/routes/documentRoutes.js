@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const upload = require('../middleware/fileUpload');
+const { cacheResponse } = require('../middleware/responseCache');
 const {
   uploadDocument,
   signUpload,
@@ -28,10 +29,10 @@ router.patch('/:id/primary', togglePrimarySource);
 
 // Legacy upload flow (fallback)
 router.post('/upload', upload.single('file'), uploadDocument);
-router.get('/', listDocuments);
-router.get('/:id', getDocument);
+router.get('/', cacheResponse(30_000), listDocuments);          // 30 s cache
+router.get('/:id', cacheResponse(60_000), getDocument);         // 1 min cache
 router.delete('/:id', deleteDocument);
-router.get('/:id/resources', getDocumentResources);
+router.get('/:id/resources', cacheResponse(5 * 60_000), getDocumentResources);  // 5 min cache
 router.post('/:id/reprocess', reprocessDocument);
 
 module.exports = router;

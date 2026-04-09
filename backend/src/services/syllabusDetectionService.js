@@ -73,20 +73,32 @@ const OPEN_ACCESS_SOURCES = [
 async function findFreeTextbooks(textbooks) {
   if (!textbooks || textbooks.length === 0) return [];
 
+  // Process up to 4 books per API call instead of 1 per call
+  const BATCH_SIZE = 4;
   const results = [];
 
-  for (const book of textbooks) {
+  for (let i = 0; i < textbooks.length; i += BATCH_SIZE) {
+    const batch = textbooks.slice(i, i + BATCH_SIZE);
+
+    const bookList = batch.map((b, idx) =>
+      `${idx + 1}. "${b.title}"${b.author ? ` by ${b.author}` : ''}${b.isbn ? ` (ISBN: ${b.isbn})` : ''}`
+    ).join('\n');
+
+    const searchPrompt = `Search for freely available online versions of these textbooks:
+${bookList}
+
+Check open-access sources: ${OPEN_ACCESS_SOURCES.map(s => s.name).join(', ')}.
+Also check author websites and university open courseware.
+
+Return ONLY a JSON array with one object per book in the same order:
+[
+  { "available": true/false, "url": "full URL or null", "source": "source name or null", "notes": "brief note" },
+  ...
+]
+
+IMPORTANT: Only set available: true if you find a genuinely free, legal version. Do not fabricate URLs.`;
+
     try {
-      const searchPrompt = `Search for a free, legally available online version of the textbook "${book.title}"${book.author ? ` by ${book.author}` : ''}.
-
-Check these open-access sources: ${OPEN_ACCESS_SOURCES.map(s => s.name).join(', ')}.
-Also check if the author has published it freely on their website or on a university's open courseware.
-
-Return ONLY valid JSON:
-{ "available": true/false, "url": "full URL or null", "source": "source name or null", "notes": "brief note" }
-
-IMPORTANT: Only return available: true if you find a genuinely free, legal version. Do not fabricate URLs.`;
-
       const result = await withRetryOnRateLimit(async () => {
         const model = getSearchGroundedModel('fast');
         return model.generateContent(searchPrompt);
@@ -94,28 +106,35 @@ IMPORTANT: Only return available: true if you find a genuinely free, legal versi
       const responseText = result.response.text();
       const jsonStr = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       const parsed = JSON.parse(jsonStr);
+      const batchResults = Array.isArray(parsed) ? parsed : [parsed];
 
-      results.push({
-        title: book.title,
-        author: book.author,
-        isbn: book.isbn,
-        required: book.required,
-        available: parsed.available || false,
-        url: parsed.url || null,
-        source: parsed.source || null,
-        notes: parsed.notes || null,
+      batch.forEach((book, idx) => {
+        const r = batchResults[idx] || {};
+        results.push({
+          title: book.title,
+          author: book.author,
+          isbn: book.isbn,
+          required: book.required,
+          available: r.available || false,
+          url: r.url || null,
+          source: r.source || null,
+          notes: r.notes || null,
+        });
       });
     } catch (err) {
-      console.error(`[syllabusDetection] Free textbook search failed for "${book.title}":`, err.message);
-      results.push({
-        title: book.title,
-        author: book.author,
-        isbn: book.isbn,
-        required: book.required,
-        available: false,
-        url: null,
-        source: null,
-        notes: 'Search failed',
+      console.error(`[syllabusDetection] Free textbook batch search failed:`, err.message);
+      // On failure, mark whole batch as unavailable
+      batch.forEach(book => {
+        results.push({
+          title: book.title,
+          author: book.author,
+          isbn: book.isbn,
+          required: book.required,
+          available: false,
+          url: null,
+          source: null,
+          notes: 'Search failed',
+        });
       });
     }
   }
