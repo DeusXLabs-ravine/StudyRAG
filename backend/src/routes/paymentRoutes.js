@@ -208,7 +208,7 @@ router.get('/verify/:reference', async (req, res) => {
 
     // 5. Determine tier from amount, with metadata fallback
     let newTier = 'free';
-    if (transaction.amount == 5000)  newTier = 'basic';
+    if (transaction.amount == 5000) newTier = 'basic';
     if (transaction.amount == 20000) newTier = 'pro';
     if (transaction.amount == 50000) newTier = 'max';
 
