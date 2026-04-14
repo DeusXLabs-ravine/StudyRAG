@@ -182,6 +182,12 @@ if (process.env.NODE_ENV === 'production') {
     lastModified: false,
   }));
 
+  // Apple Pay domain verification file
+  app.get('/.well-known/apple-developer-merchantid-domain-association', (req, res) => {
+    res.set('Content-Type', 'application/text'); // Paystack specifically requests this content-type
+    res.sendFile(path.join(__dirname, '../../frontend/dist/.well-known/apple-developer-merchantid-domain-association'));
+  });
+
   // All other static files (index.html, robots.txt, etc.) — short cache.
   app.use(express.static(distPath, {
     maxAge: '5m',

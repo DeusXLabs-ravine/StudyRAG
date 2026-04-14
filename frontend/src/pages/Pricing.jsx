@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PublicNavbar from '../components/layout/PublicNavbar';
 import Footer from '../components/layout/Footer';
@@ -159,10 +159,20 @@ export default function Pricing() {
   }), []);
 
   const isNG = isNigerianUser();
+  const [canApplePay, setCanApplePay] = useState(false);
+
+  // Check for Apple Pay support on mount
+  useEffect(() => {
+    if (window.ApplePaySession && window.ApplePaySession.canMakePayments()) {
+      setCanApplePay(true);
+    }
+  }, []);
 
   const paymentChannels = [
     { id: 'card', name: 'Pay with Card', icon: CreditCard, description: 'Visa, Mastercard, Verve' },
-    { id: 'apple_pay', name: 'Pay with Apple Pay', icon: ApplePayIcon, description: 'Quick checkout on Apple devices' },
+    ...(canApplePay ? [
+      { id: 'apple_pay', name: 'Pay with Apple Pay', icon: ApplePayIcon, description: 'Quick checkout on Apple devices' }
+    ] : []),
     ...(isNG ? [
       { id: 'bank_transfer', name: 'Pay via Bank Transfer', icon: Send, description: 'Transfer directly from your bank' },
       { id: 'bank', name: 'Pay via Bank or USSD', icon: Landmark, description: 'Use your bank account or USSD code' },

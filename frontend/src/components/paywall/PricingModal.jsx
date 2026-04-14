@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Check, Star, Sparkles, Crown, Zap, CreditCard, Landmark, Send, Loader2 } from 'lucide-react';
 import { formatTierPrice, isNigerianUser } from '../../utils/currency';
@@ -56,12 +56,14 @@ const ApplePayIcon = ({ className }) => (
   </svg>
 );
 
-const getPaymentChannels = () => {
+const getPaymentChannels = (canApplePay = false) => {
   const isNG = isNigerianUser();
   const channels = [
     { id: 'card', name: 'Debit / Credit Card', icon: CreditCard, desc: 'Visa, Mastercard' },
-    { id: 'apple_pay', name: 'Apple Pay', icon: ApplePayIcon, desc: 'Pay with Apple Pay' },
   ];
+  if (canApplePay) {
+    channels.push({ id: 'apple_pay', name: 'Apple Pay', icon: ApplePayIcon, desc: 'Pay with Apple Pay' });
+  }
   if (isNG) {
     channels.push(
       { id: 'bank_transfer', name: 'Bank Transfer', icon: Send, desc: 'Direct bank transfer' },
@@ -103,6 +105,13 @@ export default function PricingModal({ isOpen, onClose, highlightTier, currentTi
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(null); // tier name after success
+  const [canApplePay, setCanApplePay] = useState(false);
+
+  useEffect(() => {
+    if (window.ApplePaySession && window.ApplePaySession.canMakePayments()) {
+      setCanApplePay(true);
+    }
+  }, []);
 
   if (!isOpen) return null;
 
@@ -244,7 +253,7 @@ export default function PricingModal({ isOpen, onClose, highlightTier, currentTi
               )}
 
               <div className="space-y-2.5">
-                {getPaymentChannels().map((ch) => {
+                {getPaymentChannels(canApplePay).map((ch) => {
                   const Icon = ch.icon;
                   return (
                     <button
