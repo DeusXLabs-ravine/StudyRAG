@@ -4,5 +4,7 @@ dist/
 *.log
 .DS_Store
 .claude/
+.expo/
 backend/data/
 *.p8
+mobile/.expo/

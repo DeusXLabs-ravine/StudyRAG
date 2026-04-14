@@ -1,18 +1,38 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, Sparkles, GraduationCap, Gamepad2, FlaskConical, Lock, Radio } from 'lucide-react';
+import { X, Sparkles, GraduationCap, Gamepad2, FlaskConical, Lock, Radio, Mic, Cpu, Image as ImageIcon } from 'lucide-react';
+import PricingModal from './PricingModal';
+import { useSubscription } from '../../hooks/useSubscription';
 
 const FEATURE_META = {
-  teach:       { icon: GraduationCap, label: 'Teach Mode',        desc: 'Live audio sessions with your AI tutor, Sage.',                                tier: 'Pro' },
-  games:       { icon: Gamepad2,      label: 'In-Chat Games',     desc: 'Quiz games, speed rounds, and matching challenges.',                            tier: 'Pro' },
-  simulations: { icon: FlaskConical,  label: 'Physics Lab',       desc: 'Interactive simulations and 3D science experiments.',                           tier: 'Pro' },
-  documents:   { icon: Lock,          label: 'More Documents',    desc: 'Upload more study materials to your library.',                                   tier: 'Basic' },
-  podcast:     { icon: Radio,         label: 'Study Break Podcast', desc: 'Two AI hosts discuss your module using analogies tailored to your interests.', tier: 'Max' },
+  teach:       { icon: GraduationCap, label: 'Teach Mode',          desc: 'Live audio sessions with your AI tutor, Sage.',                                tier: 'Pro' },
+  games:       { icon: Gamepad2,      label: 'In-Chat Games',       desc: 'Quiz games, speed rounds, and matching challenges.',                            tier: 'Pro' },
+  simulations: { icon: FlaskConical,  label: 'Physics Lab',         desc: 'Interactive simulations and 3D science experiments.',                           tier: 'Pro' },
+  documents:   { icon: Lock,          label: 'More Documents',      desc: 'Upload more study materials to your library.',                                   tier: 'Basic' },
+  podcast:     { icon: Radio,         label: 'Study Break Podcast', desc: 'Two AI hosts discuss your module using analogies tailored to your interests.',   tier: 'Pro' },
+  live:        { icon: Mic,           label: 'Live Teaching',       desc: 'Real-time voice teaching sessions with Sage.',                                  tier: 'Pro' },
+  tts:         { icon: Radio,         label: 'Audio Generation',    desc: 'Generate podcast-style audio for any study material.',                           tier: 'Pro' },
+  proModels:   { icon: Cpu,           label: 'Pro AI Models',       desc: 'Access advanced reasoning models for deeper analysis.',                         tier: 'Pro' },
+  diagrams:    { icon: ImageIcon,     label: 'Diagram Generation',  desc: 'Generate diagrams and illustrations for visual learning.',                      tier: 'Pro' },
 };
 
 export default function UpgradeModal({ feature, onClose }) {
   const navigate = useNavigate();
+  const { tier: currentTier } = useSubscription();
+  const [showPricing, setShowPricing] = useState(false);
   const meta = FEATURE_META[feature] || { icon: Sparkles, label: 'Premium Feature', desc: 'Upgrade to unlock this feature.', tier: 'Pro' };
   const Icon = meta.icon;
+
+  if (showPricing) {
+    return (
+      <PricingModal
+        isOpen={true}
+        onClose={() => { setShowPricing(false); onClose(); }}
+        highlightTier={meta.tier.toLowerCase()}
+        currentTier={currentTier}
+      />
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -41,10 +61,10 @@ export default function UpgradeModal({ feature, onClose }) {
         <p className="text-sm text-gray-500 mb-6">{meta.desc}</p>
 
         <button
-          onClick={() => { onClose(); navigate('/pricing'); }}
+          onClick={() => setShowPricing(true)}
           className="w-full bg-primary text-white font-bold py-3 rounded-2xl hover:bg-primary/90 transition-colors mb-2"
         >
-          Upgrade to {meta.tier}
+          View Plans
         </button>
         <button
           onClick={onClose}

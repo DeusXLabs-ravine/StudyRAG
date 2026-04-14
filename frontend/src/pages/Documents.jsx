@@ -76,7 +76,7 @@ export default function Documents() {
   } = useDocumentStore();
 
   const { courses, fetchCourses } = useCourseStore();
-  const { docLimit, docCount, isAtDocLimit } = useSubscription();
+  const { docLimit, docLimitLabel, docCount, isAtDocLimit, isUnlimited } = useSubscription();
   const [showDocUpgradeModal, setShowDocUpgradeModal] = useState(false);
 
   const [activeTab, setActiveTab] = useState('file');
@@ -236,14 +236,18 @@ export default function Documents() {
           </div>
           {/* Document quota */}
           <div className="flex flex-col items-end gap-1 min-w-[120px]">
-            <span className="text-xs font-bold text-gray-500">{docCount} / {docLimit} documents</span>
-            <div className="w-32 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${isAtDocLimit ? 'bg-red-400' : docCount / docLimit > 0.75 ? 'bg-amber-400' : 'bg-primary'}`}
-                style={{ width: `${Math.min((docCount / docLimit) * 100, 100)}%` }}
-              />
-            </div>
-            {isAtDocLimit && (
+            <span className="text-xs font-bold text-gray-500">
+              {isUnlimited ? `${docCount} documents • Unlimited access` : `${docCount} / ${docLimitLabel} documents`}
+            </span>
+            {!isUnlimited && (
+              <div className="w-32 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${isAtDocLimit ? 'bg-red-400' : docCount / docLimit > 0.75 ? 'bg-amber-400' : 'bg-primary'}`}
+                  style={{ width: `${Math.min((docCount / docLimit) * 100, 100)}%` }}
+                />
+              </div>
+            )}
+            {!isUnlimited && isAtDocLimit && (
               <button
                 onClick={() => setShowDocUpgradeModal(true)}
                 className="text-[10px] font-bold text-primary hover:underline"

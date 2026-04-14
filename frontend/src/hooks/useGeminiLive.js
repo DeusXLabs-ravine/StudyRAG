@@ -26,6 +26,11 @@ export default function useGeminiLive({
   const [error, setError] = useState(null);
 
   const start = useCallback(async (contextOverride = {}) => {
+    if (state === 'connecting') {
+      console.warn('[useGeminiLive] Connection already in progress, ignoring duplicate start.');
+      return;
+    }
+
     if (sessionRef.current) {
       sessionRef.current.stop();
       sessionRef.current = null;

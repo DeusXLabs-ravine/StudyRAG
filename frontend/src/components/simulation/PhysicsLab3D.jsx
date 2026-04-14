@@ -64,6 +64,7 @@ function Scene({ simulations, onSelect }) {
 }
 
 export default function PhysicsLab3D({ simulations, onSelect }) {
+    const safeSimulations = Array.isArray(simulations) ? simulations : [];
     return (
         <div className="w-full h-[700px] bg-[#f8f9fa] rounded-[2.5rem] overflow-hidden border-2 border-white shadow-[0_50px_100px_-20px_rgba(0,0,0,0.15)] relative">
             <div className="absolute top-8 left-8 z-10 flex flex-col gap-2 pointer-events-none">
@@ -108,7 +109,7 @@ export default function PhysicsLab3D({ simulations, onSelect }) {
                         dampingFactor={0.05}
                     />
 
-                    <Scene simulations={simulations} onSelect={onSelect} />
+                    <Scene simulations={safeSimulations} onSelect={onSelect} />
 
                     <ambientLight intensity={0.6} />
                     <spotLight position={[15, 20, 15]} angle={0.3} penumbra={1} intensity={2} castShadow />

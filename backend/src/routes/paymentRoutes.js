@@ -7,12 +7,40 @@ const crypto = require('crypto');
 const { appBaseUrl } = require('../config/env');
 const { getSubscriptionSnapshotForUser } = require('../services/subscriptionService');
 
-// Map frontend tier names to prices
+// ── Tier pricing (NGN) ──────────────────────────────────────────────────────
 const TIER_PRICING = {
   basic: 5000,
   pro: 20000,
-  max: 30000
+  max: 50000,
 };
+
+// ── Valid Paystack channels ─────────────────────────────────────────────────
+// See https://paystack.com/docs/payments/payment-channels/
+// card | bank | ussd | qr | mobile_money | bank_transfer | apple_pay | eft
+const PAYSTACK_CHANNEL_MAP = {
+  card: 'card',
+  apple_pay: 'apple_pay',
+  bank_transfer: 'bank_transfer',
+  bank: 'bank',
+  ussd: 'ussd',
+  qr: 'qr',
+  mobile_money: 'mobile_money',
+  eft: 'eft',
+};
+const DEFAULT_PAYSTACK_CHANNELS = ['card', 'bank', 'ussd', 'bank_transfer', 'apple_pay'];
+
+// ── Paystack → Monnify channel mapping ──────────────────────────────────────
+// Monnify uses CARD | ACCOUNT_TRANSFER | USSD | PHONE_NUMBER
+const PAYSTACK_TO_MONNIFY_MAP = {
+  card: 'CARD',
+  bank_transfer: 'ACCOUNT_TRANSFER',
+  bank: 'ACCOUNT_TRANSFER',
+  ussd: 'USSD',
+  mobile_money: 'PHONE_NUMBER',
+};
+const DEFAULT_MONNIFY_CHANNELS = ['CARD', 'ACCOUNT_TRANSFER', 'USSD'];
+
+// ── Subscription ────────────────────────────────────────────────────────────
 
 router.get('/subscription', async (req, res, next) => {
   try {
@@ -23,24 +51,30 @@ router.get('/subscription', async (req, res, next) => {
   }
 });
 
+// ── Checkout (inline popup preferred) ───────────────────────────────────────
+
 router.post('/checkout', async (req, res, next) => {
   try {
     const { tier, gateway = 'paystack', channel } = req.body;
-    const user = req.user; // Appended by requireAuth middleware
-    
+    const user = req.user;
+
     if (!tier || !TIER_PRICING[tier.toLowerCase()]) {
       return res.status(400).json({ error: 'Invalid tier specified.' });
     }
 
     const amount = TIER_PRICING[tier.toLowerCase()];
     const paymentReference = `SRAG_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
-    
+
     let checkoutUrl = '';
     let transactionReference = '';
+    let accessCode = '';
     let actualGateway = '';
 
-    const paystackChannels = channel ? [channel] : ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'];
-    const monnifyChannels = channel ? [channel.toUpperCase()] : ['CARD', 'ACCOUNT_TRANSFER', 'USSD'];
+    // Resolve channel → valid Paystack channel(s)
+    const resolvedChannel = channel ? PAYSTACK_CHANNEL_MAP[channel] : null;
+    const paystackChannels = resolvedChannel ? [resolvedChannel] : DEFAULT_PAYSTACK_CHANNELS;
+    const monnifyChannel = channel ? PAYSTACK_TO_MONNIFY_MAP[channel] : null;
+    const monnifyChannels = monnifyChannel ? [monnifyChannel] : DEFAULT_MONNIFY_CHANNELS;
 
     if (gateway === 'paystack') {
       try {
@@ -49,42 +83,50 @@ router.post('/checkout', async (req, res, next) => {
           customerEmail: user.email,
           paymentReference,
           callbackUrl: `${appBaseUrl}/payment/verify?reference=${paymentReference}`,
-          channels: paystackChannels
+          channels: paystackChannels,
+          metadata: {
+            tier: tier.toLowerCase(),
+            userId: user.id,
+            custom_fields: [
+              { display_name: 'Plan', variable_name: 'plan', value: `StudyRAG ${tier.toUpperCase()}` },
+            ],
+          },
         });
         checkoutUrl = response.authorization_url;
+        accessCode = response.access_code;           // ← for inline popup
         transactionReference = response.access_code;
         actualGateway = 'paystack';
       } catch (err) {
         console.warn('[PaymentRoutes] Paystack failed, falling back to Monnify', err.message);
-        // Fallback to Monnify
         const response = await monnifyService.initializeTransaction({
           amount,
           customerName: user.display_name || 'StudyRAG Student',
           customerEmail: user.email,
           paymentReference,
           paymentDescription: `StudyRAG ${tier.toUpperCase()} Subscription`,
-          paymentMethods: monnifyChannels
+          redirectUrl: `${appBaseUrl}/payment/verify?reference=${paymentReference}`,
+          paymentMethods: monnifyChannels,
         });
         checkoutUrl = response.checkoutUrl;
         transactionReference = response.transactionReference;
         actualGateway = 'monnify';
       }
     } else {
-      // Monnify forced
       const response = await monnifyService.initializeTransaction({
         amount,
         customerName: user.display_name || 'StudyRAG Student',
         customerEmail: user.email,
         paymentReference,
         paymentDescription: `StudyRAG ${tier.toUpperCase()} Subscription`,
-        paymentMethods: monnifyChannels
+        redirectUrl: `${appBaseUrl}/payment/verify?reference=${paymentReference}`,
+        paymentMethods: monnifyChannels,
       });
       checkoutUrl = response.checkoutUrl;
       transactionReference = response.transactionReference;
       actualGateway = 'monnify';
     }
 
-    // Save transaction to database as PENDING (non-fatal — don't block checkout if table missing)
+    // Save PENDING transaction (non-fatal)
     const { error: dbError } = await supabase
       .from('transactions')
       .insert([{
@@ -101,12 +143,13 @@ router.post('/checkout', async (req, res, next) => {
       }]);
 
     if (dbError) {
-      // Log but don't block — user can still pay, webhook will handle upgrade
-      console.warn('[PaymentRoutes] Could not record transaction in DB (non-fatal):', dbError.message);
+      console.warn('[PaymentRoutes] DB insert failed (non-fatal):', dbError.message);
     }
 
+    // Return access_code for inline popup + checkoutUrl as fallback
     res.json({
-      checkoutUrl,
+      accessCode: accessCode || null,      // frontend uses this for inline popup
+      checkoutUrl: checkoutUrl || null,     // fallback for redirect / Monnify
       paymentReference,
       transactionReference,
     });
@@ -117,18 +160,19 @@ router.post('/checkout', async (req, res, next) => {
   }
 });
 
+// ── Verify ──────────────────────────────────────────────────────────────────
+
 /**
  * GET /api/payment/verify/:reference
- * Called by the frontend when the user returns from Paystack's hosted checkout page.
- * Checks DB first (webhook may have already processed it), then falls back to
- * calling Paystack's verify API and processing the upgrade if confirmed.
+ * Called by the frontend after Paystack inline popup succeeds, or when the
+ * user returns from a hosted redirect page.
  */
 router.get('/verify/:reference', async (req, res) => {
   const { reference } = req.params;
   const user = req.user;
 
   try {
-    // 1. Look up transaction in DB
+    // 1. Look up transaction
     const { data: transaction, error: txError } = await supabase
       .from('transactions')
       .select('*')
@@ -150,23 +194,29 @@ router.get('/verify/:reference', async (req, res) => {
       return res.json({ status: 'success', tier: profile?.subscription_tier, transaction });
     }
 
-    // 3. Still pending — only Paystack supports on-demand verify
+    // 3. Only Paystack supports on-demand verify
     if (transaction.payment_method !== 'paystack') {
       return res.json({ status: 'pending', transaction });
     }
 
-    // 4. Call Paystack verify API
+    // 4. Verify with Paystack API
     const paystackData = await paystackService.verifyTransaction(reference);
 
     if (paystackData.status !== 'success') {
       return res.json({ status: paystackData.status, transaction });
     }
 
-    // 5. Confirmed paid — determine tier and upgrade
+    // 5. Determine tier from amount, with metadata fallback
     let newTier = 'free';
     if (transaction.amount == 5000)  newTier = 'basic';
     if (transaction.amount == 20000) newTier = 'pro';
-    if (transaction.amount == 30000) newTier = 'max';
+    if (transaction.amount == 50000) newTier = 'max';
+
+    // Metadata fallback
+    if (newTier === 'free' && paystackData.metadata?.tier) {
+      const metaTier = String(paystackData.metadata.tier).toLowerCase();
+      if (['basic', 'pro', 'max'].includes(metaTier)) newTier = metaTier;
+    }
 
     const endDate = new Date();
     endDate.setDate(endDate.getDate() + 30);
@@ -182,14 +232,13 @@ router.get('/verify/:reference', async (req, res) => {
         subscription_tier: newTier,
         subscription_status: 'active',
         subscription_end_date: endDate,
-        updated_at: new Date()
+        updated_at: new Date(),
       })
       .eq('id', user.id);
 
     console.log(`[PaymentVerify] Upgraded user ${user.id} to ${newTier.toUpperCase()} via callback verify.`);
 
     return res.json({ status: 'success', tier: newTier, transaction });
-
   } catch (error) {
     console.error('[PaymentVerify] Error:', error);
     res.status(500).json({ error: 'Failed to verify payment.' });

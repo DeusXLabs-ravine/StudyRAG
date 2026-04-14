@@ -120,6 +120,14 @@ app.get('/api/cache-stats', (req, res) => {
   });
 });
 
+app.get('/live', (_req, res) => {
+  res.status(426).json({
+    error: {
+      message: 'This endpoint requires a WebSocket upgrade.',
+    },
+  });
+});
+
 // ─── Webhooks (no auth — verified via webhook secret) ────────
 
 app.use('/webhooks', webhookRoutes);
@@ -178,10 +186,11 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(distPath, {
     maxAge: '5m',
     etag: true,
+    dotfiles: 'allow',
   }));
 
   app.get('/{*path}', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/webhooks')) {
+    if (req.path.startsWith('/api') || req.path.startsWith('/webhooks') || req.path.startsWith('/live') || req.path.startsWith('/.well-known')) {
       return next();
     }
     // index.html must not be cached aggressively (contains no hash)

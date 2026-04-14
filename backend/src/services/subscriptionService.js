@@ -2,12 +2,24 @@ const supabase = require('../config/database');
 const { adminMaxEmails } = require('../config/env');
 
 const TIER_ORDER = ['free', 'basic', 'pro', 'max'];
+const ADMIN_UNLIMITED_LIMITS = Object.freeze({
+  documents: Number.MAX_SAFE_INTEGER,
+  chats: Number.MAX_SAFE_INTEGER,
+  teach: true,
+  games: true,
+  simulations: true,
+  podcast: true,
+  live: true,
+  tts: true,
+  diagrams: Number.MAX_SAFE_INTEGER,
+  proModels: true,
+});
 
 const TIER_LIMITS = {
-  free: { documents: 2, chats: 50, teach: false, games: false, simulations: false, podcast: false },
-  basic: { documents: 10, chats: 200, teach: false, games: false, simulations: false, podcast: false },
-  pro: { documents: 50, chats: 1500, teach: true, games: true, simulations: true, podcast: false },
-  max: { documents: 200, chats: 5000, teach: true, games: true, simulations: true, podcast: true },
+  free:  { documents: 2,   chats: 50,   teach: false, games: false, simulations: false, podcast: false, live: 0,   tts: 0,   diagrams: 5,   proModels: false },
+  basic: { documents: 10,  chats: 200,  teach: false, games: false, simulations: false, podcast: false, live: 0,   tts: 0,   diagrams: 20,  proModels: false },
+  pro:   { documents: 50,  chats: 1500, teach: true,  games: true,  simulations: true,  podcast: true,  live: 20,  tts: 30,  diagrams: 100, proModels: true  },
+  max:   { documents: 200, chats: 5000, teach: true,  games: true,  simulations: true,  podcast: true,  live: 60,  tts: 100, diagrams: 500, proModels: true  },
 };
 
 function normalizeTier(tier) {
@@ -23,35 +35,52 @@ function getTierLimits(tier) {
   return TIER_LIMITS[normalizeTier(tier)] || TIER_LIMITS.free;
 }
 
-function getFeatureAccess(tier) {
-  const limits = getTierLimits(tier);
+function isFeatureEnabled(limitValue) {
+  if (limitValue === true) return true;
+  if (typeof limitValue === 'number') return limitValue > 0;
+  return Boolean(limitValue);
+}
+
+function getFeatureAccessFromLimits(limits) {
   return {
-    canTeach: limits.teach,
-    canGame: limits.games,
-    canUseSimulations: limits.simulations,
-    canPodcast: limits.podcast,
+    canTeach: isFeatureEnabled(limits.teach),
+    canGame: isFeatureEnabled(limits.games),
+    canUseSimulations: isFeatureEnabled(limits.simulations),
+    canPodcast: isFeatureEnabled(limits.podcast),
+    canUseLive: isFeatureEnabled(limits.live),
+    canUseTts: isFeatureEnabled(limits.tts),
+    canUseProModels: isFeatureEnabled(limits.proModels),
   };
+}
+
+function getFeatureAccess(tier) {
+  return getFeatureAccessFromLimits(getTierLimits(tier));
 }
 
 function buildSubscriptionSnapshot(profile = {}, email = null) {
   const adminGranted = isAdminMaxEmail(email);
-  const tier = adminGranted ? 'max' : normalizeTier(profile.subscription_tier);
+  const billingTier = normalizeTier(profile.subscription_tier);
+  const tier = adminGranted ? 'max' : billingTier;
+  const limits = adminGranted ? ADMIN_UNLIMITED_LIMITS : getTierLimits(tier);
   const status = adminGranted ? 'active' : (profile.subscription_status || (tier === 'free' ? 'inactive' : 'active'));
 
   return {
     tier,
+    billingTier,
+    planLabel: adminGranted ? 'Admin Unlimited' : tier.toUpperCase(),
     status,
     endDate: profile.subscription_end_date || null,
-    limits: getTierLimits(tier),
-    featureAccess: getFeatureAccess(tier),
+    limits,
+    featureAccess: getFeatureAccessFromLimits(limits),
     isAdminGranted: adminGranted,
+    isUnlimited: adminGranted,
   };
 }
 
 async function getSubscriptionSnapshotForUser(userId, email = null) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('subscription_tier, subscription_status, subscription_end_date, document_count')
+    .select('email, subscription_tier, subscription_status, subscription_end_date, document_count')
     .eq('id', userId)
     .single();
 
@@ -59,7 +88,7 @@ async function getSubscriptionSnapshotForUser(userId, email = null) {
     throw error;
   }
 
-  const snapshot = buildSubscriptionSnapshot(data || {}, email);
+  const snapshot = buildSubscriptionSnapshot(data || {}, email || data?.email || null);
   return {
     ...snapshot,
     documentCount: data?.document_count || 0,
@@ -144,11 +173,14 @@ async function applySubscriptionState({
 }
 
 module.exports = {
+  ADMIN_UNLIMITED_LIMITS,
   TIER_LIMITS,
   TIER_ORDER,
   normalizeTier,
   getTierLimits,
   getFeatureAccess,
+  getFeatureAccessFromLimits,
+  isFeatureEnabled,
   buildSubscriptionSnapshot,
   getSubscriptionSnapshotForUser,
   normalizeRevenueCatEvent,

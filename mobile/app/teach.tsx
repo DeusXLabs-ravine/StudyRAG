@@ -10,9 +10,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Mic, MicOff, X, BookOpen, Zap } from 'lucide-react-native';
-import { useAudioRecorder, AudioModule } from 'expo-audio';
+import { useAudioRecorder, AudioModule, type RecordingOptions } from 'expo-audio';
 import { supabase } from '@/lib/auth/supabase';
 import { env } from '@/lib/env';
+import { resolveSubscriptionAccess } from '@/lib/subscription';
 import { colors, fonts, spacing, radius } from '@/lib/theme/tokens';
 import { useAuthStore } from '@/stores/auth-store';
 import { Card } from '@/components/ui/Card';
@@ -102,16 +103,14 @@ const RECORDING_OPTIONS = {
     bitRate: 256000,
   },
   web: {},
-};
+} as unknown as RecordingOptions;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function TeachScreen() {
   const profile = useAuthStore(state => state.profile);
-  const canTeach =
-    profile?.feature_access?.canTeach ||
-    profile?.subscription_tier === 'pro' ||
-    profile?.subscription_tier === 'max';
+  const access = resolveSubscriptionAccess(profile);
+  const canTeach = access.canTeach;
 
   const [wsStatus, setWsStatus] = useState<WsStatus>('idle');
   const [isRecording, setIsRecording] = useState(false);
@@ -127,6 +126,7 @@ export default function TeachScreen() {
   const wsRef = useRef<WebSocket | null>(null);
   const isRecordingRef = useRef(false);
   const transcriptScrollRef = useRef<ScrollView>(null);
+  const userHasScrolled = useRef(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const audioRecorder = useAudioRecorder(RECORDING_OPTIONS);
@@ -221,7 +221,9 @@ export default function TeachScreen() {
           break;
         case 'transcript':
           setTranscript(prev => prev + String(msg.text ?? ''));
-          setTimeout(() => transcriptScrollRef.current?.scrollToEnd({ animated: true }), 80);
+          if (!userHasScrolled.current) {
+            setTimeout(() => transcriptScrollRef.current?.scrollToEnd({ animated: true }), 80);
+          }
           break;
         case 'user_transcript':
           setUserTranscript(prev => (prev ? `${prev} ${msg.text}` : String(msg.text ?? '')));
@@ -323,7 +325,7 @@ export default function TeachScreen() {
         <PrimaryButton label="Close" onPress={() => router.back()} variant="ghost" />
         <Card style={{ backgroundColor: colors.warningSoft }}>
           <Text style={{ color: colors.warning, fontFamily: fonts.uiBold, fontSize: 15 }}>
-            Teach mode is available on Pro and Max plans.
+            Teach mode is available on Pro and Max plans, or through admin-unlimited access.
           </Text>
           <View style={{ marginTop: 12 }}>
             <PrimaryButton label="Upgrade" onPress={() => router.push('/upgrade')} />
@@ -389,6 +391,7 @@ export default function TeachScreen() {
           style={styles.transcriptScroll}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 8 }}
+          onScrollBeginDrag={() => { userHasScrolled.current = true; }}
         >
           {transcript ? (
             <Text style={styles.transcriptText}>{transcript}</Text>

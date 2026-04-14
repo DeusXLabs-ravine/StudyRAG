@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { Screen } from '@/components/ui/Screen';
 import { SectionTitle } from '@/components/ui/SectionTitle';
+import { resolveSubscriptionAccess } from '@/lib/subscription';
 import { iconRegistry } from '@/lib/theme/iconRegistry';
 import { colors, fonts } from '@/lib/theme/tokens';
 import { useAuthStore } from '@/stores/auth-store';
@@ -14,6 +15,7 @@ import { useSettingsStore } from '@/stores/settings-store';
 
 export default function ProfileTabScreen() {
   const profile = useAuthStore(state => state.profile);
+  const access = resolveSubscriptionAccess(profile);
   const signOut = useAuthStore(state => state.signOut);
   const offerings = useBillingStore(state => state.offerings);
   const customerInfo = useBillingStore(state => state.customerInfo);
@@ -42,11 +44,16 @@ export default function ProfileTabScreen() {
             Subscription
           </Text>
           <Text style={{ color: colors.text, fontFamily: fonts.uiBlack, fontSize: 24 }}>
-            {profile?.subscription_tier?.toUpperCase() || 'FREE'}
+            {access.planLabel}
           </Text>
           <Text style={{ color: colors.textMuted, fontFamily: fonts.uiMedium, fontSize: 14, lineHeight: 20 }}>
             RevenueCat keeps mobile entitlements in sync while your StudyRAG backend continues to enforce product access.
           </Text>
+          {access.isAdminGranted ? (
+            <Text style={{ color: colors.primary, fontFamily: fonts.uiBold, fontSize: 13 }}>
+              Admin override is active, so this account is using unlimited feature access instead of normal plan caps.
+            </Text>
+          ) : null}
           <Text style={{ color: colors.textSoft, fontFamily: fonts.uiMedium, fontSize: 13 }}>
             Current offering: {offerings?.current?.identifier || 'Not loaded'}
           </Text>

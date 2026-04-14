@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { Screen } from '@/components/ui/Screen';
 import { SectionTitle } from '@/components/ui/SectionTitle';
+import { resolveSubscriptionAccess } from '@/lib/subscription';
 import { listDocuments } from '@/services/core';
 import { generateSimulationParams, getSimulationCatalog } from '@/services/practice';
 import { colors, fonts, radius } from '@/lib/theme/tokens';
@@ -12,7 +13,7 @@ import { useAuthStore } from '@/stores/auth-store';
 
 export default function SimulationsScreen() {
   const profile = useAuthStore(state => state.profile);
-  const canUseSimulations = profile?.feature_access?.canUseSimulations || profile?.subscription_tier === 'pro' || profile?.subscription_tier === 'max';
+  const { canUseSimulations } = resolveSubscriptionAccess(profile);
   const [catalog, setCatalog] = useState<Array<{ id: string; title: string; description: string }>>([]);
   const [documents, setDocuments] = useState<Array<{ id: string; title?: string; name?: string; status: string }>>([]);
   const [query, setQuery] = useState('');
@@ -45,7 +46,7 @@ export default function SimulationsScreen() {
       {!canUseSimulations ? (
         <Card style={{ backgroundColor: colors.warningSoft }}>
           <Text style={{ color: colors.warning, fontFamily: fonts.uiBold, fontSize: 15 }}>
-            Your current tier does not include simulations. Upgrade to Pro or Max to unlock this surface.
+            Your current access does not include simulations. Upgrade to Pro or Max to unlock this surface.
           </Text>
           <View style={{ marginTop: 12 }}>
             <PrimaryButton label="Upgrade" onPress={() => router.push('/upgrade')} />

@@ -7,10 +7,19 @@ class PaystackService {
   /**
    * Initialize a new transaction
    */
-  async initializeTransaction({ amount, customerEmail, paymentReference, callbackUrl, channels }) {
+  async initializeTransaction({ amount, customerEmail, paymentReference, callbackUrl, channels, metadata }) {
     try {
       // Paystack expects amount in Kobo (amount * 100)
       const amountInKobo = amount * 100;
+
+      const body = {
+        amount: amountInKobo,
+        email: customerEmail,
+        reference: paymentReference,
+        callback_url: callbackUrl,
+        channels: channels || ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
+      };
+      if (metadata) body.metadata = metadata;
 
       const response = await fetch(`${PAYSTACK_BASE_URL}/transaction/initialize`, {
         method: 'POST',
@@ -18,13 +27,7 @@ class PaystackService {
           'Authorization': `Bearer ${paystackSecret}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          amount: amountInKobo,
-          email: customerEmail,
-          reference: paymentReference,
-          callback_url: callbackUrl,
-          channels: channels || ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer']
-        })
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();

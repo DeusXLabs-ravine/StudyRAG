@@ -41,7 +41,7 @@ class MonnifyService {
   /**
    * Initialize a new transaction
    */
-  async initializeTransaction({ amount, customerName, customerEmail, paymentReference, paymentDescription, paymentMethods }) {
+  async initializeTransaction({ amount, customerName, customerEmail, paymentReference, paymentDescription, redirectUrl, paymentMethods }) {
     try {
       const accessToken = await this.getAccessToken();
 
@@ -57,6 +57,7 @@ class MonnifyService {
           customerEmail,
           paymentReference,
           paymentDescription,
+          redirectUrl,
           currencyCode: 'NGN',
           contractCode: monnifyContractCode,
           paymentMethods: paymentMethods || ['CARD', 'ACCOUNT_TRANSFER', 'USSD']

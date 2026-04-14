@@ -18,12 +18,19 @@ export type Profile = {
   subscription_tier?: SubscriptionTier;
   subscription_status?: string;
   subscription_end_date?: string | null;
+  billing_tier?: SubscriptionTier;
+  planLabel?: string;
+  isAdminGranted?: boolean;
+  isUnlimited?: boolean;
   document_count?: number;
   feature_access?: {
     canTeach: boolean;
     canGame: boolean;
     canUseSimulations: boolean;
     canPodcast: boolean;
+    canUseLive?: boolean;
+    canUseTts?: boolean;
+    canUseProModels?: boolean;
   };
 };
 
@@ -82,6 +89,7 @@ export async function fetchProfile() {
   const { data } = await api.get<{ profile: Profile | null }>('/auth/profile');
   if (data.profile) {
     data.profile.subscription_tier = normalizeTier(data.profile.subscription_tier);
+    data.profile.billing_tier = normalizeTier(data.profile.billing_tier);
   }
   return data.profile;
 }
@@ -94,11 +102,19 @@ export async function createProfile(payload: {
   academicFields?: string[];
 }) {
   const { data } = await api.post<{ profile: Profile }>('/auth/profile', payload);
+  if (data.profile) {
+    data.profile.subscription_tier = normalizeTier(data.profile.subscription_tier);
+    data.profile.billing_tier = normalizeTier(data.profile.billing_tier);
+  }
   return data.profile;
 }
 
 export async function updateProfile(payload: Partial<Profile>) {
   const { data } = await api.put<{ profile: Profile }>('/auth/profile', payload);
+  if (data.profile) {
+    data.profile.subscription_tier = normalizeTier(data.profile.subscription_tier);
+    data.profile.billing_tier = normalizeTier(data.profile.billing_tier);
+  }
   return data.profile;
 }
 

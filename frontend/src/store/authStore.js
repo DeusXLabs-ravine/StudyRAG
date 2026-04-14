@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import api from '../services/api';
 
 const PROFILE_CACHE_KEY = 'studyrag_cached_profile';
-const PROFILE_CACHE_VERSION = 'v2'; // bump this to invalidate all cached profiles
+const PROFILE_CACHE_VERSION = 'v3'; // admin-unlimited metadata changed; invalidate older cached profiles
 const PROFILE_VERSION_KEY = 'studyrag_profile_version';
 
 // One-time cache bust: clear old profile cache when version changes

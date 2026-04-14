@@ -6,13 +6,14 @@ import { Card } from '@/components/ui/Card';
 import { PrimaryButton } from '@/components/ui/PrimaryButton';
 import { Screen } from '@/components/ui/Screen';
 import { SectionTitle } from '@/components/ui/SectionTitle';
+import { resolveSubscriptionAccess } from '@/lib/subscription';
 import { getPodcastSections, listDocuments } from '@/services/core';
 import { colors, fonts } from '@/lib/theme/tokens';
 import { useAuthStore } from '@/stores/auth-store';
 
 export default function PodcastScreen() {
   const profile = useAuthStore(state => state.profile);
-  const canPodcast = profile?.feature_access?.canPodcast || profile?.subscription_tier === 'max';
+  const { canPodcast } = resolveSubscriptionAccess(profile);
   const [documents, setDocuments] = useState<Array<{ id: string; title?: string; name?: string; status: string }>>([]);
   const [selectedDocId, setSelectedDocId] = useState('');
   const [sections, setSections] = useState<
@@ -64,7 +65,7 @@ export default function PodcastScreen() {
       {!canPodcast ? (
         <Card style={{ backgroundColor: colors.warningSoft }}>
           <Text style={{ color: colors.warning, fontFamily: fonts.uiBold, fontSize: 15 }}>
-            Podcasts are part of the Max tier. Upgrade to unlock audio-first study revision.
+            Podcasts are part of Max, or available through admin-unlimited access. Upgrade to unlock audio-first study revision.
           </Text>
           <View style={{ marginTop: 12 }}>
             <PrimaryButton label="Upgrade" onPress={() => router.push('/upgrade')} />

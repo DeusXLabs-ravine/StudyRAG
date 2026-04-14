@@ -32,10 +32,14 @@ export default function useVoiceInput({ onTranscript, continuous = false }) {
     recognition.lang = 'en-US';
 
     recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map(r => r[0].transcript)
+      const transcript = Array.from(event.results || [])
+        .map((result) => result?.[0]?.transcript?.trim())
+        .filter(Boolean)
         .join(' ');
-      onTranscript?.(transcript);
+
+      if (transcript) {
+        onTranscript?.(transcript);
+      }
     };
 
     recognition.onerror = () => setIsListening(false);

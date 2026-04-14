@@ -13,6 +13,7 @@ function extractServerContentEvents(serverContent) {
 
   const events = [];
 
+  // ── Transcriptions ──────────────────────────────────────────
   if (serverContent.inputTranscription?.text) {
     events.push({ type: 'user_transcript', text: serverContent.inputTranscription.text });
   }
@@ -21,6 +22,7 @@ function extractServerContentEvents(serverContent) {
     events.push({ type: 'transcript', text: serverContent.outputTranscription.text });
   }
 
+  // ── Model turn parts (audio + text) ─────────────────────────
   if (serverContent.modelTurn?.parts) {
     for (const part of serverContent.modelTurn.parts) {
       if (part.inlineData?.mimeType?.startsWith('audio/')) {
@@ -37,11 +39,18 @@ function extractServerContentEvents(serverContent) {
     }
   }
 
+  // ── Interruption ────────────────────────────────────────────
   if (serverContent.interrupted) {
     events.push({ type: 'interrupted' });
   }
 
+  // ── Turn complete ───────────────────────────────────────────
   if (serverContent.turnComplete) {
+    events.push({ type: 'turn_complete' });
+  }
+
+  // ── Generation complete (3.1 SDK) ──────────────────────────
+  if (serverContent.generationComplete) {
     events.push({ type: 'turn_complete' });
   }
 

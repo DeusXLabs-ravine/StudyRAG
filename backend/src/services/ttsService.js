@@ -45,9 +45,32 @@ function buildWavHeader(pcmLength) {
   return buffer;
 }
 
+// Keys reserved by active Gemini Live sessions — TTS deprioritises these
+let _activeLiveKeys;
+function getActiveLiveKeys() {
+  if (!_activeLiveKeys) {
+    try { _activeLiveKeys = require('./geminiLiveProxy').activeLiveKeys; } catch { _activeLiveKeys = new Set(); }
+  }
+  return _activeLiveKeys;
+}
+
 function getAllKeys() {
   const keys = geminiApiKeys?.length ? [...geminiApiKeys] : (geminiApiKey ? [geminiApiKey] : []);
   if (!keys.length) throw new Error('No Gemini API keys configured');
+
+  // Deprioritise keys reserved by active Live sessions so TTS doesn't
+  // cause rate-limit clashes on the long-lived Live WebSocket.
+  const liveKeys = getActiveLiveKeys();
+  if (liveKeys.size > 0) {
+    const free = [];
+    const reserved = [];
+    for (const k of keys) {
+      (liveKeys.has(k) ? reserved : free).push(k);
+    }
+    // Use free keys first (shuffled), then fall back to reserved ones
+    return [...free.sort(() => Math.random() - 0.5), ...reserved.sort(() => Math.random() - 0.5)];
+  }
+
   // Shuffle to spread load across keys
   return keys.sort(() => Math.random() - 0.5);
 }

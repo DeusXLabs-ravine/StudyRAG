@@ -227,9 +227,20 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
     await vectorStore.addPageIndex(docId, tree, pages.length);
     log('Page index + store', t);
 
-    // Background: generate section podcasts from raw page text (fire-and-forget)
+    // Background: generate section podcasts for anyone with podcast access,
+    // including admin-unlimited users whose billing tier may still be lower.
     setImmediate(async () => {
       try {
+        if (!userId) {
+          console.log(`${prefix} Skipping section podcasts — no user context available`);
+          return;
+        }
+        const { getSubscriptionSnapshotForUser } = require('../services/subscriptionService');
+        const subscription = await getSubscriptionSnapshotForUser(userId);
+        if (!subscription.featureAccess.canPodcast) {
+          console.log(`${prefix} Skipping section podcasts — user does not have podcast access`);
+          return;
+        }
         const { generateSectionPodcasts } = require('../services/sectionPodcastService');
         const { getUserTeachingLevel } = require('../services/userProfileService');
         const tl = await getUserTeachingLevel(userId);

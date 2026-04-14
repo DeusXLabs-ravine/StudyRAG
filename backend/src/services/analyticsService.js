@@ -1,5 +1,18 @@
 const supabase = require('../config/database');
 
+function isTransientSupabaseError(error) {
+  const message = `${error?.message || ''} ${error?.cause?.message || ''}`.toLowerCase();
+  return (
+    message.includes('fetch failed') ||
+    message.includes('econnrefused') ||
+    message.includes('econnreset') ||
+    message.includes('enotfound') ||
+    message.includes('etimedout') ||
+    message.includes('socket') ||
+    message.includes('network')
+  );
+}
+
 async function getTopicMastery(userId = null) {
   const { data, error } = await supabase.rpc('get_topic_mastery', { p_user_id: userId });
   if (error) throw error;
@@ -273,20 +286,30 @@ async function getOverview(userId = null) {
 }
 
 async function getUserSettings(userId = null) {
-  const query = supabase
-    .from('user_settings')
-    .select('key, value');
+  try {
+    const query = supabase
+      .from('user_settings')
+      .select('key, value');
 
-  if (userId) query.eq('user_id', userId);
+    if (userId) query.eq('user_id', userId);
 
-  const { data: rows, error } = await query;
-  if (error) throw error;
+    const { data: rows, error } = await query;
+    if (error) {
+      console.warn(`[Analytics] Failed to load user settings for ${userId || 'anon'}: ${error.message}`);
+      return {};
+    }
 
-  const settings = {};
-  for (const row of (rows || [])) {
-    settings[row.key] = row.value;
+    const settings = {};
+    for (const row of (rows || [])) {
+      settings[row.key] = row.value;
+    }
+    return settings;
+  } catch (error) {
+    // Settings are non-critical — always degrade gracefully so the
+    // endpoint never 500s just because the database is unreachable.
+    console.warn(`[Analytics] Settings fetch failure for ${userId || 'anon'}: ${error.message}`);
+    return {};
   }
-  return settings;
 }
 
 async function updateUserSetting(key, value, userId = null) {

@@ -1,18 +1,26 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import PublicNavbar from '../components/layout/PublicNavbar';
 import Footer from '../components/layout/Footer';
-import { Check, Star, CreditCard, Landmark, Send, Loader2, X } from 'lucide-react';
+import { Check, Star, CheckCircle, CreditCard, Landmark, Send, Loader2, X } from 'lucide-react';
 import SEO from '../components/common/SEO';
 import useAuthStore from '../store/authStore';
 import api from '../services/api';
+import { formatTierPrice, isNigerianUser } from '../utils/currency';
 
-const tiers = [
+/* ── Apple Pay logo (inline SVG) ── */
+const ApplePayIcon = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M7.08 4.63c-.44.52-1.15.93-1.85.87-.09-.7.26-1.45.66-1.91.44-.52 1.21-.9 1.84-.93.07.73-.21 1.45-.65 1.97zm.65 1.01c-1.02-.06-1.9.58-2.38.58s-1.24-.55-2.05-.53c-1.05.02-2.03.61-2.57 1.56-1.1 1.9-.28 4.72.78 6.27.52.76 1.15 1.6 1.97 1.57.78-.03 1.09-.51 2.04-.51s1.22.51 2.05.49c.85-.01 1.39-.76 1.91-1.52.6-.87.84-1.71.86-1.75-.02-.01-1.65-.63-1.66-2.51-.02-1.57 1.28-2.32 1.34-2.36-.73-1.08-1.87-1.2-2.28-1.23v-.06z"/>
+  </svg>
+);
+
+const tierData = [
   {
     id: 'free',
     name: 'Free',
-    price: 'NGN 0',
-    priceValue: 0,
-    usdPrice: '$0',
+    ngn: 0,
+    usd: 0,
     desc: 'Start studying with your own material for free.',
     features: [
       'Up to 2 library documents',
@@ -27,9 +35,8 @@ const tiers = [
   {
     id: 'basic',
     name: 'Basic',
-    price: 'NGN 5,000',
-    priceValue: 5000,
-    usdPrice: '$10',
+    ngn: 5000,
+    usd: 10,
     desc: 'Best for regular coursework and weekly revision.',
     features: [
       'Up to 10 library documents',
@@ -44,15 +51,14 @@ const tiers = [
   {
     id: 'pro',
     name: 'Pro',
-    price: 'NGN 20,000',
-    priceValue: 20000,
-    usdPrice: '$20',
+    ngn: 20000,
+    usd: 25,
     desc: 'Advanced tools for deeper study and heavier usage.',
     features: [
       'Up to 50 library documents',
       '1,500 chats per month',
       'Unlock Teach Mode',
-      'Unlock in-chat games',
+      'Study Break podcast',
       'Image and diagram generation',
       'Priority processing',
     ],
@@ -62,14 +68,13 @@ const tiers = [
   {
     id: 'max',
     name: 'Max',
-    price: 'NGN 30,000',
-    priceValue: 30000,
-    usdPrice: '$50',
+    ngn: 50000,
+    usd: 50,
     desc: 'For intensive study loads and power users.',
     features: [
       'Up to 200 library documents',
       'Unlimited AI with fair use',
-      'Teach Mode and games',
+      'Everything in Pro',
       'Priority AI reasoning models',
       'Early access to new features',
       '24/7 priority support',
@@ -106,27 +111,62 @@ const pricingSchema = [
     '@context': 'https://schema.org',
     '@type': 'OfferCatalog',
     name: 'StudyRAG Pricing Plans',
-    itemListElement: tiers.map((tier) => ({
+    itemListElement: tierData.map((tier) => ({
       '@type': 'Offer',
       name: tier.name,
-      price: String(tier.priceValue),
-      priceCurrency: 'NGN',
+      price: String(tier.usd),
+      priceCurrency: 'USD',
       description: tier.desc,
       category: 'EducationApplication',
     })),
   },
 ];
 
+/**
+ * Open Paystack Inline Popup using @paystack/inline-js.
+ * Renders inside the current page — no redirect.
+ */
+async function openPaystackInline({ accessCode, onSuccess, onClose: onPopupClose }) {
+  const { default: PaystackPop } = await import('@paystack/inline-js');
+  const popup = new PaystackPop();
+  popup.resumeTransaction(accessCode, {
+    onSuccess(transaction) {
+      console.log('[Paystack] Payment successful:', transaction.reference);
+      onSuccess?.(transaction);
+    },
+    onCancel() {
+      console.log('[Paystack] User cancelled payment');
+      onPopupClose?.();
+    },
+    onError(error) {
+      console.error('[Paystack] Payment error:', error);
+      onPopupClose?.(error);
+    },
+  });
+}
+
 export default function Pricing() {
-  const { user } = useAuthStore();
+  const navigate = useNavigate();
+  const { user, fetchProfile } = useAuthStore();
   const [selectedTier, setSelectedTier] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [paymentSuccess, setPaymentSuccess] = useState(null);
+
+  const tiers = useMemo(() => tierData.map(t => {
+    const price = formatTierPrice(t.ngn, t.usd);
+    return { ...t, price: price.primary, priceSecondary: price.secondary, priceValue: t.ngn };
+  }), []);
+
+  const isNG = isNigerianUser();
 
   const paymentChannels = [
-    { id: 'card', name: 'Pay with Card', icon: CreditCard, description: 'Secure credit or debit card payment' },
-    { id: 'bank_transfer', name: 'Pay via Bank Transfer', icon: Send, description: 'Transfer directly from your bank' },
-    { id: 'bank', name: 'Pay via Bank or USSD', icon: Landmark, description: 'Use your bank account or USSD code' },
+    { id: 'card', name: 'Pay with Card', icon: CreditCard, description: 'Visa, Mastercard, Verve' },
+    { id: 'apple_pay', name: 'Pay with Apple Pay', icon: ApplePayIcon, description: 'Quick checkout on Apple devices' },
+    ...(isNG ? [
+      { id: 'bank_transfer', name: 'Pay via Bank Transfer', icon: Send, description: 'Transfer directly from your bank' },
+      { id: 'bank', name: 'Pay via Bank or USSD', icon: Landmark, description: 'Use your bank account or USSD code' },
+    ] : []),
   ];
 
   const handleCheckout = async (channelId) => {
@@ -144,16 +184,35 @@ export default function Pricing() {
         channel: channelId,
       });
 
-      if (data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
+      if (!data.accessCode && !data.checkoutUrl) {
+        throw new Error('No payment session received');
+      }
+
+      // Prefer inline popup (embedded)
+      if (data.accessCode) {
+        setIsLoading(false);
+        await openPaystackInline({
+          accessCode: data.accessCode,
+          onSuccess: async () => {
+            try {
+              await api.get(`/payment/verify/${encodeURIComponent(data.paymentReference)}`);
+            } catch { /* webhook handles it */ }
+            await fetchProfile();
+            setPaymentSuccess(selectedTier.name);
+            setSelectedTier(null);
+          },
+          onClose: (error) => {
+            if (error) setErrorMsg('Payment did not complete. Please try again.');
+          },
+        });
       } else {
-        throw new Error('No checkout URL received');
+        // Fallback: redirect (Monnify)
+        window.location.href = data.checkoutUrl;
       }
     } catch (err) {
       console.error('Checkout error:', err);
       const msg = err.response?.data?.error || err.message || 'An error occurred during checkout. Please try again.';
       setErrorMsg(msg);
-    } finally {
       setIsLoading(false);
     }
   };
@@ -188,7 +247,7 @@ export default function Pricing() {
 
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto items-stretch">
               {tiers.map((tier) => (
-                <div key={tier.id} className={`relative sleek-card p-8 flex flex-col h-full bg-white transition-all hover:shadow-2xl ${tier.popular ? 'border-2 border-primary ring-4 ring-primary/5' : 'border-gray-100'}`}>
+                <div key={tier.id} className={`relative sleek-card p-8 flex flex-col h-full bg-white transition-all hover:shadow-2xl cursor-pointer ${tier.popular ? 'border-2 border-primary ring-4 ring-primary/5' : 'border-gray-100'}`}>
                   {tier.popular && (
                     <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-white text-[10px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full shadow-lg flex items-center gap-1.5">
                       <Star className="h-3 w-3 fill-white" />
@@ -202,7 +261,7 @@ export default function Pricing() {
                         <span className="text-4xl font-black text-gray-900">{tier.price}</span>
                         {tier.id !== 'free' && <span className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">/mo</span>}
                       </div>
-                      {tier.usdPrice && <span className="text-gray-400 font-medium text-sm">Approx. {tier.usdPrice}</span>}
+                      {tier.priceSecondary && <span className="text-gray-400 font-medium text-sm">{tier.priceSecondary}</span>}
                     </div>
                     <p className="text-sm text-gray-500 font-medium">{tier.desc}</p>
                   </div>
@@ -215,8 +274,8 @@ export default function Pricing() {
                     ))}
                   </div>
                   <button
-                    onClick={() => (tier.id === 'free' ? window.location.href = '/documents' : setSelectedTier(tier))}
-                    className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-95 ${tier.popular ? 'bg-primary text-white shadow-xl shadow-primary/20 hover:bg-primary-600' : 'bg-gray-100 text-gray-900 hover:bg-gray-200'}`}
+                    onClick={() => (tier.id === 'free' ? navigate('/documents') : setSelectedTier(tier))}
+                    className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-95 cursor-pointer ${tier.popular ? 'bg-primary text-white shadow-xl shadow-primary/20 hover:bg-primary/90' : 'bg-gray-100 text-gray-900 hover:bg-gray-200'}`}
                   >
                     {tier.cta}
                   </button>
@@ -238,9 +297,10 @@ export default function Pricing() {
         </section>
       </main>
 
+      {/* ── Payment method modal ── */}
       {selectedTier && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm" onClick={() => !isLoading && setSelectedTier(null)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
             <div className="relative p-6 px-8 border-b border-gray-100 flex items-center justify-between bg-white z-10">
               <div>
                 <h3 className="text-xl font-black text-gray-900">Select Payment Method</h3>
@@ -248,7 +308,7 @@ export default function Pricing() {
               </div>
               <button
                 onClick={() => !isLoading && setSelectedTier(null)}
-                className="h-10 w-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+                className="h-10 w-10 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-colors cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -269,7 +329,7 @@ export default function Pricing() {
                       key={channel.id}
                       onClick={() => handleCheckout(channel.id)}
                       disabled={isLoading}
-                      className="w-full relative group flex items-center gap-4 p-5 rounded-2xl bg-white border border-gray-100 hover:border-primary/50 hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none text-left"
+                      className="w-full relative group flex items-center gap-4 p-5 rounded-2xl bg-white border border-gray-100 hover:border-primary/50 hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none text-left cursor-pointer"
                     >
                       <div className="h-12 w-12 rounded-xl bg-gray-50 flex flex-shrink-0 items-center justify-center group-hover:bg-primary/10 transition-colors">
                         <Icon className="h-6 w-6 text-gray-400 group-hover:text-primary transition-colors" />
@@ -284,16 +344,35 @@ export default function Pricing() {
               </div>
 
               <p className="text-center text-xs font-semibold text-gray-400 mt-6 flex items-center justify-center gap-1.5">
-                Secured by Paystack and Monnify
+                Secured by Paystack
               </p>
             </div>
 
             {isLoading && (
-              <div className="absolute inset-0 bg-white/80 backdrop-blur-[2px] z-20 flex flex-col items-center justify-center">
+              <div className="absolute inset-0 bg-white/80 backdrop-blur-[2px] z-20 flex flex-col items-center justify-center rounded-3xl">
                 <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
                 <p className="text-sm font-bold text-gray-900 animate-pulse">Initializing Checkout...</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Success toast ── */}
+      {paymentSuccess && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm" onClick={() => setPaymentSuccess(null)}>
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 text-center" onClick={e => e.stopPropagation()}>
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 mb-5">
+              <CheckCircle className="h-8 w-8 text-emerald-600" />
+            </div>
+            <h2 className="text-2xl font-black text-gray-900 mb-2">You're on {paymentSuccess}!</h2>
+            <p className="text-sm text-gray-500 mb-6">Your upgrade is active. Start exploring your new features.</p>
+            <button
+              onClick={() => { setPaymentSuccess(null); navigate('/documents'); }}
+              className="w-full bg-primary text-white font-bold py-3 rounded-2xl hover:bg-primary/90 transition-colors cursor-pointer"
+            >
+              Go to Library
+            </button>
           </div>
         </div>
       )}

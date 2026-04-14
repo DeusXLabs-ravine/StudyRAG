@@ -9,8 +9,6 @@ import App from './App.jsx'
 window.addEventListener('unhandledrejection', (e) => {
   const msg = e.reason?.message || String(e.reason ?? '');
   if (
-    msg.includes("Cannot read properties of undefined") ||
-    msg.includes("reading '0'") ||
     msg.includes('WebGL context') ||
     msg.includes('THREE.')
   ) {

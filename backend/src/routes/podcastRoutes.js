@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { withModelFallback, keyPool } = require('../config/gemini');
 const { synthesizeMultiSpeakerSpeech } = require('../services/ttsService');
+const { enforceUsageCap } = require('../middleware/tierAuth');
 
 const MAX_CONTENT_LENGTH = 5000;
 
@@ -69,7 +70,7 @@ Write only the dialogue lines now — no preamble, no summary, no labels outside
  * }
  * Response: { transcript, audioBase64, hostAName, hostBName }
  */
-router.post('/generate', async (req, res) => {
+router.post('/generate', enforceUsageCap('tts'), async (req, res) => {
   const {
     moduleTitle, moduleTopic, content, userName,
     hostAName, hostAVoice,

@@ -1,6 +1,33 @@
 const supabase = require('../config/database');
 const { getSubscriptionSnapshotForUser } = require('../services/subscriptionService');
 
+async function serializeProfile(data, authUser) {
+  if (!data) return null;
+
+  const subscription = await getSubscriptionSnapshotForUser(data.id, authUser?.email || data.email || null);
+
+  return {
+    id: data.id,
+    email: data.email,
+    displayName: data.display_name,
+    avatarUrl: data.avatar_url,
+    age: data.age,
+    teachingLevel: data.teaching_level,
+    interests: data.interests || [],
+    onboardingCompleted: data.onboarding_completed,
+    createdAt: data.created_at,
+    subscription_tier: subscription.tier,
+    subscription_status: subscription.status,
+    subscription_end_date: subscription.endDate,
+    document_count: data.document_count || 0,
+    isAdminGranted: subscription.isAdminGranted,
+    isUnlimited: subscription.isUnlimited,
+    planLabel: subscription.planLabel,
+    billing_tier: subscription.billingTier,
+    feature_access: subscription.featureAccess,
+  };
+}
+
 async function getProfile(req, res, next) {
   try {
     const { data, error } = await supabase
@@ -14,26 +41,8 @@ async function getProfile(req, res, next) {
     }
     if (error) throw error;
 
-    const subscription = await getSubscriptionSnapshotForUser(req.user.id, req.user.email);
-
     res.json({
-      profile: {
-        id: data.id,
-        email: data.email,
-        displayName: data.display_name,
-        avatarUrl: data.avatar_url,
-        age: data.age,
-        teachingLevel: data.teaching_level,
-        interests: data.interests || [],
-        onboardingCompleted: data.onboarding_completed,
-        createdAt: data.created_at,
-        subscription_tier: subscription.tier,
-        subscription_status: subscription.status,
-        subscription_end_date: subscription.endDate,
-        document_count: data.document_count || 0,
-        isAdminGranted: subscription.isAdminGranted,
-        feature_access: subscription.featureAccess,
-      },
+      profile: await serializeProfile(data, req.user),
     });
   } catch (error) {
     next(error);
@@ -63,17 +72,7 @@ async function createProfile(req, res, next) {
     if (error) throw error;
 
     res.json({
-      profile: {
-        id: data.id,
-        email: data.email,
-        displayName: data.display_name,
-        avatarUrl: data.avatar_url,
-        age: data.age,
-        teachingLevel: data.teaching_level,
-        interests: data.interests || [],
-        onboardingCompleted: data.onboarding_completed,
-        createdAt: data.created_at,
-      },
+      profile: await serializeProfile(data, req.user),
     });
 
     syncTeachingLevel(teachingLevel || 'intermediate');
@@ -113,17 +112,7 @@ async function updateProfile(req, res, next) {
     if (error) throw error;
 
     res.json({
-      profile: {
-        id: data.id,
-        email: data.email,
-        displayName: data.display_name,
-        avatarUrl: data.avatar_url,
-        age: data.age,
-        teachingLevel: data.teaching_level,
-        interests: data.interests || [],
-        onboardingCompleted: data.onboarding_completed,
-        createdAt: data.created_at,
-      },
+      profile: await serializeProfile(data, req.user),
     });
 
     if (teachingLevel !== undefined) {

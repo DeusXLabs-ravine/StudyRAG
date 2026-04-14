@@ -170,10 +170,12 @@ async function handleMonnifyWebhook(req, res) {
         return;
       }
 
+      // Use Monnify-confirmed amount if available, fall back to DB amount
+      const confirmedAmount = payload.eventData?.amountPaid || payload.eventData?.amount || transaction.amount;
       let newTier = 'free';
-      if (transaction.amount == 5000)  newTier = 'basic';
-      if (transaction.amount == 20000) newTier = 'pro';
-      if (transaction.amount == 30000) newTier = 'max';
+      if (confirmedAmount == 5000)  newTier = 'basic';
+      if (confirmedAmount == 20000) newTier = 'pro';
+      if (confirmedAmount == 50000) newTier = 'max';
 
       const endDate = new Date();
       endDate.setDate(endDate.getDate() + 30);
@@ -272,7 +274,7 @@ async function handlePaystackWebhook(req, res) {
     if (payload.event === 'charge.success') {
       const paymentData = payload.data;
       const paymentReference = paymentData.reference;
-      
+
       console.log(`[Paystack Webhook] Successful Payment: ${paymentReference}`);
 
       // 1. Get the transaction from DB
@@ -281,26 +283,63 @@ async function handlePaystackWebhook(req, res) {
         .select('*')
         .eq('payment_reference', paymentReference)
         .single();
-        
-      if (txError || !transaction) {
-        console.error(`[Paystack Webhook] Transaction not found for ref: ${paymentReference}`);
-        return;
-      }
 
       // Check if already processed
-      if (transaction.status === 'PAID') {
+      if (transaction?.status === 'PAID') {
         console.log(`[Paystack Webhook] Transaction ${paymentReference} already processed.`);
         return;
       }
 
-      // 2. Determine Tier based on amount or description
+      // 2. Determine tier from Paystack-confirmed amount (in kobo → NGN)
+      const amountNaira = (paymentData.amount || 0) / 100;
       let newTier = 'free';
-      if (transaction.amount == 5000) newTier = 'basic';
-      if (transaction.amount == 20000) newTier = 'pro';
-      if (transaction.amount == 30000) newTier = 'max';
+      if (amountNaira == 5000)  newTier = 'basic';
+      if (amountNaira == 20000) newTier = 'pro';
+      if (amountNaira == 50000) newTier = 'max';
+
+      // Fallback: read tier from metadata if amount mapping gave 'free'
+      if (newTier === 'free' && paymentData.metadata?.tier) {
+        const metaTier = String(paymentData.metadata.tier).toLowerCase();
+        if (['basic', 'pro', 'max'].includes(metaTier)) newTier = metaTier;
+      }
 
       const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 30); // 30 days subscription
+      endDate.setDate(endDate.getDate() + 30);
+
+      if (txError || !transaction) {
+        // Transaction not in DB — recover using user_id from Paystack metadata
+        console.warn(`[Paystack Webhook] Transaction not found for ref: ${paymentReference} — attempting recovery`);
+
+        const userId = paymentData.metadata?.user_id;
+        if (!userId) {
+          console.error(`[Paystack Webhook] Cannot recover — no user_id in metadata for ref: ${paymentReference}`);
+          return;
+        }
+
+        // Create the missing transaction record
+        await supabase.from('transactions').insert({
+          user_id: userId,
+          payment_reference: paymentReference,
+          transaction_reference: paymentData.access_code || paymentReference,
+          amount: amountNaira,
+          currency: 'NGN',
+          payment_method: 'paystack',
+          status: 'PAID',
+          description: `StudyRAG ${newTier.toUpperCase()} Subscription`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+        await supabase.from('profiles').update({
+          subscription_tier: newTier,
+          subscription_status: 'active',
+          subscription_end_date: endDate,
+          updated_at: new Date(),
+        }).eq('id', userId);
+
+        console.log(`[Paystack Webhook] RECOVERED: upgraded user ${userId} to ${newTier.toUpperCase()}`);
+        return;
+      }
 
       // 3. Update Transaction Status
       await supabase
@@ -318,7 +357,7 @@ async function handlePaystackWebhook(req, res) {
           updated_at: new Date()
         })
         .eq('id', transaction.user_id);
-      
+
       console.log(`[Paystack Webhook] Upgraded user ${transaction.user_id} to ${newTier.toUpperCase()} tier.`);
     }
 

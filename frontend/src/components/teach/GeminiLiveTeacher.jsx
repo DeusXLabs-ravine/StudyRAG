@@ -6,6 +6,7 @@ import { X, Mic, MicOff, Send, Loader2, MessageSquare, AlertCircle } from 'lucid
 import * as THREE from 'three';
 import mermaid from 'mermaid';
 import useGeminiLive from '../../hooks/useGeminiLive';
+import useAuthStore from '../../store/authStore';
 import { getGeneratedDiagramImageUrl } from '../../services/diagramService';
 
 mermaid.initialize({ startOnLoad: false, theme: 'dark' });
@@ -658,6 +659,10 @@ export default function GeminiLiveTeacher({
   teachingLevel = 'intermediate', userName = '',
   contextLabel = '', documentId = null, moduleId = null,
 }) {
+  // Resolve user's actual name from profile — never fall back to "friend"
+  const { profile } = useAuthStore();
+  const resolvedUserName = userName || profile?.displayName || profile?.full_name || profile?.email?.split('@')[0] || '';
+
   const [interruptInput, setInterruptInput] = useState('');
   const [showInterrupt, setShowInterrupt] = useState(false);
   const [toolData, setToolData] = useState(null);
@@ -680,43 +685,49 @@ export default function GeminiLiveTeacher({
   const onToolCall = useCallback((call) => {
     const fc = call?.functionCalls?.[0];
     if (!fc) return;
+    const args = fc.args || {};
     const cache = getToolCache();
-    const cacheKey = fc.name === 'render_diagram' ? fc.args.title
-      : fc.name === 'generate_illustration' ? (fc.args.prompt || fc.args.description) : null;
+    const cacheKey = fc.name === 'render_diagram' ? args.title
+      : fc.name === 'generate_illustration' ? (args.prompt || args.description) : null;
     if (cacheKey && cache[cacheKey] && Date.now() - cache[cacheKey].ts < 86_400_000) {
       setToolData(cache[cacheKey].data); return;
     }
     if (fc.name === 'render_diagram')
-      setToolData({ type: 'diagram', loading: true, title: fc.args.title || '' });
+      setToolData({ type: 'diagram', loading: true, title: args.title || '' });
     else if (fc.name === 'generate_illustration')
-      setToolData({ type: 'illustration', loading: true, prompt: fc.args.prompt || fc.args.description });
+      setToolData({ type: 'illustration', loading: true, prompt: args.prompt || args.description || '' });
     else if (fc.name === 'search_external_knowledge')
-      setToolData({ type: 'research', loading: true, query: fc.args.query });
+      setToolData({ type: 'research', loading: true, query: args.query || '' });
     else if (fc.name === 'start_lightning_round') {
       setIsLightningRound(true); setLightningQuestions([]); setToolData({ type: 'lightning', loading: true });
     }
   }, []);
 
   const onToolResult = useCallback(async ({ name, result }) => {
-    if (result?.error) { setToolData(null); return; }
+    if (!result || result.error) { setToolData(null); return; }
     let newData = null;
     if (name === 'render_diagram') {
-      newData = { type: 'diagram', loading: false, code: result.mermaidCode, title: result.title };
+      newData = { type: 'diagram', loading: false, code: result.mermaidCode || '', title: result.title || '' };
       setToolData(newData);
       if (result.title) setToolCache(result.title, { data: newData });
     } else if (name === 'generate_illustration') {
+      const prompt = result.prompt || '';
+      if (!result.diagramId) {
+        setToolData({ type: 'illustration', loading: false, prompt, url: null });
+        return;
+      }
       try {
         const url = await getGeneratedDiagramImageUrl(result.diagramId);
-        newData = { type: 'illustration', loading: false, prompt: result.prompt, url };
+        newData = { type: 'illustration', loading: false, prompt, url };
         setToolData(newData);
-        if (result.prompt) setToolCache(result.prompt, { data: newData });
+        if (prompt) setToolCache(prompt, { data: newData });
       } catch {
-        setToolData({ type: 'illustration', loading: false, prompt: result.prompt, url: null });
+        setToolData({ type: 'illustration', loading: false, prompt, url: null });
       }
     } else if (name === 'search_external_knowledge') {
       setToolData({ type: 'research', loading: false, query: result.query || '', summary: result.summary || '' });
     } else if (name === 'start_lightning_round') {
-      setLightningQuestions(result.questions || []);
+      setLightningQuestions(Array.isArray(result.questions) ? result.questions : []);
       setToolData(null);
       setTimeout(() => { setIsLightningRound(false); setLightningQuestions([]); }, 90_000);
     }
@@ -726,13 +737,14 @@ export default function GeminiLiveTeacher({
     state, isActive, isConnecting, isSpeaking, isListening,
     transcript, userTranscript, error, start, stop, sendTextInterruption,
   } = useGeminiLive({
-    moduleTitle, moduleTopic, content, teachingLevel, userName,
+    moduleTitle, moduleTopic, content, teachingLevel, userName: resolvedUserName,
     moduleId, documentId, onToolCall, onToolResult,
   });
 
   useEffect(() => {
     if (isOpen && state === 'idle') start();
     if (!isOpen && isActive) stop();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   useEffect(() => {

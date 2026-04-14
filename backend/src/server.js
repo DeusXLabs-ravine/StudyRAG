@@ -46,9 +46,29 @@ if (USE_CLUSTERING && cluster.isPrimary) {
 
   // WebSocket server for Gemini Live proxy — mounted on the same HTTP server
   // so Railway's single port handles both HTTP and WS upgrades transparently.
-  const wss = new WebSocketServer({ server, path: '/live' });
+  const wss = new WebSocketServer({ noServer: true });
   wss.on('connection', handleLiveConnection);
   wss.on('error', (err) => console.error('[WSS] Server error:', err.message));
+
+  server.on('upgrade', (req, socket, head) => {
+    let pathname = '';
+
+    try {
+      pathname = new URL(req.url, 'http://localhost').pathname;
+    } catch {
+      socket.destroy();
+      return;
+    }
+
+    if (pathname !== '/live') {
+      socket.destroy();
+      return;
+    }
+
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit('connection', ws, req);
+    });
+  });
 
 
   // Graceful shutdown for individual workers

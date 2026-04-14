@@ -209,6 +209,10 @@ export default function useTTS() {
 
     setIsLoading(true);
 
+    if (!chunks[0]) {
+      setIsLoading(false);
+      return;
+    }
     prefetchRef.current.set(0, fetchSpeechAudio(chunks[0], voiceId));
     if (chunks.length > 1) prefetchRef.current.set(1, fetchSpeechAudio(chunks[1], voiceId));
 

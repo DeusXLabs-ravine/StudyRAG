@@ -13,6 +13,13 @@ const config = {
     process.env.GEMINI_API_KEY_6,
     process.env.GEMINI_API_KEY_7,
     process.env.GEMINI_API_KEY_8,
+    process.env.GEMINI_API_KEY_9,
+    process.env.GEMINI_API_KEY_10,
+    process.env.GEMINI_API_KEY_11,
+    process.env.GEMINI_API_KEY_12,
+    process.env.GEMINI_API_KEY_13,
+    process.env.GEMINI_API_KEY_14,
+    process.env.GEMINI_API_KEY_15,
   ].filter(Boolean),
   supabaseUrl: process.env.SUPABASE_URL,
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -31,7 +38,7 @@ const config = {
   paystackSecret: process.env.PAYSTACK_SECRET_KEY,
   appBaseUrl: process.env.APP_BASE_URL || 'https://studyrag.co',
   revenueCatWebhookAuth: process.env.REVENUECAT_WEBHOOK_AUTH || null,
-  // Comma-separated emails that always get max tier regardless of payment
+  // Comma-separated emails that always get admin-unlimited access regardless of payment
   adminMaxEmails: (process.env.ADMIN_MAX_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean),
 };
 

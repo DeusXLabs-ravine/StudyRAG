@@ -93,16 +93,28 @@ export class GeminiLiveSession {
     this.isPlayingAudio = false;
     this.state = 'idle';
     this._closed = false;
+    this._hasReceivedAudio = false;
+    this._nudgeTimer = null;
     this._micStream = null;
     this._micProcessor = null;
     this._micInputCtx = null;
   }
 
   async start() {
+    console.log('[GeminiLive] Starting session...');
     this._setState('connecting');
     try {
+      console.log('[GeminiLive] Step 1: Connecting to WebSocket...');
       await this._connect();
-      if (!this.listenOnly) await this._initMic();
+      console.log('[GeminiLive] Step 1: WebSocket connected and ready.');
+
+      if (!this.listenOnly) {
+        console.log('[GeminiLive] Step 2: Initializing Microphone...');
+        await this._initMic();
+        console.log('[GeminiLive] Step 2: Microphone initialized.');
+      }
+
+      console.log('[GeminiLive] Session active — waiting for Sage to respond...');
     } catch (err) {
       console.error('[GeminiLive] Start error:', err);
       this._setState('ended');
@@ -113,6 +125,7 @@ export class GeminiLiveSession {
 
   stop() {
     this._closed = true;
+    clearTimeout(this._nudgeTimer);
     this._stopMic();
     this._stopAudio();
     if (this.ws) {
@@ -135,15 +148,17 @@ export class GeminiLiveSession {
       const url = `${this.wsUrl}?token=${encodeURIComponent(this.authToken)}`;
       console.log('[GeminiLive] Connecting to backend proxy...');
       this.ws = new WebSocket(url);
+      let settled = false;
 
       const timer = setTimeout(() => {
         if (this.state === 'connecting') {
           try { this.ws?.close(); } catch {}
-          reject(new Error('Connection timed out — backend may be starting up, try again.'));
+          if (!settled) { settled = true; reject(new Error('Connection timed out — backend may be starting up, try again.')); }
         }
       }, CONNECT_TIMEOUT_MS);
 
       this.ws.onopen = () => {
+        console.log('[GeminiLive] WebSocket open, sending init...');
         // Send init immediately — backend creates the Gemini session
         this._send({
           type: 'init',
@@ -152,22 +167,29 @@ export class GeminiLiveSession {
         });
       };
 
+      let msgCount = 0;
       this.ws.onmessage = (event) => {
         let msg;
         try { msg = JSON.parse(event.data); } catch { return; }
 
         if (msg.type === 'ready') {
           clearTimeout(timer);
+          console.log('[GeminiLive] Received ready from proxy.');
           this._setState('listening');
-          resolve();
+          if (!settled) { settled = true; resolve(); }
         } else {
+          msgCount++;
+          // Log first few messages for debugging
+          if (msgCount <= 5 || msg.type === 'error') {
+            console.log(`[GeminiLive] Message #${msgCount}: type=${msg.type}`);
+          }
           this._handleMessage(msg);
         }
       };
 
       this.ws.onerror = () => {
         clearTimeout(timer);
-        reject(new Error('Could not reach backend WebSocket — check server is running.'));
+        if (!settled) { settled = true; reject(new Error('Could not reach backend WebSocket — check server is running.')); }
       };
 
       this.ws.onclose = (event) => {
@@ -180,7 +202,7 @@ export class GeminiLiveSession {
             event.code === 1001 ? 'Server restarting — please start a new session' :
             event.reason || `Connection closed (${event.code})`;
           this.onError(reason);
-          reject(new Error(reason));
+          if (!settled) { settled = true; reject(new Error(reason)); }
         }
       };
     });
@@ -197,26 +219,35 @@ export class GeminiLiveSession {
   _handleMessage(msg) {
     switch (msg.type) {
       case 'audio':
-        this._queueAudio(msg.data);
-        this._setState('teaching');
-        this._drainAudioQueue();
+        if (msg.data) {
+          if (!this._hasReceivedAudio) {
+            this._hasReceivedAudio = true;
+            clearTimeout(this._nudgeTimer);
+            console.log('[GeminiLive] First audio chunk received — Sage is speaking!');
+          }
+          this._queueAudio(msg.data);
+          this._setState('teaching');
+          this._drainAudioQueue();
+        }
         break;
 
       case 'transcript':
+        if (msg.text) console.log('[GeminiLive] Sage:', msg.text.slice(0, 80));
         this.onTranscript(msg.text || '');
         break;
 
       case 'user_transcript':
+        if (msg.text) console.log('[GeminiLive] You:', msg.text.slice(0, 80));
         this.onUserTranscript(msg.text || '');
         break;
 
       case 'tool_call':
-        // Optimistic: show loading state in UI immediately
+        console.log('[GeminiLive] Tool call:', (msg.calls || []).map(c => c.name).join(', '));
         this.onToolCall({ functionCalls: msg.calls || [] });
         break;
 
       case 'tool_result':
-        // Real result from backend hybrid executor — update UI
+        console.log('[GeminiLive] Tool result:', msg.name);
         this.onToolResult({ name: msg.name, result: msg.result || {} });
         break;
 
@@ -229,7 +260,14 @@ export class GeminiLiveSession {
         if (!this.isPlayingAudio) this._setState('listening');
         break;
 
+      case 'goaway':
+        // Gemini is about to disconnect — warn user
+        console.warn('[GeminiLive] GoAway — session ending soon:', msg.timeLeft);
+        this.onError('Session will end soon — wrapping up. You can restart after.');
+        break;
+
       case 'error':
+        console.error('[GeminiLive] Server error:', msg.message);
         this.onError(msg.message || 'Unknown error');
         this._setState('error');
         break;
@@ -237,6 +275,9 @@ export class GeminiLiveSession {
       case 'ended':
         if (!this._closed) this._setState('ended');
         break;
+
+      default:
+        console.log('[GeminiLive] Unknown msg type:', msg.type);
     }
   }
 
@@ -252,13 +293,18 @@ export class GeminiLiveSession {
     if (this.isPlayingAudio || this.outputQueue.length === 0) return;
     this.isPlayingAudio = true;
 
-    if (!this.audioCtx) {
-      this.audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: OUTPUT_SAMPLE_RATE });
+    try {
+      if (!this.audioCtx) {
+        this.audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: OUTPUT_SAMPLE_RATE });
+      }
+      if (this.audioCtx.state === 'suspended') await this.audioCtx.resume();
+    } catch {
+      this.isPlayingAudio = false;
+      return;
     }
-    if (this.audioCtx.state === 'suspended') await this.audioCtx.resume();
 
     const playNext = () => {
-      if (this._closed || this.outputQueue.length === 0) {
+      if (this._closed || this.outputQueue.length === 0 || !this.audioCtx) {
         this.isPlayingAudio = false;
         if (!this._closed) this._setState('listening');
         return;
@@ -292,6 +338,7 @@ export class GeminiLiveSession {
   // ── Private: microphone input ──────────────────────────────────────────────
 
   async _initMic() {
+    console.log('[GeminiLive] Requesting mic permissions...');
     this._micStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         sampleRate: INPUT_SAMPLE_RATE,
@@ -301,7 +348,9 @@ export class GeminiLiveSession {
         autoGainControl: true,
       },
     });
+    console.log('[GeminiLive] Mic stream obtained.');
 
+    console.log('[GeminiLive] Creating AudioContext for mic...');
     this._micInputCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: INPUT_SAMPLE_RATE });
     const source = this._micInputCtx.createMediaStreamSource(this._micStream);
     this._micProcessor = this._micInputCtx.createScriptProcessor(4096, 1, 1);
@@ -321,7 +370,12 @@ export class GeminiLiveSession {
   }
 
   _stopMic() {
-    if (this._micProcessor) { try { this._micProcessor.disconnect(); } catch {} this._micProcessor = null; }
+    // Clear handler first to prevent race between onaudioprocess and cleanup
+    if (this._micProcessor) {
+      this._micProcessor.onaudioprocess = null;
+      try { this._micProcessor.disconnect(); } catch {}
+      this._micProcessor = null;
+    }
     if (this._micInputCtx) { try { this._micInputCtx.close(); } catch {} this._micInputCtx = null; }
     if (this._micStream) { this._micStream.getTracks().forEach(t => t.stop()); this._micStream = null; }
   }
@@ -330,6 +384,18 @@ export class GeminiLiveSession {
     if (this.state !== state) {
       this.state = state;
       this.onStateChange(state);
+
+      // Safety net: if we enter "listening" and no audio arrives within 8s,
+      // send a nudge to make sure Gemini starts speaking.
+      if (state === 'listening' && !this._hasReceivedAudio) {
+        clearTimeout(this._nudgeTimer);
+        this._nudgeTimer = setTimeout(() => {
+          if (this.state === 'listening' && !this._hasReceivedAudio && !this._closed) {
+            console.log('[GeminiLive] No audio after 8s — sending nudge...');
+            this._send({ type: 'text', text: 'Please begin teaching now.' });
+          }
+        }, 8000);
+      }
     }
   }
 }
@@ -344,18 +410,24 @@ export function buildTeachingInstruction({ moduleTitle, moduleTopic, content, te
     advanced:     'technical and rigorous — edge cases, nuances, theoretical depth',
   };
 
+  const name = userName || 'there';
+
   return `You are Sage, a world-class live AI tutor conducting a real-time audio teaching session.
 
-STUDENT: ${userName || 'the student'} | LEVEL: ${teachingLevel} (${levelGuide[teachingLevel] || levelGuide.intermediate})
+STUDENT: ${name} | LEVEL: ${teachingLevel} (${levelGuide[teachingLevel] || levelGuide.intermediate})
 LESSON: ${moduleTitle || 'this lesson'}${moduleTopic ? ` — ${moduleTopic}` : ''}
+
+GREETING (say this IMMEDIATELY as your very first words):
+"Hey ${name}! Welcome to today's lesson."
+Then share one surprising or counterintuitive fact about the topic to hook their attention, and ask if they're ready to dive in.
 
 TEACHING RULES:
 - You are speaking live — keep sentences short and natural, as a real teacher would speak
+- Address the student as "${name}" — never "friend" or "student"
 - Use the whiteboard constantly: call render_diagram for any process, hierarchy, or concept map
 - For analogies and mental images, call generate_illustration
 - For real-time facts or to verify information, call search_external_knowledge
 - End each section with a check-in question before moving on
-- Use the student's name (${userName || 'friend'}) occasionally for personal connection
 - Adapt complexity to their teaching level at all times
 
 TOOL USAGE MANDATE (use these — don't just talk):
@@ -367,7 +439,7 @@ TOOL USAGE MANDATE (use these — don't just talk):
 LESSON CONTENT:
 ${content ? content.substring(0, 12000) : 'Teach from general knowledge on this topic.'}
 
-Start with a 1-2 sentence warm greeting using the student's name, then give the single most surprising or counterintuitive fact about this topic to hook their attention. Then ask if they're ready to begin.`;
+BEGIN SPEAKING NOW. Start with the greeting above, then proceed to teach.`;
 }
 
 // ── Podcast instruction builder ───────────────────────────────────────────────
