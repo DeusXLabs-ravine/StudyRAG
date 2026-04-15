@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Check, Star, Sparkles, Crown, Zap, CreditCard, Landmark, Send, Loader2 } from 'lucide-react';
 import { formatTierPrice, isNigerianUser } from '../../utils/currency';
 import useAuthStore from '../../store/authStore';
 import api from '../../services/api';
+import NativePayButton from './NativePayButton';
 
 const TIERS = [
   {
@@ -49,21 +50,14 @@ const TIERS = [
   },
 ];
 
-/* ── Apple Pay logo (inline SVG) ── */
-const ApplePayIcon = ({ className }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M7.08 4.63c-.44.52-1.15.93-1.85.87-.09-.7.26-1.45.66-1.91.44-.52 1.21-.9 1.84-.93.07.73-.21 1.45-.65 1.97zm.65 1.01c-1.02-.06-1.9.58-2.38.58s-1.24-.55-2.05-.53c-1.05.02-2.03.61-2.57 1.56-1.1 1.9-.28 4.72.78 6.27.52.76 1.15 1.6 1.97 1.57.78-.03 1.09-.51 2.04-.51s1.22.51 2.05.49c.85-.01 1.39-.76 1.91-1.52.6-.87.84-1.71.86-1.75-.02-.01-1.65-.63-1.66-2.51-.02-1.57 1.28-2.32 1.34-2.36-.73-1.08-1.87-1.2-2.28-1.23v-.06z"/>
-  </svg>
-);
 
-const getPaymentChannels = (canApplePay = false) => {
+// Apple Pay and Google Pay are handled natively via NativePayButton (Stripe).
+// This list covers the remaining Paystack-routed methods.
+const getPaymentChannels = () => {
   const isNG = isNigerianUser();
   const channels = [
-    { id: 'card', name: 'Debit / Credit Card', icon: CreditCard, desc: 'Visa, Mastercard' },
+    { id: 'card', name: 'Debit / Credit Card', icon: CreditCard, desc: 'Visa, Mastercard, Verve' },
   ];
-  if (canApplePay) {
-    channels.push({ id: 'apple_pay', name: 'Apple Pay', icon: ApplePayIcon, desc: 'Pay with Apple Pay' });
-  }
   if (isNG) {
     channels.push(
       { id: 'bank_transfer', name: 'Bank Transfer', icon: Send, desc: 'Direct bank transfer' },
@@ -105,13 +99,6 @@ export default function PricingModal({ isOpen, onClose, highlightTier, currentTi
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(null); // tier name after success
-  const [canApplePay, setCanApplePay] = useState(false);
-
-  useEffect(() => {
-    if (window.ApplePaySession && window.ApplePaySession.canMakePayments()) {
-      setCanApplePay(true);
-    }
-  }, []);
 
   if (!isOpen) return null;
 
@@ -246,6 +233,16 @@ export default function PricingModal({ isOpen, onClose, highlightTier, currentTi
                 </p>
               </div>
 
+              {/* Apple Pay / Google Pay — native browser buttons, no popup */}
+              <NativePayButton
+                tier={selectedTier.id}
+                onSuccess={async () => {
+                  await fetchProfile();
+                  setPaymentSuccess(selectedTier.name);
+                }}
+                onError={(msg) => setErrorMsg(typeof msg === 'string' ? msg : 'Payment failed. Please try again.')}
+              />
+
               {errorMsg && (
                 <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm font-medium">
                   {errorMsg}
@@ -253,7 +250,7 @@ export default function PricingModal({ isOpen, onClose, highlightTier, currentTi
               )}
 
               <div className="space-y-2.5">
-                {getPaymentChannels(canApplePay).map((ch) => {
+                {getPaymentChannels().map((ch) => {
                   const Icon = ch.icon;
                   return (
                     <button
@@ -275,7 +272,7 @@ export default function PricingModal({ isOpen, onClose, highlightTier, currentTi
               </div>
 
               <p className="text-center text-[10px] font-semibold text-gray-300 mt-5 uppercase tracking-wider">
-                Secured by Paystack
+                Secured by Stripe &amp; Paystack
               </p>
             </div>
           ) : (

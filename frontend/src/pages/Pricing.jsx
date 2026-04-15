@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PublicNavbar from '../components/layout/PublicNavbar';
 import Footer from '../components/layout/Footer';
@@ -7,13 +7,8 @@ import SEO from '../components/common/SEO';
 import useAuthStore from '../store/authStore';
 import api from '../services/api';
 import { formatTierPrice, isNigerianUser } from '../utils/currency';
+import NativePayButton from '../components/paywall/NativePayButton';
 
-/* ── Apple Pay logo (inline SVG) ── */
-const ApplePayIcon = ({ className }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M7.08 4.63c-.44.52-1.15.93-1.85.87-.09-.7.26-1.45.66-1.91.44-.52 1.21-.9 1.84-.93.07.73-.21 1.45-.65 1.97zm.65 1.01c-1.02-.06-1.9.58-2.38.58s-1.24-.55-2.05-.53c-1.05.02-2.03.61-2.57 1.56-1.1 1.9-.28 4.72.78 6.27.52.76 1.15 1.6 1.97 1.57.78-.03 1.09-.51 2.04-.51s1.22.51 2.05.49c.85-.01 1.39-.76 1.91-1.52.6-.87.84-1.71.86-1.75-.02-.01-1.65-.63-1.66-2.51-.02-1.57 1.28-2.32 1.34-2.36-.73-1.08-1.87-1.2-2.28-1.23v-.06z" />
-  </svg>
-);
 
 const tierData = [
   {
@@ -159,20 +154,10 @@ export default function Pricing() {
   }), []);
 
   const isNG = isNigerianUser();
-  const [canApplePay, setCanApplePay] = useState(false);
 
-  // Check for Apple Pay support on mount
-  useEffect(() => {
-    if (window.ApplePaySession && window.ApplePaySession.canMakePayments()) {
-      setCanApplePay(true);
-    }
-  }, []);
-
+  // Apple Pay and Google Pay are handled natively via NativePayButton (Stripe).
   const paymentChannels = [
     { id: 'card', name: 'Pay with Card', icon: CreditCard, description: 'Visa, Mastercard, Verve' },
-    ...(canApplePay ? [
-      { id: 'apple_pay', name: 'Pay with Apple Pay', icon: ApplePayIcon, description: 'Quick checkout on Apple devices' }
-    ] : []),
     ...(isNG ? [
       { id: 'bank_transfer', name: 'Pay via Bank Transfer', icon: Send, description: 'Transfer directly from your bank' },
       { id: 'bank', name: 'Pay via Bank or USSD', icon: Landmark, description: 'Use your bank account or USSD code' },
@@ -325,6 +310,17 @@ export default function Pricing() {
             </div>
 
             <div className="p-6 px-8 overflow-y-auto bg-gray-50/50 flex-1">
+              {/* Apple Pay / Google Pay — native browser buttons, no popup */}
+              <NativePayButton
+                tier={selectedTier.id}
+                onSuccess={async () => {
+                  await fetchProfile();
+                  setPaymentSuccess(selectedTier.name);
+                  setSelectedTier(null);
+                }}
+                onError={(msg) => setErrorMsg(typeof msg === 'string' ? msg : 'Payment failed. Please try again.')}
+              />
+
               {errorMsg && (
                 <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600 text-sm font-medium">
                   {errorMsg}
@@ -354,7 +350,7 @@ export default function Pricing() {
               </div>
 
               <p className="text-center text-xs font-semibold text-gray-400 mt-6 flex items-center justify-center gap-1.5">
-                Secured by Paystack
+                Secured by Stripe &amp; Paystack
               </p>
             </div>
 
