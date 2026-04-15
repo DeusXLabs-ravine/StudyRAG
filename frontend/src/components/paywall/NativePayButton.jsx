@@ -1,145 +1,99 @@
-import { useState, useEffect, useRef } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
+import { useState, useEffect } from 'react';
 import api from '../../services/api';
-import { isNigerianUser } from '../../utils/currency';
-
-const STRIPE_KEY = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
-
-// Lazy-load Stripe only once, only if the key is present
-const stripePromise = STRIPE_KEY ? loadStripe(STRIPE_KEY) : null;
-
-// Tier amounts in smallest currency unit (kobo / cents)
-const STRIPE_AMOUNTS = {
-  basic: { ngn: 500_000,   usd: 1_000 },
-  pro:   { ngn: 2_000_000, usd: 2_500 },
-  max:   { ngn: 5_000_000, usd: 5_000 },
-};
+import useAuthStore from '../../store/authStore';
 
 /**
  * NativePayButton
  *
- * Renders an Apple Pay or Google Pay button directly on the page using
- * Stripe's Payment Request API — no Paystack popup, no redirect.
+ * Shows an Apple Pay button when the browser supports it.
+ * Payment is processed through Paystack's apple_pay channel —
+ * clicking the button opens the Paystack popup restricted to Apple Pay.
  *
- * • Apple Pay  →  visible on Safari / iOS / macOS with a card set up
- * • Google Pay →  visible on Chrome / Android with a saved payment method
- * • Both       →  shown when the browser supports both
- *
- * When neither is supported the component renders nothing (null).
- *
- * Required env vars:
- *   VITE_STRIPE_PUBLIC_KEY   (frontend)
- *   STRIPE_SECRET_KEY        (backend)
- *
- * Required Stripe setup:
- *   1. Enable Apple Pay in Stripe dashboard → Settings → Payment methods
- *   2. Add & verify your domain (studyrag.co) in the Apple Pay tab
- *   3. Google Pay works automatically — no extra setup needed
+ * Renders nothing if Apple Pay is not available on the device/browser.
  */
 export default function NativePayButton({ tier, onSuccess, onError }) {
-  const containerRef = useRef(null);
   const [canPay, setCanPay] = useState(false);
-
-  const isNG   = isNigerianUser();
-  const currency = isNG ? 'ngn' : 'usd';
-  const amounts  = STRIPE_AMOUNTS[tier?.toLowerCase()];
-  const amount   = amounts ? (isNG ? amounts.ngn : amounts.usd) : 0;
+  const [isLoading, setIsLoading] = useState(false);
+  const { fetchProfile } = useAuthStore();
 
   useEffect(() => {
-    if (!stripePromise || !amounts || !containerRef.current) return;
+    // Apple Pay is available when ApplePaySession exists and canMakePayments() is true
+    const supported =
+      typeof window !== 'undefined' &&
+      window.ApplePaySession &&
+      window.ApplePaySession.canMakePayments();
+    setCanPay(!!supported);
+  }, []);
 
-    let destroyed = false;
-    let prButton  = null;
-
-    stripePromise.then((stripe) => {
-      if (destroyed || !stripe || !containerRef.current) return;
-
-      // Build a Payment Request — this is what triggers the native sheet
-      const pr = stripe.paymentRequest({
-        // country must match your Stripe account's country.
-        // Change 'US' → 'NG' if you're using a Stripe Atlas Nigeria account.
-        country: 'US',
-        currency,
-        total: { label: `StudyRAG ${tier} — 1 month`, amount },
-        requestPayerName:  false,
-        requestPayerEmail: false,
+  const handleApplePay = async () => {
+    setIsLoading(true);
+    try {
+      // Initialize a Paystack transaction restricted to apple_pay channel
+      const { data } = await api.post('/payment/checkout', {
+        tier,
+        channel: 'apple_pay',
       });
 
-      // Check if Apple Pay / Google Pay is available in this browser
-      pr.canMakePayment().then((result) => {
-        if (destroyed || !result || !containerRef.current) return;
+      if (!data.accessCode && !data.checkoutUrl) {
+        throw new Error('No payment session received');
+      }
 
-        // Mount Stripe's PaymentRequestButtonElement — it auto-renders the
-        // correct button (Apple Pay logo on Safari, Google Pay logo on Chrome)
-        const elements = stripe.elements();
-        prButton = elements.create('paymentRequestButton', {
-          paymentRequest: pr,
-          style: {
-            paymentRequestButton: {
-              type:   'default',
-              theme:  'dark',
-              height: '52px',
-            },
+      if (data.accessCode) {
+        const { default: PaystackPop } = await import('@paystack/inline-js');
+        const popup = new PaystackPop();
+        popup.resumeTransaction(data.accessCode, {
+          async onSuccess(transaction) {
+            try {
+              await api.get(`/payment/verify/${encodeURIComponent(data.paymentReference)}`);
+            } catch { /* webhook handles it as fallback */ }
+            await fetchProfile();
+            onSuccess?.();
+          },
+          onCancel() {
+            // User cancelled — do nothing
+          },
+          onError(err) {
+            onError?.(err?.message || 'Payment failed. Please try again.');
           },
         });
-        prButton.mount(containerRef.current);
-        setCanPay(true);
-      });
+      } else {
+        window.location.href = data.checkoutUrl;
+      }
+    } catch (err) {
+      onError?.(err?.response?.data?.error || err.message || 'Payment failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-      // Fired when the user authorises via Apple/Google Pay
-      pr.on('paymentmethod', async (ev) => {
-        try {
-          // 1. Create a PaymentIntent on the backend
-          const { data } = await api.post('/payment/stripe/intent', { tier, currency });
-
-          // 2. Confirm using the token from the device's wallet
-          const { error: confirmError } = await stripe.confirmCardPayment(
-            data.clientSecret,
-            { payment_method: ev.paymentMethod.id },
-            { handleActions: false }, // keep everything in-page, no redirects
-          );
-
-          if (confirmError) {
-            ev.complete('fail');
-            onError?.(confirmError.message || 'Payment failed. Please try again.');
-          } else {
-            ev.complete('success');
-
-            // 3. Tell our backend to upgrade the subscription
-            try {
-              await api.post('/payment/stripe/confirm', {
-                paymentIntentId: data.paymentIntentId,
-                tier,
-              });
-            } catch (e) {
-              // Non-fatal — backend will catch it via Stripe webhook as fallback
-              console.warn('[NativePay] Backend confirm call failed:', e.message);
-            }
-
-            onSuccess?.();
-          }
-        } catch (err) {
-          ev.complete('fail');
-          onError?.(err?.response?.data?.error || 'Payment failed. Please try again.');
-        }
-      });
-    });
-
-    return () => {
-      destroyed = true;
-      try { prButton?.destroy(); } catch {}
-    };
-  }, [tier, currency, amount]);
-
-  // Don't render anything if Stripe isn't configured or the device can't pay
-  if (!STRIPE_KEY || !amounts) return null;
+  if (!canPay) return null;
 
   return (
-    <div className={canPay ? 'block' : 'hidden'}>
-      {/* Stripe mounts the Apple Pay / Google Pay button here */}
-      <div ref={containerRef} className="w-full rounded-2xl overflow-hidden" />
+    <div>
+      <button
+        onClick={handleApplePay}
+        disabled={isLoading}
+        className="w-full h-[52px] bg-black text-white rounded-2xl flex items-center justify-center gap-2 font-semibold text-base hover:bg-gray-900 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer"
+        style={{ WebkitAppearance: '-apple-pay-button', ApplePayButtonType: 'plain' }}
+      >
+        {/* Fallback content shown if -apple-pay-button CSS isn't supported */}
+        {!isLoading && (
+          <>
+            <svg viewBox="0 0 24 24" className="h-5 w-auto fill-white" xmlns="http://www.w3.org/2000/svg">
+              <path d="M17.0425 12.7875C17.025 10.8375 18.6375 9.8925 18.7125 9.8475C17.805 8.505 16.3875 8.3175 15.885 8.3025C14.685 8.175 13.5225 9.0225 12.9075 9.0225C12.285 9.0225 11.3325 8.3175 10.32 8.3325C9.0075 8.355 7.7925 9.105 7.1175 10.2975C5.73 12.7275 6.735 16.3425 8.07 18.33C8.7375 19.305 9.525 20.3925 10.5525 20.3475C11.55 20.3025 11.9325 19.695 13.14 19.695C14.3475 19.695 14.7 20.3475 15.7425 20.325C16.815 20.3025 17.4975 19.35 18.15 18.3675C18.93 17.235 19.245 16.1325 19.26 16.0725C19.2375 16.065 17.0625 15.225 17.0425 12.7875Z" />
+              <path d="M15.1275 7.0575C15.675 6.3825 16.05 5.46 15.945 4.5C15.165 4.5375 14.1975 5.0325 13.6275 5.6925C13.1175 6.27 12.6675 7.2225 12.7875 8.1225C13.665 8.19 14.565 7.7325 15.1275 7.0575Z" />
+            </svg>
+            <span>Pay</span>
+          </>
+        )}
+        {isLoading && (
+          <svg className="animate-spin h-5 w-5 fill-white" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+            <path className="opacity-75" d="M4 12a8 8 0 018-8v8z" />
+          </svg>
+        )}
+      </button>
 
-      {/* Divider between native-pay buttons and card/bank options below */}
       <div className="flex items-center gap-3 my-4">
         <div className="flex-1 h-px bg-gray-200" />
         <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
