@@ -23,6 +23,7 @@ import { LampContainer } from '../components/ui/lamp';
 import FeatureLiveDemo from '../components/features/FeatureLiveDemo';
 import useAuthStore from '../store/authStore';
 import SEO from '../components/common/SEO';
+import { ArcadeEmbed } from '../components/common/ArcadeEmbed';
 
 const features = [
   {
@@ -279,6 +280,7 @@ export default function Home() {
   const [scrolled, setScrolled] = useState(false);
   const [hoveredIdx, setHoveredIdx] = useState(null);
   const [activePreview, setActivePreview] = useState(null);
+  const [showArcade, setShowArcade] = useState(false);
 
   useEffect(() => {
     initialize();
@@ -337,7 +339,7 @@ export default function Home() {
                 Get Started
               </Link>
               <button
-                onClick={() => setActivePreview('Learn Mode')}
+                onClick={() => setShowArcade(true)}
                 className="inline-flex items-center justify-center gap-2.5 bg-slate-900 border border-white/10 text-white px-5 sm:px-8 py-3 rounded-xl font-black text-sm sm:text-base hover:bg-slate-800 transition-all active:scale-95 whitespace-nowrap"
               >
                 <Play className="h-4 w-4 sm:h-5" />
@@ -608,6 +610,44 @@ export default function Home() {
           </div>
         </section>
       </main>
+
+      <AnimatePresence>
+        {showArcade && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowArcade(false)}
+              className="absolute inset-0 bg-slate-950/70 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 16 }}
+              transition={{ duration: 0.2 }}
+              className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden z-10"
+            >
+              <div className="absolute top-4 right-4 z-[120]">
+                <button
+                  onClick={() => setShowArcade(false)}
+                  className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-900 rounded-full transition-all active:scale-95"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-4 sm:p-6">
+                <ArcadeEmbed />
+              </div>
+              <div className="px-6 pb-4 text-center">
+                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">
+                  Interactive Demo &bull; StudyRAG 2026
+                </p>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {activePreview && (
