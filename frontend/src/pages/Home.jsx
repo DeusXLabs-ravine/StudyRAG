@@ -169,6 +169,75 @@ const homeSchema = [
     url: 'https://studyrag.co',
     description: 'StudyRAG is an AI study platform for turning notes, PDFs, textbooks, and lecture slides into guided study workflows.',
     inLanguage: 'en',
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: {
+        '@type': 'EntryPoint',
+        urlTemplate: 'https://studyrag.co/chat?q={search_term_string}',
+      },
+      'query-input': 'required name=search_term_string',
+    },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'SiteLinksSearchBox',
+    url: 'https://studyrag.co',
+    potentialAction: [
+      {
+        '@type': 'SearchAction',
+        target: 'https://studyrag.co/chat?q={search_term_string}',
+        'query-input': 'required name=search_term_string',
+      },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: 'StudyRAG Navigation',
+    itemListElement: [
+      {
+        '@type': 'SiteNavigationElement',
+        position: 1,
+        name: 'Features',
+        description: 'Explore AI chat, quizzes, flashcards, study modules, and exam prep tools built from your own documents.',
+        url: 'https://studyrag.co/features',
+      },
+      {
+        '@type': 'SiteNavigationElement',
+        position: 2,
+        name: 'Pricing',
+        description: 'Free, Basic, Pro, and Max plans. Start free — no credit card required.',
+        url: 'https://studyrag.co/pricing',
+      },
+      {
+        '@type': 'SiteNavigationElement',
+        position: 3,
+        name: 'About',
+        description: 'Learn about the team and mission behind StudyRAG.',
+        url: 'https://studyrag.co/about',
+      },
+      {
+        '@type': 'SiteNavigationElement',
+        position: 4,
+        name: 'AI Chat',
+        description: 'Chat with your PDFs, lecture notes, and textbooks using document-grounded AI.',
+        url: 'https://studyrag.co/chat',
+      },
+      {
+        '@type': 'SiteNavigationElement',
+        position: 5,
+        name: 'Flashcards',
+        description: 'Auto-generate spaced-repetition flashcard decks from your study materials.',
+        url: 'https://studyrag.co/flashcards',
+      },
+      {
+        '@type': 'SiteNavigationElement',
+        position: 6,
+        name: 'Quiz Mode',
+        description: 'Adaptive AI quizzes that target your weak areas based on your own notes.',
+        url: 'https://studyrag.co/quiz',
+      },
+    ],
   },
   {
     '@context': 'https://schema.org',
