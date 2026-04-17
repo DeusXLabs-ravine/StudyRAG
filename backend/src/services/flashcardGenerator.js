@@ -188,6 +188,9 @@ async function getContentForGeneration(docId, userId = null) {
     if (pages.length > 0) return pages;
     return await vectorStore.getDocumentChunks(docId);
   }
+  // No docId: try pages first (newer docs), fall back to chunks (legacy docs)
+  const pages = await vectorStore.getAllPagesWithText(userId, 200);
+  if (pages.length > 0) return pages;
   return await vectorStore.getAllChunksWithText(userId, 200);
 }
 

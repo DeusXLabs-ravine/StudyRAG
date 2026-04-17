@@ -204,6 +204,35 @@ async function getPages(docId, pageNumbers) {
   }));
 }
 
+async function getAllPagesWithText(userId = null, limit = 200) {
+  if (userId) {
+    const { data: docs, error: docsErr } = await supabase
+      .from('documents')
+      .select('id')
+      .eq('user_id', userId);
+    if (docsErr) throw docsErr;
+    const docIds = (docs || []).map(d => d.id);
+    if (docIds.length === 0) return [];
+
+    const { data, error } = await supabase
+      .from('pages')
+      .select('id, doc_id, page_number, text, heading')
+      .in('doc_id', docIds)
+      .order('page_number', { ascending: true })
+      .limit(limit);
+    if (error) throw error;
+    return (data || []).map(row => ({ id: row.id, docId: row.doc_id, pageNumber: row.page_number, text: row.text, heading: row.heading }));
+  }
+
+  const { data, error } = await supabase
+    .from('pages')
+    .select('id, doc_id, page_number, text, heading')
+    .order('page_number', { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []).map(row => ({ id: row.id, docId: row.doc_id, pageNumber: row.page_number, text: row.text, heading: row.heading }));
+}
+
 async function getDocumentPages(docId) {
   const { data, error } = await supabase
     .from('pages')
@@ -422,6 +451,7 @@ module.exports = {
   getPageIndex,
   getPages,
   getDocumentPages,
+  getAllPagesWithText,
   getAllPageIndexes,
   deletePages,
 };

@@ -224,7 +224,9 @@ async function getContentForGeneration(docId, userId = null) {
     // Fall back to chunks for legacy documents
     return await vectorStore.getDocumentChunks(docId);
   }
-  // No docId: use user's chunks only, with a cap to avoid loading all rows
+  // No docId: try pages first (newer docs), fall back to chunks (legacy docs)
+  const pages = await vectorStore.getAllPagesWithText(userId, 200);
+  if (pages.length > 0) return pages;
   return await vectorStore.getAllChunksWithText(userId, 200);
 }
 

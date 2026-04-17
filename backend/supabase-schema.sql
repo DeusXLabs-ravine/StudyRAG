@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS flashcard_cards (
   front TEXT NOT NULL,
   back TEXT NOT NULL,
   topic TEXT,
+  source_pages INTEGER[],
   status TEXT NOT NULL DEFAULT 'new',
   ease_factor REAL NOT NULL DEFAULT 2.5,
   interval_days INTEGER NOT NULL DEFAULT 0,
