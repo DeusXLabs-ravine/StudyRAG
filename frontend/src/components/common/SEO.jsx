@@ -18,7 +18,7 @@ export default function SEO({
   description,
   canonical,
   ogType = 'website',
-  ogImage = '/logo-1.png',
+  ogImage = '/logo.png',
   keywords,
   robots = 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1',
   schema,
