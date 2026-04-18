@@ -182,10 +182,19 @@ if (process.env.NODE_ENV === 'production') {
     lastModified: false,
   }));
 
-  // Apple Pay domain verification file
+  // Apple Pay domain verification file (Paystack).
+  // Served directly from the backend so it doesn't depend on the frontend
+  // build pipeline. Paystack strictly requires Content-Type: application/text.
   app.get('/.well-known/apple-developer-merchantid-domain-association', (req, res) => {
-    res.set('Content-Type', 'application/text'); // Paystack specifically requests this content-type
-    res.sendFile(path.join(__dirname, '../../frontend/dist/.well-known/apple-developer-merchantid-domain-association'));
+    const filePath = path.join(__dirname, '../.well-known/apple-developer-merchantid-domain-association');
+    res.set('Content-Type', 'application/text');
+    res.set('Cache-Control', 'public, max-age=300');
+    res.sendFile(filePath, (err) => {
+      if (err) {
+        console.error('[ApplePay] Verification file missing at', filePath, err.message);
+        if (!res.headersSent) res.status(404).send('verification file not found');
+      }
+    });
   });
 
   // All other static files (index.html, robots.txt, etc.) — short cache.
