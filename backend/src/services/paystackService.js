@@ -7,14 +7,15 @@ class PaystackService {
   /**
    * Initialize a new transaction
    */
-  async initializeTransaction({ amount, customerEmail, paymentReference, callbackUrl, channels, metadata }) {
+  async initializeTransaction({ amount, customerEmail, paymentReference, callbackUrl, channels, metadata, currency = 'NGN' }) {
     try {
-      // Paystack expects amount in Kobo (amount * 100)
+      // Paystack expects amount in the lowest currency unit (amount * 100)
       const amountInKobo = amount * 100;
 
       const body = {
         amount: amountInKobo,
         email: customerEmail,
+        currency,
         reference: paymentReference,
         callback_url: callbackUrl,
         channels: channels || ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
@@ -34,7 +35,8 @@ class PaystackService {
       if (data.status) {
         return data.data; // Contains authorization_url and access_code
       }
-      throw new Error(`Failed to init Paystack transaction: ${data.message}`);
+      console.error('[PaystackService] Init failed. Request:', JSON.stringify({ channels: body.channels, currency, amount: amountInKobo }), 'Response:', JSON.stringify(data));
+      throw new Error(`Paystack init failed: ${data.message || 'unknown error'}`);
     } catch (error) {
       console.error('[PaystackService] Error initializing transaction:', error.message);
       throw error;

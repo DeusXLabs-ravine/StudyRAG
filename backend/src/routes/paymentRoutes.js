@@ -89,20 +89,44 @@ router.post('/checkout', async (req, res, next) => {
 
     if (gateway === 'paystack') {
       try {
-        const response = await paystackService.initializeTransaction({
-          amount,
-          customerEmail: user.email,
-          paymentReference,
-          callbackUrl: `${appBaseUrl}/payment/verify?reference=${paymentReference}`,
-          channels: paystackChannels,
-          metadata: {
-            tier: tier.toLowerCase(),
-            userId: user.id,
-            custom_fields: [
-              { display_name: 'Plan', variable_name: 'plan', value: `StudyRAG ${tier.toUpperCase()}` },
-            ],
-          },
-        });
+        let response;
+        try {
+          response = await paystackService.initializeTransaction({
+            amount,
+            customerEmail: user.email,
+            paymentReference,
+            callbackUrl: `${appBaseUrl}/payment/verify?reference=${paymentReference}`,
+            channels: paystackChannels,
+            metadata: {
+              tier: tier.toLowerCase(),
+              userId: user.id,
+              custom_fields: [
+                { display_name: 'Plan', variable_name: 'plan', value: `StudyRAG ${tier.toUpperCase()}` },
+              ],
+            },
+          });
+        } catch (initErr) {
+          // If Apple-Pay-only init fails (e.g. domain not yet verified on
+          // Paystack), retry with card fallback so the user can still pay.
+          const isApplePayOnly =
+            paystackChannels.length === 1 && paystackChannels[0] === 'apple_pay';
+          if (!isApplePayOnly) throw initErr;
+          console.warn('[PaymentRoutes] Apple Pay init failed, retrying with card fallback:', initErr.message);
+          response = await paystackService.initializeTransaction({
+            amount,
+            customerEmail: user.email,
+            paymentReference,
+            callbackUrl: `${appBaseUrl}/payment/verify?reference=${paymentReference}`,
+            channels: ['apple_pay', 'card'],
+            metadata: {
+              tier: tier.toLowerCase(),
+              userId: user.id,
+              custom_fields: [
+                { display_name: 'Plan', variable_name: 'plan', value: `StudyRAG ${tier.toUpperCase()}` },
+              ],
+            },
+          });
+        }
         checkoutUrl = response.authorization_url;
         accessCode = response.access_code;           // ← for inline popup
         transactionReference = response.access_code;
