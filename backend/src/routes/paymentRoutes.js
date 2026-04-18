@@ -71,13 +71,19 @@ router.post('/checkout', async (req, res, next) => {
     let actualGateway = '';
 
     // Resolve channel → valid Paystack channel(s)
-    // Always include 'card' as a fallback so there's at least one universally
-    // supported channel even when the requested channel (e.g. apple_pay) hasn't
-    // been activated on the Paystack dashboard yet.
+    // When the caller explicitly requests apple_pay, restrict the transaction
+    // to ONLY apple_pay so Paystack shows the native Apple Pay sheet instead
+    // of the generic card input. For other explicit channels we still include
+    // 'card' as a universal fallback.
     const resolvedChannel = channel ? PAYSTACK_CHANNEL_MAP[channel] : null;
-    const paystackChannels = resolvedChannel
-      ? [...new Set([resolvedChannel, 'card'])]
-      : DEFAULT_PAYSTACK_CHANNELS;
+    let paystackChannels;
+    if (!resolvedChannel) {
+      paystackChannels = DEFAULT_PAYSTACK_CHANNELS;
+    } else if (resolvedChannel === 'apple_pay') {
+      paystackChannels = ['apple_pay'];
+    } else {
+      paystackChannels = [...new Set([resolvedChannel, 'card'])];
+    }
     const monnifyChannel = channel ? PAYSTACK_TO_MONNIFY_MAP[channel] : null;
     const monnifyChannels = monnifyChannel ? [monnifyChannel] : DEFAULT_MONNIFY_CHANNELS;
 
