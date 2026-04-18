@@ -3,6 +3,7 @@ const cors = require('cors');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const fs = require('fs');
 const { allowedOrigins } = require('./config/env');
 const errorHandler = require('./middleware/errorHandler');
 const { requireAuth } = require('./middleware/auth');
@@ -183,18 +184,42 @@ if (process.env.NODE_ENV === 'production') {
   }));
 
   // Apple Pay domain verification file (Paystack).
-  // Served directly from the backend so it doesn't depend on the frontend
-  // build pipeline. Paystack strictly requires Content-Type: application/text.
+  // Paystack strictly requires Content-Type: application/text.
+  // We load the file into memory at boot from the first path that resolves —
+  // this removes any runtime path-resolution ambiguity in the container.
+  const applePayCandidates = [
+    path.join(__dirname, '../.well-known/apple-developer-merchantid-domain-association'),
+    path.join(__dirname, '../../backend/.well-known/apple-developer-merchantid-domain-association'),
+    path.join(__dirname, '../../frontend/dist/.well-known/apple-developer-merchantid-domain-association'),
+    path.join(__dirname, '../../frontend/public/.well-known/apple-developer-merchantid-domain-association'),
+    path.join(process.cwd(), 'backend/.well-known/apple-developer-merchantid-domain-association'),
+    path.join(process.cwd(), '.well-known/apple-developer-merchantid-domain-association'),
+  ];
+
+  let applePayBuffer = null;
+  let applePaySource = null;
+  for (const p of applePayCandidates) {
+    try {
+      if (fs.existsSync(p)) {
+        applePayBuffer = fs.readFileSync(p);
+        applePaySource = p;
+        break;
+      }
+    } catch { /* try next */ }
+  }
+  if (applePayBuffer) {
+    console.log('[ApplePay] Loaded verification file from', applePaySource, `(${applePayBuffer.length} bytes)`);
+  } else {
+    console.error('[ApplePay] Verification file NOT FOUND. Tried:', applePayCandidates);
+  }
+
   app.get('/.well-known/apple-developer-merchantid-domain-association', (req, res) => {
-    const filePath = path.join(__dirname, '../.well-known/apple-developer-merchantid-domain-association');
     res.set('Content-Type', 'application/text');
     res.set('Cache-Control', 'public, max-age=300');
-    res.sendFile(filePath, (err) => {
-      if (err) {
-        console.error('[ApplePay] Verification file missing at', filePath, err.message);
-        if (!res.headersSent) res.status(404).send('verification file not found');
-      }
-    });
+    if (!applePayBuffer) {
+      return res.status(404).send('verification file not found');
+    }
+    res.send(applePayBuffer);
   });
 
   // All other static files (index.html, robots.txt, etc.) — short cache.
