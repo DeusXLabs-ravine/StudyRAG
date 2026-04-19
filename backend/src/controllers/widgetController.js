@@ -9,7 +9,8 @@
  * only this payload — it never talks to Supabase directly.
  */
 
-const { createServiceRoleSupabase } = require('../config/supabase');
+const supabase = require('../config/database');
+const { getSubscriptionSnapshotForUser } = require('../services/subscriptionService');
 
 const PRO_TIERS = new Set(['pro', 'pro_annual', 'unlimited', 'enterprise']);
 
@@ -27,13 +28,26 @@ function pickDailyIndex(arr, seed) {
   return hash % arr.length;
 }
 
+async function resolveTier(user) {
+  // Prefer the full subscription snapshot (mirrors how the rest of the app
+  // resolves Pro gating). Fall back to whatever is on req.user if the snapshot
+  // fails — widgets should never 500 on a tier lookup hiccup.
+  try {
+    const snapshot = await getSubscriptionSnapshotForUser(user.id, user.email);
+    if (snapshot?.tier) return String(snapshot.tier).toLowerCase();
+  } catch {
+    /* fall through */
+  }
+  return String(user?.subscription_tier || 'free').toLowerCase();
+}
+
 async function getDailyWidgetContent(req, res, next) {
   try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: { message: 'Not authenticated.' } });
+    const user = req.user;
+    if (!user?.id) return res.status(401).json({ error: { message: 'Not authenticated.' } });
 
-    const supabase = createServiceRoleSupabase?.() ?? null;
-    const tier = (req.user?.subscription_tier || 'free').toLowerCase();
+    const userId = user.id;
+    const tier = await resolveTier(user);
     const isPro = PRO_TIERS.has(tier);
 
     // Flashcard: prefer a card that is due today (SRS next_review_date <= now).
