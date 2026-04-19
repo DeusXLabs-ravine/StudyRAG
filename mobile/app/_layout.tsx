@@ -1,6 +1,7 @@
 import '../global.css';
 
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import * as Linking from 'expo-linking';
 import { Redirect, Stack, usePathname, useSegments } from 'expo-router';
 import { ActivityIndicator, Text, View } from 'react-native';
@@ -18,6 +19,8 @@ import {
   useFonts as useOutfitFonts,
 } from '@expo-google-fonts/outfit';
 import { AppProviders } from '@/providers/AppProviders';
+import { TutorialProvider } from '@/components/tutorial/TutorialProvider';
+import { syncWidgets } from '@/native/widgets';
 import { colors, fonts } from '@/lib/theme/tokens';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -82,6 +85,17 @@ function RootNavigator() {
     return () => sub.remove();
   }, [handleIncomingUrl]);
 
+  // Keep widgets fresh — sync on login and on foreground. syncWidgets() is a
+  // no-op in Expo Go (no native bridge), so this is safe everywhere.
+  useEffect(() => {
+    if (!session?.user) return;
+    syncWidgets();
+    const sub = AppState.addEventListener('change', next => {
+      if (next === 'active') syncWidgets();
+    });
+    return () => sub.remove();
+  }, [session?.user]);
+
   const fontsReady = outfitLoaded && kalamLoaded && caveatLoaded;
   if (!fontsReady || loading) {
     return <SplashState />;
@@ -126,7 +140,9 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <AppProviders>
-      <RootNavigator />
+      <TutorialProvider>
+        <RootNavigator />
+      </TutorialProvider>
     </AppProviders>
   );
 }

@@ -29,6 +29,8 @@ const webhookRoutes = require('./routes/webhookRoutes');
 const geminiRoutes = require('./routes/geminiRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const podcastRoutes = require('./routes/podcastRoutes');
+const ocrRoutes = require('./routes/ocrRoutes');
+const widgetRoutes = require('./routes/widgetRoutes');
 
 const app = express();
 
@@ -168,6 +170,14 @@ app.use('/api/gemini', geminiRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/podcast/generate', generationLimiter);
 app.use('/api/podcast', podcastRoutes);
+
+// OCR scan — bounded by the generation limiter since each call invokes a
+// vision provider. Requires auth (applied above via requireAuth).
+app.use('/api/documents/ocr', generationLimiter);
+app.use('/api/documents/ocr', ocrRoutes);
+
+// Widget content — lightweight; global limiter is enough.
+app.use('/api/widgets', widgetRoutes);
 
 // ─── Static & SPA Fallback ───────────────────────────────────
 

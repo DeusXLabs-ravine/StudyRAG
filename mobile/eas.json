@@ -19,7 +19,9 @@
         "resourceClass": "m-medium"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://api.studyrag.co/api"
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.studyrag.co/api",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://wjygeunhqsnusraaehcg.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqeWdldW5ocXNudXNyYWFlaGNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyMTM4NzUsImV4cCI6MjA4Njc4OTg3NX0.KtXxbx2pQY8xGOWt9GDulDTuwWuMBWp81fELkcvmvRE"
       }
     },
     "production": {
@@ -29,7 +31,9 @@
         "resourceClass": "m-medium"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://api.studyrag.co/api"
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.studyrag.co/api",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://wjygeunhqsnusraaehcg.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqeWdldW5ocXNudXNyYWFlaGNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyMTM4NzUsImV4cCI6MjA4Njc4OTg3NX0.KtXxbx2pQY8xGOWt9GDulDTuwWuMBWp81fELkcvmvRE"
       }
     }
   },

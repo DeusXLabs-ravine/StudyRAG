@@ -234,6 +234,24 @@ export async function addTopic(topic: string, description?: string) {
   return data;
 }
 
+export async function submitScan(file: { uri: string; name?: string; mimeType?: string | null }) {
+  // Backend route is multipart — send the image with the `image` field so
+  // multer picks it up on the Express side (see backend/src/routes/ocrRoutes.js).
+  const form = new FormData();
+  const filename = file.name || `scan-${Date.now()}.jpg`;
+  // React Native's FormData accepts this shape — TS complains, hence the cast.
+  form.append('image', {
+    uri: file.uri,
+    name: filename,
+    type: file.mimeType || 'image/jpeg',
+  } as unknown as Blob);
+
+  const { data } = await api.post('/documents/ocr/scan', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data as { document?: StudyDocument; text?: string };
+}
+
 export async function togglePrimarySource(documentId: string, isPrimary: boolean) {
   const { data } = await api.patch(`/documents/${documentId}/primary`, { isPrimary });
   return data;

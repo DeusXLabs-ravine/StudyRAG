@@ -1,0 +1,68 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "StudyRAG",
+  "version": "0.1.0",
+  "identifier": "co.studyrag.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "https://studyrag.co"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "StudyRAG",
+        "url": "https://studyrag.co",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "transparent": false,
+        "center": true,
+        "visible": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "capabilities": ["main-capability"]
+    },
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true,
+      "menuOnLeftClick": false
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis", "dmg", "app"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "copyright": "© 2026 StudyRAG",
+    "category": "Education",
+    "shortDescription": "Study that finally clicks",
+    "longDescription": "StudyRAG turns your documents into tutor chats, quizzes, and flashcards. The desktop app mirrors studyrag.co with native menus, system tray, and offline-aware updates.",
+    "windows": {
+      "wix": {
+        "language": "en-US"
+      },
+      "nsis": {
+        "installerIcon": "icons/icon.ico"
+      }
+    },
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "11.0",
+      "exceptionDomain": "studyrag.co",
+      "entitlements": null
+    }
+  },
+  "plugins": {}
+}

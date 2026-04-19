@@ -1,0 +1,17 @@
+<!--
+  Merge the <receiver> block into the <application> section of
+  mobile/android/app/src/main/AndroidManifest.xml after running `expo prebuild`.
+  The resource references (@xml/studyrag_widget_info, @layout/studyrag_widget_preview,
+  @string/studyrag_widget_description) must also exist under res/.
+-->
+
+<receiver
+    android:name="co.studyrag.widget.StudyRAGWidgetReceiver"
+    android:exported="true">
+    <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+    </intent-filter>
+    <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/studyrag_widget_info" />
+</receiver>
