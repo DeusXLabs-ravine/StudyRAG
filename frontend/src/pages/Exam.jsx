@@ -10,6 +10,8 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { useNavigate } from 'react-router-dom';
 import useBuddyStore from '../store/buddyStore';
+import * as examService from '../services/examService';
+import useDocumentStore from '../store/documentStore';
 import { MorphingSquare } from '../components/ui/morphing-square';
 import { TextLoop } from '../components/ui/text-loop';
 import { getAestheticPhoto } from '../utils/imageHelpers';

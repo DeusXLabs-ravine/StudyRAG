@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Play, CheckCircle, XCircle, RotateCcw, Trophy, Zap, X, Timer, ChevronRight } from 'lucide-react';
+import { Play, CheckCircle, XCircle, RotateCcw, Trophy, ClipboardCheck, X, Timer, ChevronRight, FileText, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
@@ -96,7 +96,7 @@ export default function Quiz() {
         <div className="sleek-card p-6 md:p-10 border border-gray-100 shadow-sm mb-10">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-sm font-black text-gray-900 uppercase tracking-[0.2em] flex items-center gap-2">
-              <Zap className="h-4 w-4 text-primary" />
+              <ClipboardCheck className="h-4 w-4 text-primary" />
               Quiz Configuration
             </h2>
             <div className="px-2 py-0.5 rounded bg-primary/5 text-[8px] font-black text-primary uppercase tracking-widest border border-primary/10">

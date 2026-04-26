@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import {
   BookOpen, Flame, Trophy, ArrowRight, Plus, Library,
   CreditCard, Mic, Brain, ChevronRight, FileText,
-  FlaskConical, Headphones, Target, Clock,
+  FlaskConical, Headphones, Target, Clock, Layers, ClipboardCheck, GraduationCap
 } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import useDocumentStore from '../store/documentStore';
@@ -156,6 +156,28 @@ export default function Study() {
               </div>
             </button>
           )}
+          
+          {/* ─── STUDY MODES LAUNCHPAD ───────────────────────────── */}
+          <div className="grid grid-cols-3 gap-3 mt-4">
+            <StudyModeMiniTile
+              icon={Layers}
+              label="Flashcards"
+              color="bg-blue-500"
+              onClick={() => navigate('/flashcards')}
+            />
+            <StudyModeMiniTile
+              icon={ClipboardCheck}
+              label="Quiz"
+              color="bg-emerald-500"
+              onClick={() => navigate('/quiz')}
+            />
+            <StudyModeMiniTile
+              icon={GraduationCap}
+              label="Exam"
+              color="bg-purple-600"
+              onClick={() => navigate('/exam')}
+            />
+          </div>
         </div>
 
         {/* Due today + Live tutor — 4 cols stacked */}
@@ -305,5 +327,25 @@ function ActionTile({ icon: Icon, label, sub, tint, onClick, pro }) {
         <p className="text-[11px] text-gray-500 mt-0.5 font-medium">{sub}</p>
       </div>
     </button>
+  );
+}
+
+// ─── Study mode mini tiles ────────────────────────────────────────────────
+function StudyModeMiniTile({ icon: Icon, label, color, onClick }) {
+  return (
+    <motion.button
+      whileHover={{ y: -2, scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={onClick}
+      className="flex items-center gap-3 p-4 bg-white border border-gray-200/70 rounded-2xl shadow-[0_1px_2px_rgba(15,23,42,0.03)] hover:shadow-lg hover:border-gray-300 transition-all text-left"
+    >
+      <div className={`h-10 w-10 rounded-xl ${color} flex items-center justify-center text-white shadow-lg shadow-current/20 flex-shrink-0`}>
+        <Icon className="h-5 w-5" strokeWidth={2.3} />
+      </div>
+      <div className="min-w-0">
+        <p className="text-[11px] font-black text-gray-900 uppercase tracking-tight leading-none truncate">{label}</p>
+        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-1">Launch</p>
+      </div>
+    </motion.button>
   );
 }
