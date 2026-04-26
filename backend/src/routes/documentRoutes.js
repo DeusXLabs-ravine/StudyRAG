@@ -11,6 +11,7 @@ const {
   deleteDocument,
   reprocessDocument,
   getDocumentResources,
+  getDocumentViewUrl,
   registerUrl,
   registerNote,
   togglePrimarySource,
@@ -33,6 +34,7 @@ router.get('/', cacheResponse(30_000), listDocuments);          // 30 s cache
 router.get('/:id', cacheResponse(60_000), getDocument);         // 1 min cache
 router.delete('/:id', deleteDocument);
 router.get('/:id/resources', cacheResponse(5 * 60_000), getDocumentResources);  // 5 min cache
+router.get('/:id/view-url', getDocumentViewUrl);                                 // short-lived signed URL for co-reading
 router.post('/:id/reprocess', reprocessDocument);
 
 module.exports = router;

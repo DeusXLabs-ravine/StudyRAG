@@ -13,13 +13,16 @@ const ADMIN_UNLIMITED_LIMITS = Object.freeze({
   tts: true,
   diagrams: Number.MAX_SAFE_INTEGER,
   proModels: true,
+  buddy: true,
+  buddyMinutesSoft: Number.MAX_SAFE_INTEGER,
+  buddyMinutesHard: Number.MAX_SAFE_INTEGER,
 });
 
 const TIER_LIMITS = {
-  free:  { documents: 2,   chats: 50,   teach: false, games: false, simulations: false, podcast: false, live: 0,   tts: 0,   diagrams: 5,   proModels: false },
-  basic: { documents: 10,  chats: 200,  teach: false, games: false, simulations: false, podcast: false, live: 0,   tts: 0,   diagrams: 20,  proModels: false },
-  pro:   { documents: 50,  chats: 1500, teach: true,  games: true,  simulations: true,  podcast: true,  live: 20,  tts: 30,  diagrams: 100, proModels: true  },
-  max:   { documents: 200, chats: 5000, teach: true,  games: true,  simulations: true,  podcast: true,  live: 60,  tts: 100, diagrams: 500, proModels: true  },
+  free:  { documents: 2,   chats: 50,   teach: false, games: false, simulations: false, podcast: false, live: 0,   tts: 0,   diagrams: 5,   proModels: false, buddy: false, buddyMinutesSoft: 0,   buddyMinutesHard: 0   },
+  basic: { documents: 10,  chats: 200,  teach: false, games: false, simulations: false, podcast: false, live: 0,   tts: 0,   diagrams: 20,  proModels: false, buddy: false, buddyMinutesSoft: 0,   buddyMinutesHard: 0   },
+  pro:   { documents: 50,  chats: 1500, teach: true,  games: true,  simulations: true,  podcast: true,  live: 20,  tts: 30,  diagrams: 100, proModels: true,  buddy: false, buddyMinutesSoft: 0,   buddyMinutesHard: 0   },
+  max:   { documents: 200, chats: 5000, teach: true,  games: true,  simulations: true,  podcast: true,  live: 60,  tts: 100, diagrams: 500, proModels: true,  buddy: true,  buddyMinutesSoft: 120, buddyMinutesHard: 300 },
 };
 
 function normalizeTier(tier) {
@@ -50,6 +53,7 @@ function getFeatureAccessFromLimits(limits) {
     canUseLive: isFeatureEnabled(limits.live),
     canUseTts: isFeatureEnabled(limits.tts),
     canUseProModels: isFeatureEnabled(limits.proModels),
+    canUseBuddy: isFeatureEnabled(limits.buddy),
   };
 }
 

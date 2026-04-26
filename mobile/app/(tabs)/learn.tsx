@@ -150,6 +150,10 @@ export default function LearnTabScreen() {
           const isReady = doc.status === 'ready';
           const isActive = splitView && selectedId === doc.id;
           const handlePress = () => {
+            if (doc.status === 'processing') {
+              router.push({ pathname: '/processing/[id]', params: { id: doc.id } });
+              return;
+            }
             if (splitView) {
               if (isReady) setSelectedId(doc.id);
             } else if (isReady) {
@@ -157,7 +161,7 @@ export default function LearnTabScreen() {
             }
           };
           return (
-            <Pressable key={doc.id} onPress={handlePress} disabled={!isReady}>
+            <Pressable key={doc.id} onPress={handlePress}>
               <Card
                 style={{
                   borderColor: isActive ? colors.primary : colors.border,

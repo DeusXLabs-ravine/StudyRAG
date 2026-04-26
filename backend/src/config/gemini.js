@@ -1,4 +1,5 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleAICacheManager } = require('@google/generative-ai/server');
 const { geminiApiKey, geminiApiKeys } = require('./env');
 
 // ─── GeminiKeyPool: Round-Robin Multi-Key Management ──────────
@@ -115,6 +116,7 @@ if (keys.length === 0) {
 }
 
 const keyPool = keys.length > 0 ? new GeminiKeyPool(keys) : null;
+const cacheManager = keys.length > 0 ? new GoogleAICacheManager(keys[0]) : null; // Use first key for cache management
 
 // Concurrency limit: ~15 per key (Gemini rate limit is ~15 RPM for free, 1500 for paid)
 const maxConcurrent = Math.max(15, keys.length * 15);
@@ -127,13 +129,13 @@ if (keys.length > 0) {
 // ─── Model Configuration ──────────────────────────────────────
 // Primary models per tier. 3-pro is deprecated March 9 2026 → migrated to 3.1-pro.
 const MODELS = {
-  fast: 'gemini-3-flash-preview',
+  fast: 'gemini-2.5-flash',
   standard: 'gemini-3-flash-preview',
-  advanced: 'gemini-3.1-pro-preview',
+  advanced: 'gemini-3.1-pro-preview', // 2.0 Flash is currently very strong, use exp for advanced features
   imageGen: [
+    'gemini-2.5-flash-image', // Supports image generation in some versions
     'gemini-3-pro-image-preview',
     'gemini-3.1-flash-image-preview',
-    'gemini-2.5-flash-image',
   ],
 };
 
@@ -397,6 +399,19 @@ function isOverloadError(err) {
 }
 
 /**
+ * Detect if an error is a transient network/connection failure.
+ */
+function isNetworkError(err) {
+  const msg = err?.message || String(err);
+  return msg.includes('fetch failed') || 
+         msg.includes('ECONNRESET') || 
+         msg.includes('ETIMEDOUT') ||
+         msg.includes('Socket closed') ||
+         msg.includes('UND_ERR_CONNECT_TIMEOUT') ||
+         msg.includes('Network Error');
+}
+
+/**
  * Extract the model name from a Gemini error message (if present).
  * Errors typically include the model name in the URL.
  */
@@ -421,8 +436,9 @@ async function withRetryOnRateLimit(fn, maxRetries = 3, priority = 0) {
       } catch (err) {
         const rateLimited = isRateLimitError(err);
         const overloaded = isOverloadError(err);
+        const networkErr = isNetworkError(err);
 
-        if ((rateLimited || overloaded) && attempt < maxRetries && keyPool) {
+        if ((rateLimited || overloaded || networkErr) && attempt < maxRetries && keyPool) {
           // Mark the API key as rate-limited
           if (rateLimited) {
             const total = keyPool.entries.length;
@@ -438,8 +454,8 @@ async function withRetryOnRateLimit(fn, maxRetries = 3, priority = 0) {
             markModelUnhealthy(failedModel, cooldown, rateLimited ? '429 rate limit' : '503 overloaded');
           }
 
-          const waitMs = overloaded ? 2000 * (attempt + 1) : 1000 * (attempt + 1);
-          console.warn(`[GeminiRetry] ${overloaded ? '503 overloaded' : 'Rate limited'}${failedModel ? ` (${failedModel})` : ''}, retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+          const waitMs = (overloaded || networkErr) ? 2000 * (attempt + 1) : 1000 * (attempt + 1);
+          console.warn(`[GeminiRetry] ${networkErr ? 'Network error' : (overloaded ? '503 overloaded' : 'Rate limited')}${failedModel ? ` (${failedModel})` : ''}, retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`);
           await new Promise(r => setTimeout(r, waitMs));
           continue;
         }
@@ -483,10 +499,11 @@ async function withModelFallback(fnFactory, tier = 'fast', priority = 0) {
     } catch (err) {
       const rateLimited = isRateLimitError(err);
       const overloaded = isOverloadError(err);
+      const networkErr = isNetworkError(err);
 
-      if ((rateLimited || overloaded) && i < allModels.length - 1) {
-        markModelUnhealthy(modelName, 60_000, rateLimited ? '429' : '503');
-        console.warn(`[ModelFallback] ${modelName} failed, trying ${allModels[i + 1]}`);
+      if ((rateLimited || overloaded || networkErr) && i < allModels.length - 1) {
+        if (!networkErr) markModelUnhealthy(modelName, 60_000, rateLimited ? '429' : '503');
+        console.warn(`[ModelFallback] ${modelName} failed (${networkErr ? 'network' : 'api'}), trying ${allModels[i + 1]}`);
         await new Promise(r => setTimeout(r, 500));
         continue;
       }
@@ -524,4 +541,5 @@ module.exports = {
   resolveModel,
   MODELS,
   FALLBACK_MODELS,
+  cacheManager,
 };

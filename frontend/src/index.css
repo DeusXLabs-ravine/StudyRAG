@@ -413,3 +413,197 @@ html.a11y-cb-tritanopia {
 }
 /* Achromatopsia (full colour-blind) */
 html.a11y-cb-achromatopsia { filter: grayscale(1); }
+
+/* ─── Buddy — ambient session styling ─────────────────────── */
+
+/* Calm warm-cream room. A single small tinted glow sits behind the orb —
+   no page-wide gradients, no drift. Mood-specific variables are set on
+   [data-buddy-mood="..."] so the orb's mood is hinted rather than shouted. */
+.buddy-ambient {
+  position: relative;
+  isolation: isolate;
+  background-color: #FAF7F2;
+  --buddy-glow: rgba(180, 165, 145, 0.10);
+  transition: background-color 1200ms ease;
+}
+
+/* Localised halo behind the orb — not full-page. Quiet enough to ignore,
+   warm enough to read as "lit room". */
+.buddy-ambient::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: clamp(180px, 22%, 320px);
+  width: min(560px, 78vw);
+  height: min(560px, 78vw);
+  transform: translate(-50%, -50%);
+  z-index: -1;
+  background: radial-gradient(circle, var(--buddy-glow) 0%, transparent 62%);
+  filter: blur(32px);
+  pointer-events: none;
+  transition: background 1600ms ease;
+}
+
+/* Mood palettes — near-monochrome; the tint is a breath, not a wash. */
+[data-buddy-mood="neutral"]     { --buddy-glow: rgba(180, 165, 145, 0.10); }
+[data-buddy-mood="warm"]        { --buddy-glow: rgba(200, 170, 130, 0.14); }
+[data-buddy-mood="amused"]      { --buddy-glow: rgba(140, 180, 155, 0.12); }
+[data-buddy-mood="curious"]     { --buddy-glow: rgba(155, 165, 200, 0.12); }
+[data-buddy-mood="encouraging"] { --buddy-glow: rgba(200, 160, 125, 0.14); }
+[data-buddy-mood="puzzled"]     { --buddy-glow: rgba(160, 165, 175, 0.10); }
+[data-buddy-mood="speaking"]    { --buddy-glow: rgba(145, 155, 205, 0.18); }
+[data-buddy-mood="listening"]   { --buddy-glow: rgba(100, 190, 140, 0.18); }
+
+@media (prefers-reduced-motion: reduce) {
+  .buddy-ambient,
+  .buddy-ambient::before { transition: none; }
+  .buddy-ring { animation: none !important; opacity: 0 !important; }
+}
+
+/* Concentric pulse rings behind the orb — emitted every 2s, fade + grow. */
+.buddy-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 68%;
+  height: 68%;
+  border-radius: 50%;
+  border: 1px solid rgba(180, 165, 145, 0.35);
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  pointer-events: none;
+  animation: buddy-ring-pulse 5.4s ease-out infinite;
+}
+.buddy-ring--2 { animation-delay: 1.8s; }
+.buddy-ring--3 { animation-delay: 3.6s; }
+
+@keyframes buddy-ring-pulse {
+  0%   { transform: translate(-50%, -50%) scale(0.62); opacity: 0;    border-width: 1px; }
+  25%  { opacity: 0.28; }
+  100% { transform: translate(-50%, -50%) scale(1.5);  opacity: 0;    border-width: 0.5px; }
+}
+
+/* Toolbar listening-glow — muted stone aura that breathes with the orb. */
+@keyframes buddy-toolbar-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(120, 113, 108, 0), 0 0 20px -6px rgba(120, 113, 108, 0.18); }
+  50%      { box-shadow: 0 0 0 3px rgba(120, 113, 108, 0.08), 0 0 28px -4px rgba(120, 113, 108, 0.26); }
+}
+.buddy-toolbar-listening {
+  animation: buddy-toolbar-glow 3.6s ease-in-out infinite;
+}
+
+/* Status-pill waveform — 4 bars scaling in sync with mic volume (driven by JS
+   inline-style on --lvl, 0..1). Falls back to a gentle idle wobble. */
+.buddy-wave {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 10px;
+}
+.buddy-wave span {
+  display: inline-block;
+  width: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  height: calc(2px + 8px * var(--lvl, 0.15));
+  transition: height 90ms linear;
+  transform-origin: center;
+}
+.buddy-wave span:nth-child(1) { animation: buddy-wave-idle 1.4s ease-in-out infinite; animation-delay: 0s; }
+.buddy-wave span:nth-child(2) { animation: buddy-wave-idle 1.2s ease-in-out infinite; animation-delay: 0.15s; }
+.buddy-wave span:nth-child(3) { animation: buddy-wave-idle 1.3s ease-in-out infinite; animation-delay: 0.3s; }
+.buddy-wave span:nth-child(4) { animation: buddy-wave-idle 1.5s ease-in-out infinite; animation-delay: 0.45s; }
+.buddy-wave--active span { animation: none !important; }
+
+@keyframes buddy-wave-idle {
+  0%, 100% { height: 3px; }
+  50%      { height: 7px; }
+}
+
+/* Mood-tinted bubble glow, for transcript — Glassmorphism for Buddy */
+.buddy-bubble-buddy {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.1), 
+    0 2px 4px -1px rgba(0, 0, 0, 0.06),
+    inset 0 0 20px rgba(255, 255, 255, 0.5);
+  color: #1E293B;
+}
+
+/* User bubble — Dark Glass */
+.buddy-bubble-user {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  color: #F8FAFC;
+}
+
+/* ─── Document Processing Card ──────────────────────────────────────────── */
+
+@keyframes dp-orb-float-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(14px, -20px) scale(1.1); }
+  66%      { transform: translate(-10px, 10px) scale(0.92); }
+}
+@keyframes dp-orb-float-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  40%      { transform: translate(-18px, 14px) scale(1.14); }
+  70%      { transform: translate(10px, -12px) scale(0.9); }
+}
+@keyframes dp-orb-float-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25%      { transform: translate(12px, 16px) scale(0.94); }
+  75%      { transform: translate(-16px, -10px) scale(1.12); }
+}
+@keyframes dp-progress-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.doc-processing-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(52px);
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+.doc-processing-orb--1 {
+  width: 220px; height: 220px;
+  background: rgba(139, 92, 246, 0.28);
+  top: -70px; left: -50px;
+  animation: dp-orb-float-1 9s ease-in-out infinite;
+}
+.doc-processing-orb--2 {
+  width: 170px; height: 170px;
+  background: rgba(99, 102, 241, 0.22);
+  bottom: -55px; right: -35px;
+  animation: dp-orb-float-2 12s ease-in-out infinite;
+}
+.doc-processing-orb--3 {
+  width: 130px; height: 130px;
+  background: rgba(168, 85, 247, 0.18);
+  top: 30%; right: 22%;
+  animation: dp-orb-float-3 7s ease-in-out infinite;
+}
+.doc-processing-progress {
+  background: linear-gradient(
+    90deg,
+    rgba(139, 92, 246, 0.85) 0%,
+    rgba(99, 102, 241, 1)    30%,
+    rgba(196, 130, 255, 1)   50%,
+    rgba(99, 102, 241, 1)    70%,
+    rgba(139, 92, 246, 0.85) 100%
+  );
+  background-size: 200% auto;
+  animation: dp-progress-shimmer 2.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doc-processing-orb { animation: none !important; }
+  .doc-processing-progress { animation: none !important; background-position: 0 center; }
+}

@@ -1,6 +1,15 @@
 const { PDFParse } = require('pdf-parse');
 const mammoth = require('mammoth');
 const AdmZip = require('adm-zip');
+const path = require('path');
+
+// Try to load the Rust extraction module (high performance)
+let rustExtractor = null;
+try {
+  rustExtractor = require('../../rust-extractor');
+} catch (err) {
+  console.warn('[FileProcessor] Rust extractor not found or failed to load. Falling back to JavaScript libraries.');
+}
 
 // Code / plain text extensions (read as UTF-8)
 const CODE_EXTENSIONS = new Set([
@@ -41,6 +50,11 @@ async function extractTextFromBuffer(buffer, ext) {
 }
 
 async function extractPdfFromBuffer(buffer) {
+  // NOTE: Rust extractor intentionally NOT used for PDFs.
+  // The Rust pdf-extract crate returns a single text blob without per-page data.
+  // The downstream pipeline (page index, module generator, podcasts) requires
+  // per-page text structure that only JS pdf-parse provides.
+
   const pdf = new PDFParse({ data: new Uint8Array(buffer) });
   const { text, total } = await pdf.getText();
   const { info } = await pdf.getInfo();
@@ -66,17 +80,35 @@ async function extractPdfFromBuffer(buffer) {
     metadata: {
       pages: total,
       info,
+      parser: 'js',
     },
   };
 }
 
 async function extractDocxFromBuffer(buffer) {
+  // Try Rust extractor first
+  if (rustExtractor && rustExtractor.extractTextFromDocx) {
+    try {
+      const text = rustExtractor.extractTextFromDocx(buffer);
+      if (text) {
+        return {
+          text,
+          pages: null,
+          metadata: { format: 'docx', parser: 'rust' },
+        };
+      }
+    } catch (err) {
+      console.warn(`[FileProcessor] Rust DOCX extraction failed: ${err.message}. Falling back to JS.`);
+    }
+  }
+
   const result = await mammoth.extractRawText({ buffer });
   return {
     text: result.value,
     pages: null,
     metadata: {
       messages: result.messages,
+      parser: 'js',
     },
   };
 }

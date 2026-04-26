@@ -31,6 +31,7 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const podcastRoutes = require('./routes/podcastRoutes');
 const ocrRoutes = require('./routes/ocrRoutes');
 const widgetRoutes = require('./routes/widgetRoutes');
+const buddyRoutes = require('./routes/buddyRoutes');
 
 const app = express();
 
@@ -178,6 +179,10 @@ app.use('/api/documents/ocr', ocrRoutes);
 
 // Widget content — lightweight; global limiter is enough.
 app.use('/api/widgets', widgetRoutes);
+
+// Study Buddy — Max tier. Voice session lives on the /live WebSocket; these
+// REST endpoints cover profile CRUD, session list, memory, and usage.
+app.use('/api/buddy', buddyRoutes);
 
 // ─── Static & SPA Fallback ───────────────────────────────────
 

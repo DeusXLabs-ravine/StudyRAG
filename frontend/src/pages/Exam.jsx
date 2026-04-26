@@ -2,14 +2,14 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Timer, AlertTriangle, CheckCircle, XCircle, Trophy, ArrowRight, ArrowLeft,
   GraduationCap, Plus, Brain, Sparkles, BookOpen, HelpCircle, ClipboardList,
-  Upload, FileText, Trash2, ChevronDown, ChevronUp, X, Dna, Zap, LineChart,
+  Upload, FileText, Trash2, ChevronDown, ChevronUp, X, Dna, Zap, LineChart, MessageCircle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import * as examService from '../services/examService';
-import useDocumentStore from '../store/documentStore';
+import { useNavigate } from 'react-router-dom';
+import useBuddyStore from '../store/buddyStore';
 import { MorphingSquare } from '../components/ui/morphing-square';
 import { TextLoop } from '../components/ui/text-loop';
 import { getAestheticPhoto } from '../utils/imageHelpers';
@@ -28,6 +28,8 @@ const MATERIAL_TYPES = [
 ];
 
 export default function Exam() {
+  const navigate = useNavigate();
+  const setSessionContext = useBuddyStore(s => s.setSessionContext);
   const { documents, fetchDocuments } = useDocumentStore();
   const [phase, setPhase] = useState('landing');
   // Prep wizard state
@@ -807,6 +809,20 @@ export default function Exam() {
           </div>
           <div className="flex gap-3">
             <button
+              onClick={() => {
+                setSessionContext({
+                  sessionGoal: 'exam_prep',
+                  topicTag: prepSession.name,
+                  documentId: prepSession.documentIds?.[0] || null, // Link first doc as primary context
+                });
+                navigate('/buddy');
+              }}
+              className="flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all shadow-lg shadow-amber-200"
+            >
+              <Sparkles className="h-4 w-4" />
+              Study with Buddy
+            </button>
+            <button
               onClick={() => handleDeleteSession(prepSession.id)}
               className="p-4 bg-red-50 text-red-500 rounded-2xl hover:bg-red-100 transition-colors"
             >
@@ -953,13 +969,32 @@ export default function Exam() {
                                   <Sparkles className={`h-4 w-4 ${expandedQs[i] ? 'text-white' : 'text-gray-300'}`} />
                                 </div>
                                 {expandedQs[i] && (
-                                  <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    className="mt-4 pt-4 border-t border-white/20 prose prose-sm max-w-none prose-invert [&_p]:mb-1"
-                                  >
-                                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{q.answer}</ReactMarkdown>
-                                  </motion.div>
+                                  <>
+                                    <motion.div
+                                      initial={{ opacity: 0 }}
+                                      animate={{ opacity: 1 }}
+                                      className="mt-4 pt-4 border-t border-white/20 prose prose-sm max-w-none prose-invert [&_p]:mb-1"
+                                    >
+                                      <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{q.answer}</ReactMarkdown>
+                                    </motion.div>
+                                    <div className="mt-4 flex justify-end">
+                                      <div
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSessionContext({
+                                            sessionGoal: 'exam_prep',
+                                            topicTag: `Exam Question help`,
+                                            documentId: prepSession.documentIds?.[0] || null,
+                                          });
+                                          navigate('/buddy');
+                                        }}
+                                        className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-colors"
+                                      >
+                                        <MessageCircle className="h-3 w-3" />
+                                        Explain with Buddy
+                                      </div>
+                                    </div>
+                                  </>
                                 )}
                               </button>
                             </div>

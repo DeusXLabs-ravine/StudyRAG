@@ -12,13 +12,16 @@ const ADMIN_UNLIMITED_LIMITS = {
   tts: true,
   diagrams: Number.MAX_SAFE_INTEGER,
   proModels: true,
+  buddy: true,
+  buddyMinutesSoft: Number.MAX_SAFE_INTEGER,
+  buddyMinutesHard: Number.MAX_SAFE_INTEGER,
 };
 
 const TIER_LIMITS = {
-  free:  { documents: 2,   chats: 50,   teach: false, games: false, simulations: false, podcast: false, live: 0,   tts: 0,   diagrams: 5,   proModels: false },
-  basic: { documents: 10,  chats: 200,  teach: false, games: false, simulations: false, podcast: false, live: 0,   tts: 0,   diagrams: 20,  proModels: false },
-  pro:   { documents: 50,  chats: 1500, teach: true,  games: true,  simulations: true,  podcast: true,  live: 20,  tts: 30,  diagrams: 100, proModels: true  },
-  max:   { documents: 200, chats: 5000, teach: true,  games: true,  simulations: true,  podcast: true,  live: 60,  tts: 100, diagrams: 500, proModels: true  },
+  free:  { documents: 2,   chats: 50,   teach: false, games: false, simulations: false, podcast: false, live: 0,   tts: 0,   diagrams: 5,   proModels: false, buddy: false, buddyMinutesSoft: 0,   buddyMinutesHard: 0   },
+  basic: { documents: 10,  chats: 200,  teach: false, games: false, simulations: false, podcast: false, live: 0,   tts: 0,   diagrams: 20,  proModels: false, buddy: false, buddyMinutesSoft: 0,   buddyMinutesHard: 0   },
+  pro:   { documents: 50,  chats: 1500, teach: true,  games: true,  simulations: true,  podcast: true,  live: 20,  tts: 30,  diagrams: 100, proModels: true,  buddy: false, buddyMinutesSoft: 0,   buddyMinutesHard: 0   },
+  max:   { documents: 200, chats: 5000, teach: true,  games: true,  simulations: true,  podcast: true,  live: 60,  tts: 100, diagrams: 500, proModels: true,  buddy: true,  buddyMinutesSoft: 120, buddyMinutesHard: 300 },
 };
 
 export { TIER_LIMITS, TIER_ORDER };
@@ -53,6 +56,9 @@ export function useSubscription() {
     canUseLive: featureAccess.canUseLive ?? (limits.live === true || limits.live > 0),
     canUseTts: featureAccess.canUseTts ?? (limits.tts === true || limits.tts > 0),
     canUseProModels: featureAccess.canUseProModels ?? limits.proModels,
+    canUseBuddy: featureAccess.canUseBuddy ?? Boolean(limits.buddy),
+    buddyMinutesSoft: limits.buddyMinutesSoft ?? 0,
+    buddyMinutesHard: limits.buddyMinutesHard ?? 0,
     docLimit: isAdminGranted ? Number.MAX_SAFE_INTEGER : limits.documents,
     docLimitLabel: isAdminGranted ? 'Unlimited' : String(limits.documents),
     docCount,

@@ -40,6 +40,9 @@ const config = {
   revenueCatWebhookAuth: process.env.REVENUECAT_WEBHOOK_AUTH || null,
   // Comma-separated emails that always get admin-unlimited access regardless of payment
   adminMaxEmails: (process.env.ADMIN_MAX_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean),
+  paypalClientId: process.env.PAYPAL_CLIENT_ID || null,
+  paypalClientSecret: process.env.PAYPAL_CLIENT_SECRET || null,
+  paypalEnvironment: process.env.PAYPAL_ENVIRONMENT || 'sandbox',
 };
 
 console.log(`[Config] Environment: ${config.nodeEnv}`);

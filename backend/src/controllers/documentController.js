@@ -173,17 +173,34 @@ async function processDocumentFromStorage(docId, storagePaths, ext, oldPages = n
 
 async function runProcessingPipeline(docId, text, metadata, rawPages = null, buffer = null, ext = null, userId = null) {
   // Strip null bytes that PostgreSQL rejects — some PDFs embed \u0000 in text
-  const stripNulls = (s) => s ? s.replace(/\u0000/g, '') : s;
+  const stripNulls = (s) => {
+    if (!s || typeof s !== 'string') return s;
+    return s.replace(/\u0000/g, '').replace(/\\u0000/g, '');
+  };
   text = stripNulls(text);
   if (rawPages) {
     rawPages = rawPages.map(p => ({ ...p, text: stripNulls(p.text), heading: stripNulls(p.heading) }));
   }
+  let currentMetadata = metadata && typeof metadata === 'object' ? { ...metadata } : {};
   if (metadata && typeof metadata === 'object') {
-    metadata = JSON.parse(stripNulls(JSON.stringify(metadata)));
+    currentMetadata = JSON.parse(stripNulls(JSON.stringify(currentMetadata)));
   }
 
   const pipelineStart = Date.now();
   const prefix = `[Pipeline ${docId.slice(0, 8)}]`;
+
+  // Helper to update processing step in the database for real-time frontend feedback
+  const updateStep = async (step) => {
+    currentMetadata.processingStep = step;
+    try {
+      await vectorStore.updateDocumentStatus(docId, { extractedMetadata: currentMetadata });
+    } catch (err) {
+      console.warn(`${prefix} Failed to update processing step to ${step}: ${err.message}`);
+    }
+  };
+
+  await updateStep('indexing');
+
   const log = (step, startTime) =>
     console.log(`${prefix} ${step}: ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
 
@@ -253,64 +270,77 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
     return pages.length;
   })();
 
+  await updateStep('generating_modules');
+
   const modulesPromise = (async () => {
     const t = Date.now();
     const result = await generateInitialModules(docId, text, userId);
     log(`Initial modules (${result.moduleCount} modules, segment 1/${result.totalSegments})`, t);
+
+    // After initial modules, update status to reflect partial modules available
+    currentMetadata.modulesStatus = result.totalSegments > 1 ? 'partial' : 'complete';
+    await vectorStore.updateDocumentStatus(docId, { extractedMetadata: currentMetadata });
+
     return result;
   })();
 
-  // Wait for both page index AND initial modules before marking ready.
-  // This ensures the user sees modules immediately when redirected to Learn.
-  let moduleGenError = null;
-  const [pageCount] = await Promise.all([
-    pageIndexPromise,
-    modulesPromise.catch(err => {
-      // Distinguish user-facing errors (scanned PDF, empty text) from infra errors
-      const isContentError = err.message?.includes('Unable to generate study modules');
-      if (isContentError) {
-        moduleGenError = err.message;
-        console.warn(`${prefix} Module generation skipped: ${err.message}`);
-      } else {
-        console.error(`${prefix} Initial module generation failed (non-fatal): ${err.message}`);
-      }
-    }),
-  ]);
+  // Phase 1b: Mark document ready as soon as page index succeeds.
+  // The user can now start chatting immediately while modules generate.
+  const pageCount = await pageIndexPromise;
 
+  currentMetadata.modulesStatus = 'generating';
+  currentMetadata.processingStep = 'ready';
   await vectorStore.updateDocumentStatus(docId, {
     status: 'ready',
     processedDate: new Date().toISOString(),
     chunkCount: pageCount,
-    extractedMetadata: metadata,
-    // Surface content-extraction errors so the frontend can show a helpful message
-    ...(moduleGenError ? { error: moduleGenError } : {}),
+    extractedMetadata: currentMetadata,
   });
 
-  log('READY (modules + chat available)', pipelineStart);
+  log('READY (chat available, modules generating)', pipelineStart);
+  invalidateDocListCache(userId);
 
   // Phase 2: Background — remaining modules + web research + enrichment.
   // Chains off modulesPromise so remaining modules start after initial ones finish.
-  modulesPromise.then(async () => {
+  modulesPromise.then(async (initialResult) => {
     try {
+      await updateStep('generating_remaining');
       const t = Date.now();
       await generateRemainingModules(docId, text, userId);
       log('Remaining modules (background)', t);
+
+      // Final metadata update: all modules generated
+      currentMetadata.modulesStatus = 'complete';
+      await vectorStore.updateDocumentStatus(docId, { extractedMetadata: currentMetadata });
     } catch (err) {
       console.error(`${prefix} Background module generation failed: ${err.message}`);
     }
-  }).catch(() => {});
+  }).catch(err => {
+    // Surface content-extraction errors if initial modules failed
+    const isContentError = err.message?.includes('Unable to generate study modules');
+    if (isContentError) {
+      console.warn(`${prefix} Module generation skipped: ${err.message}`);
+      currentMetadata.modulesStatus = 'failed';
+      vectorStore.updateDocumentStatus(docId, { error: err.message, extractedMetadata: currentMetadata }).catch(() => {});
+    } else {
+      console.error(`${prefix} Initial module generation failed (non-fatal): ${err.message}`);
+    }
+  });
 
   (async () => {
     try {
+      await updateStep('researching');
       const t = Date.now();
       const researchResult = await researchDocument(docId, text);
       log('Web research (background)', t);
 
       if (researchResult) {
+        await updateStep('enriching');
         const t2 = Date.now();
         await enrichModulesWithResources(docId);
         log('Enrichment (background)', t2);
       }
+      await updateStep('complete');
     } catch (err) {
       console.error(`${prefix} Background enrichment failed: ${err.message}`);
     }
@@ -509,6 +539,33 @@ async function reprocessDocument(req, res, next) {
         await vectorStore.updateDocumentStatus(id, { status: 'failed', error: err.message });
       });
     }
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Return a short-lived signed URL the frontend can use to render the raw
+ * file (currently used by Buddy's "study a PDF together" panel). Only file-
+ * backed documents have a storagePath — URL/note/topic docs return 400.
+ */
+async function getDocumentViewUrl(req, res, next) {
+  try {
+    const { id } = req.params;
+    const doc = await vectorStore.getDocument(id);
+    if (!doc) return res.status(404).json({ error: 'Document not found' });
+    if (!doc.storagePath) {
+      return res.status(400).json({ error: 'This document has no rendered file (e.g. URL, note, or topic source).' });
+    }
+    const { data, error } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .createSignedUrl(doc.storagePath, 60 * 30); // 30 min
+    if (error) throw error;
+    res.json({
+      signedUrl: data.signedUrl,
+      fileType: doc.fileType || null,
+      totalPages: doc.metadata?.pages || doc.pages || null,
+    });
   } catch (error) {
     next(error);
   }
@@ -934,6 +991,6 @@ async function registerUrlInternal(url, userId = null) {
 
 module.exports = {
   uploadDocument, signUpload, registerDocument, listDocuments, getDocument,
-  deleteDocument, reprocessDocument, getDocumentResources,
+  deleteDocument, reprocessDocument, getDocumentResources, getDocumentViewUrl,
   registerUrl, registerNote, togglePrimarySource, registerTopic, registerUrlInternal,
 };

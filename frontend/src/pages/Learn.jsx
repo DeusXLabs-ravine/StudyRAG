@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { BookOpen, CheckCircle, Lock, ChevronRight, Calculator, FlaskConical, Cpu, Atom, Globe, Lightbulb, Sparkles, Send, Volume2, Loader2, MessageSquareText, X, Menu, PanelLeftClose, PanelLeftOpen, Maximize2, Minimize2, Image as ImageIcon, GraduationCap, Mic, ArrowUp, ListTodo, FolderOpen, RotateCcw, Radio } from 'lucide-react';
+import { BookOpen, CheckCircle, Lock, ChevronRight, Calculator, FlaskConical, Cpu, Atom, Globe, Lightbulb, Brain, Send, Volume2, Loader2, MessageSquareText, X, Menu, PanelLeftClose, PanelLeftOpen, Maximize2, Minimize2, Image as ImageIcon, GraduationCap, Mic, ArrowUp, ListTodo, FolderOpen, RotateCcw, Radio } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import useModuleStore from '../store/moduleStore';
 import useDocumentStore from '../store/documentStore';
@@ -10,6 +10,7 @@ import useCourseStore from '../store/courseStore';
 import useGameStore from '../store/gameStore';
 import { useSubscription } from '../hooks/useSubscription';
 import UpgradeModal from '../components/paywall/UpgradeModal';
+import PremiumBadge from '../components/common/PremiumBadge';
 import useVoiceInput from '../hooks/useVoiceInput';
 import { MorphingSquare } from '../components/ui/morphing-square';
 import { AILoader } from '../components/ui/ai-loader';
@@ -546,7 +547,7 @@ export default function Learn() {
               }`}
             title={isTutorOpen ? "Hide Sage" : "Show Sage"}
           >
-            <Sparkles className="h-5 w-5" />
+            <Brain className="h-5 w-5" strokeWidth={2.3} />
           </button>
         </div>
       </div>
@@ -586,7 +587,7 @@ export default function Learn() {
         ) : (
           <div className="sleek-card p-12 md:p-20 flex flex-col items-center justify-center gap-4 text-center">
             <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center">
-              <Sparkles className="h-7 w-7 text-amber-400" />
+              <Lightbulb className="h-7 w-7 text-amber-400" strokeWidth={2.3} />
             </div>
             <div>
               <h3 className="text-lg font-bold text-gray-900 mb-2">No study modules generated</h3>
@@ -681,7 +682,7 @@ export default function Learn() {
               )
             ) : (
               <div className="sleek-card p-20 text-center bg-gray-50/50">
-                <Sparkles className="h-12 w-12 text-primary/30 mx-auto mb-4" />
+                <BookOpen className="h-12 w-12 text-primary/30 mx-auto mb-4" strokeWidth={2} />
                 <h3 className="text-lg font-bold text-gray-900">Choose a Lesson</h3>
                 <p className="text-gray-500">Pick a module from the left to start learning on the board.</p>
               </div>
@@ -715,6 +716,7 @@ export default function Learn() {
                   onGameRequest={handleGameRequest}
                   onGameComplete={handleGameComplete}
                   onTeach={() => canTeach ? setIsTeachOpen(true) : setUpgradeModal('teach')}
+                  canTeach={canTeach}
                 />
               </motion.div>
             )}
@@ -782,10 +784,11 @@ export default function Learn() {
                   color: '#a5b4fc',
                   border: '1px solid rgba(165,180,252,0.2)',
                 }}
-                title="Start a live AI teaching session with Sage"
+                title={canTeach ? 'Start a live AI teaching session with Sage' : 'Upgrade to Pro to use Teach Me'}
               >
                 <GraduationCap className="h-4 w-4" />
                 <span className="hidden sm:inline">Teach Me</span>
+                {!canTeach && <PremiumBadge variant="chip" tier="pro" className="ml-0.5" />}
               </motion.button>
             </div>
           </motion.div>
@@ -898,7 +901,7 @@ export default function Learn() {
                 <div className="sticky top-0 bg-white px-8 py-4 flex items-center justify-between border-b border-gray-100">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-gradient-to-tr from-blue-400 to-cyan-300 text-white rounded-xl flex items-center justify-center shadow-lg shadow-blue-100/50">
-                      <Sparkles className="h-4 w-4" />
+                      <Brain className="h-4 w-4" strokeWidth={2.3} />
                     </div>
                     <div>
                       <h3 className="font-black text-gray-900 leading-none">Sage</h3>
@@ -918,6 +921,7 @@ export default function Learn() {
                       >
                         <GraduationCap className="h-3.5 w-3.5" />
                         Teach
+                        {!canTeach && <PremiumBadge variant="chip" tier="pro" className="ml-0.5" />}
                       </button>
                     )}
                     <button onClick={() => setMobileAssistantOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
@@ -939,6 +943,7 @@ export default function Learn() {
                     onGameRequest={handleGameRequest}
                     onGameComplete={handleGameComplete}
                     onTeach={() => { setMobileAssistantOpen(false); canTeach ? setIsTeachOpen(true) : setUpgradeModal('teach'); }}
+                    canTeach={canTeach}
                   />
                 </div>
               </motion.div>
@@ -1127,7 +1132,7 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
   );
 }
 
-function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded, currentModule, isMobile, isMaximized, setIsMaximized, onDiagramRequest, onGameRequest, onGameComplete, onTeach }) {
+function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded, currentModule, isMobile, isMaximized, setIsMaximized, onDiagramRequest, onGameRequest, onGameComplete, onTeach, canTeach = true }) {
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -1207,10 +1212,11 @@ function TutorChat({ messages, input, setInput, onSend, loading, greetingLoaded,
                     color: 'white',
                     boxShadow: '0 2px 10px rgba(99,102,241,0.4)',
                   }}
-                  title="Start live audio teaching session"
+                  title={canTeach ? 'Start live audio teaching session' : 'Upgrade to Pro to use Teach Me'}
                 >
                   <GraduationCap className="h-3.5 w-3.5" />
                   Teach
+                  {!canTeach && <PremiumBadge variant="chip" tier="pro" className="ml-0.5" />}
                 </button>
               )}
               <button

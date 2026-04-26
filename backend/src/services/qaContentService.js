@@ -87,15 +87,22 @@ async function processQAContent(docId, text, userId = null) {
     });
 
     // Generate comprehension questions from the Q&A content
-    for (const q of (group.questions || []).slice(0, 5)) {
+    const questions = group.questions || [];
+    for (const q of questions) {
+      if (!q.question) continue;
+      
+      const qType = 'multiple_choice';
+      const qOptions = Array.isArray(q.options) ? q.options : ['A) Option 1', 'B) Option 2', 'C) Option 3', 'D) Option 4'];
+      const qCorrect = String(q.answer || 'A');
+
       questionRows.push({
         id: uuidv4(),
         module_id: moduleId,
-        type: 'multiple_choice',
+        type: qType,
         question: q.question,
-        options: null, // Will be populated if the original had options
-        correct: q.answer,
-        explanation: q.explanation || null,
+        options: qOptions,
+        correct: qCorrect,
+        explanation: q.explanation || 'Answer based on the exam content.',
         topic: group.topic,
       });
     }

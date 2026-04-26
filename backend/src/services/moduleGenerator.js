@@ -8,7 +8,7 @@ const { v4: uuidv4 } = require('uuid');
 
 // Max chars per LLM segment — Gemini Flash handles large contexts,
 // but keeping segments reasonable ensures quality per-segment output.
-const SEGMENT_SIZE = 80000;
+const SEGMENT_SIZE = 40000;
 const MAX_CONCURRENCY = 3;
 const BATCH_SIZE = 3;         // modules per LLM batch call in two-phase generation
 const BATCH_CONCURRENCY = 2;  // parallel batch calls within a segment
@@ -265,14 +265,18 @@ async function generateModuleBatch(segmentText, fullOutline, batchModules, batch
 
   const result = await withRetryOnRateLimit(async () => {
     const model = getGenerativeModel('fast');
-    return model.generateContent(prompt);
+    return model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 8192, temperature: 0.2 },
+    });
   }, 3, 1);
   const text = result.response.text();
   const jsonStr = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   const modules = tryExtractModulesFromJSON(jsonStr);
   if (modules.length === 0) {
-    // Nothing salvageable — surface the original parse error for upstream logging
-    JSON.parse(jsonStr);
+    // Nothing salvageable — log detailed error for debugging
+    console.warn(`[moduleGenerator] Batch ${batchStart + 1} failed to parse JSON. Length: ${jsonStr.length} chars. Snippet: ${jsonStr.slice(0, 100)}...`);
+    JSON.parse(jsonStr); // Trigger original parse error for withRetry to catch
   }
   return { modules };
 }
@@ -302,15 +306,18 @@ async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalS
 
   const result = await withRetryOnRateLimit(async () => {
     const model = getGenerativeModel('fast');
-    return model.generateContent(prompt);
+    return model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 8192, temperature: 0.3 },
+    });
   }, 3, 1);
   const responseText = result.response.text();
 
   try {
     const jsonStr = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    return JSON.parse(jsonStr);
+    return { modules: tryExtractModulesFromJSON(jsonStr) };
   } catch (e) {
-    console.error(`[moduleGenerator] Legacy parse failed for segment ${segmentIndex + 1}:`, e.message);
+    console.error(`[moduleGenerator] Legacy salvage failed for segment ${segmentIndex + 1}:`, e.message);
     return { modules: [] };
   }
 }
@@ -329,7 +336,7 @@ async function generateModulesForSegment(segmentText, segmentIndex, totalSegment
   try {
     outline = await withRetry(
       () => generateOutlineForSegment(segmentText, segmentIndex, totalSegments, teachingLevel, interests, learningStyle, learningPace),
-      1,
+      2, // Increased from 1
       `Outline seg-${segmentIndex + 1}`
     );
     console.log(`[moduleGenerator] Segment ${segmentIndex + 1}/${totalSegments}: outline → ${outline.length} modules (${wordCount} words)`);
@@ -348,7 +355,7 @@ async function generateModulesForSegment(segmentText, segmentIndex, totalSegment
     try {
       const result = await withRetry(
         () => generateModuleBatch(segmentText, outline, outline, 0, teachingLevel, interests, learningStyle, learningPace),
-        1,
+        2, // Increased from 1
         `Single-batch seg-${segmentIndex + 1}`
       );
       console.log(`[moduleGenerator] Segment ${segmentIndex + 1}: ${result.modules?.length || 0} modules (single batch)`);
@@ -360,16 +367,20 @@ async function generateModulesForSegment(segmentText, segmentIndex, totalSegment
   }
 
   // Phase 2: Generate modules in parallel batches
+  // Use smaller batches for high-depth domains to avoid hitting LLM output token limits
+  const { domain } = getModuleDepthSection(segmentText);
+  const effectiveBatchSize = domain ? 2 : BATCH_SIZE;
+  
   const batches = [];
-  for (let i = 0; i < outline.length; i += BATCH_SIZE) {
-    batches.push({ start: i, items: outline.slice(i, i + BATCH_SIZE) });
+  for (let i = 0; i < outline.length; i += effectiveBatchSize) {
+    batches.push({ start: i, items: outline.slice(i, i + effectiveBatchSize) });
   }
 
   const batchTasks = batches.map(({ start, items }) => async () => {
     try {
       return await withRetry(
         () => generateModuleBatch(segmentText, outline, items, start, teachingLevel, interests, learningStyle, learningPace),
-        1,
+        2, // Increased from 1
         `Batch ${start + 1}-${start + items.length} seg-${segmentIndex + 1}`
       );
     } catch (err) {
@@ -421,11 +432,11 @@ async function insertModuleResults(docId, segmentResults, startOrderIndex, opts 
         id,
         document_id: docId,
         order_index: orderIndex++,
-        title: mod.title,
-        topic,
-        objectives: mod.objectives,
-        content: mod.content,
-        takeaways: mod.takeaways,
+        title: mod.title || 'Untitled Module',
+        topic: mod.topic || mod.title || 'General',
+        objectives: Array.isArray(mod.objectives) ? mod.objectives : [],
+        content: mod.content || 'Content generation failed for this section.',
+        takeaways: Array.isArray(mod.takeaways) ? mod.takeaways : [],
       };
 
       if (opts.courseId) row.course_id = opts.courseId;
@@ -433,16 +444,23 @@ async function insertModuleResults(docId, segmentResults, startOrderIndex, opts 
 
       allModuleRows.push(row);
 
-      for (const q of (mod.questions || [])) {
+      const questions = mod.questions || mod.comprehension_questions || mod.comprehensionQuestions || [];
+      for (const q of questions) {
+        if (!q.question) continue; // Skip truly empty objects
+
+        const qType = q.type || (q.options ? 'multiple_choice' : 'true_false');
+        const qOptions = Array.isArray(q.options) ? q.options : (qType === 'multiple_choice' ? ['A) Option 1', 'B) Option 2', 'C) Option 3', 'D) Option 4'] : null);
+        const qCorrect = String(q.correct || (qType === 'true_false' ? 'true' : 'A'));
+
         allQuestionRows.push({
           id: uuidv4(),
           module_id: id,
-          type: q.type,
+          type: qType,
           question: q.question,
-          options: q.options || null,
-          correct: q.correct,
-          explanation: q.explanation || null,
-          topic: q.topic || topic,
+          options: qOptions,
+          correct: qCorrect,
+          explanation: q.explanation || 'Answer based on the module content.',
+          topic: q.topic || row.topic,
         });
       }
     }
@@ -499,38 +517,58 @@ async function insertModuleResults(docId, segmentResults, startOrderIndex, opts 
       }
     });
 
-    // Background medical resource enrichment
+    // Background resource enrichment — medical for clinical docs, web for everything else.
     setImmediate(async () => {
       try {
-        const { enrichModuleWithMedicalResources, quickMedicalCheck } = require('./medicalResourceService');
+        const { enrichModuleWithMedicalResources, enrichModuleWithWebResources, quickMedicalCheck } = require('./medicalResourceService');
 
-        // Quick check on the first module's content to see if this is medical material
+        // Quick check: require ≥2 keyword hits to qualify as medical material.
         const sampleContent = allModuleRows.slice(0, 3).map(r => r.content).join(' ');
         const confidence = quickMedicalCheck(sampleContent);
-        if (confidence < 0.2) {
-          console.log(`[moduleGenerator] Skipping medical enrichment — content not medical (confidence: ${confidence.toFixed(2)})`);
-          return;
-        }
+        const isMedical = confidence >= 0.4;
 
-        await runWithConcurrency(
-          allModuleRows.map(row => async () => {
-            try {
-              await enrichModuleWithMedicalResources({
-                moduleId: row.id,
-                documentId: docId,
-                topic: row.topic || row.title,
-                content: row.content,
-                userId,
-              });
-            } catch (err) {
-              console.warn(`[moduleGenerator] Medical enrichment failed for module ${row.id.slice(0, 8)}: ${err.message}`);
-            }
-          }),
-          2   // max 2 concurrent medical enrichment jobs
-        );
-        console.log(`[moduleGenerator] Medical resource enrichment complete for ${allModuleRows.length} modules`);
+        if (isMedical) {
+          console.log(`[moduleGenerator] Medical content detected (confidence: ${confidence.toFixed(2)}) — enriching with clinical references`);
+          await runWithConcurrency(
+            allModuleRows.map(row => async () => {
+              try {
+                await enrichModuleWithMedicalResources({
+                  moduleId: row.id,
+                  documentId: docId,
+                  topic: row.topic || row.title,
+                  content: row.content,
+                  userId,
+                });
+              } catch (err) {
+                console.warn(`[moduleGenerator] Medical enrichment failed for module ${row.id.slice(0, 8)}: ${err.message}`);
+              }
+            }),
+            2
+          );
+          console.log(`[moduleGenerator] Medical resource enrichment complete for ${allModuleRows.length} modules`);
+        } else {
+          console.log(`[moduleGenerator] Non-medical content (confidence: ${confidence.toFixed(2)}) — enriching with web references`);
+          // Only enrich the first 3 modules to keep costs low; the rest use similar sources
+          await runWithConcurrency(
+            allModuleRows.slice(0, 3).map(row => async () => {
+              try {
+                await enrichModuleWithWebResources({
+                  moduleId: row.id,
+                  documentId: docId,
+                  topic: row.topic || row.title,
+                  content: row.content,
+                  userId,
+                });
+              } catch (err) {
+                console.warn(`[moduleGenerator] Web enrichment failed for module ${row.id.slice(0, 8)}: ${err.message}`);
+              }
+            }),
+            2
+          );
+          console.log(`[moduleGenerator] Web resource enrichment complete`);
+        }
       } catch (err) {
-        console.error(`[moduleGenerator] Medical enrichment error: ${err.message}`);
+        console.error(`[moduleGenerator] Resource enrichment error: ${err.message}`);
       }
     });
   }

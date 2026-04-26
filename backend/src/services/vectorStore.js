@@ -5,7 +5,9 @@ const { embeddingCache, documentCache } = require('../config/cache');
 /** Strip null bytes and other characters that PostgreSQL text columns reject. */
 function sanitizeForPostgres(text) {
   if (!text) return text;
-  return text.replace(/\u0000/g, '');
+  if (typeof text !== 'string') return text;
+  // Strip literal null bytes and also escaped null bytes (for JSON strings)
+  return text.replace(/\u0000/g, '').replace(/\\u0000/g, '');
 }
 
 // ─── Document CRUD ────────────────────────────────────────────

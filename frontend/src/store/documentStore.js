@@ -11,7 +11,14 @@ const useDocumentStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const documents = await documentService.listDocuments();
-      set({ documents: Array.isArray(documents) ? documents : [], loading: false });
+      set(state => {
+        const optimisticDocs = state.documents.filter(d => d._isOptimistic);
+        // Ensure no duplicates if server already returns it (though optimistic has 'temp_' ID)
+        return { 
+          documents: [...optimisticDocs, ...(Array.isArray(documents) ? documents : [])], 
+          loading: false 
+        };
+      });
     } catch (error) {
       set({ error: error.message, loading: false });
     }

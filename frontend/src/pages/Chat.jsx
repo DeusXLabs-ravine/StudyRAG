@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
-import { FileText, Sparkles, ArrowUp, Globe, MessageSquare, Plus, ChevronDown, Menu, X, Image as ImageIcon, Mic, GraduationCap } from 'lucide-react';
+import { FileText, Compass, ArrowUp, Globe, MessageSquare, Plus, ChevronDown, Menu, X, Image as ImageIcon, Mic, GraduationCap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as chatService from '../services/chatService';
 import useDocumentStore from '../store/documentStore';
@@ -15,6 +15,9 @@ import InputPreview from '../components/chat/InputPreview';
 import { ChatInput } from '@/components/ui/chat-input';
 import { MorphingSquare } from '../components/ui/morphing-square';
 import GeminiLiveTeacher from '../components/teach/GeminiLiveTeacher';
+import { useSubscription } from '../hooks/useSubscription';
+import UpgradeModal from '../components/paywall/UpgradeModal';
+import PremiumBadge from '../components/common/PremiumBadge';
 import {
   appendMessageToChatSession,
   createChatSession,
@@ -144,6 +147,8 @@ export default function Chat() {
   const [isTeachOpen, setIsTeachOpen] = useState(false);
   const [selectedTeachDocId, setSelectedTeachDocId] = useState(null);
   const [showTeachDocPicker, setShowTeachDocPicker] = useState(false);
+  const [showTeachUpgrade, setShowTeachUpgrade] = useState(false);
+  const { canTeach } = useSubscription();
   const [lastMessageTime, setLastMessageTime] = useState(Date.now());
   const voiceInputEnabled = useSettingsStore(state => state.settings.a11y_voice_input === 'true');
   const { isListening: isVoiceListening, isSupported: isVoiceSupported, toggle: voiceToggle } = useVoiceInput({
@@ -661,7 +666,7 @@ export default function Chat() {
           {messages.length === 0 && !loading && (
             <div className="flex flex-col items-center justify-center min-h-full py-10 text-center max-w-xl mx-auto">
               <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-16 h-16 md:w-20 md:h-20 bg-[#f0f9ff] rounded-3xl md:rounded-[2.5rem] flex items-center justify-center mb-6 md:mb-8 border border-[#e0f2fe] shadow-inner">
-                <Sparkles className="h-8 w-8 md:h-10 md:w-10 text-[#0ea5e9]" />
+                <Compass className="h-8 w-8 md:h-10 md:w-10 text-[#0ea5e9]" strokeWidth={2.3} />
               </motion.div>
               <h1 className="text-3xl md:text-4xl font-black text-[#0f172a] mb-2 md:mb-3 tracking-tight">What's the plan?</h1>
               <p className="text-[#64748b] mb-4 font-semibold text-sm md:text-base">
@@ -789,6 +794,7 @@ export default function Chat() {
                       <button
                         type="button"
                         onClick={() => {
+                          if (!canTeach) { setShowTeachUpgrade(true); return; }
                           if (selectedTeachDocId !== null) {
                             setIsTeachOpen(true);
                           } else {
@@ -805,10 +811,11 @@ export default function Chat() {
                           fontWeight: 700,
                           boxShadow: '0 2px 12px rgba(99,102,241,0.35)',
                         }}
-                        title="Start live audio teaching with Sage"
+                        title={canTeach ? 'Start live audio teaching with Sage' : 'Upgrade to Pro to use Teach Me'}
                       >
                         <GraduationCap className="h-4 w-4" />
                         <span className="hidden sm:inline">Teach Me</span>
+                        {!canTeach && <PremiumBadge variant="chip" tier="pro" className="ml-0.5" />}
                       </button>
 
                       {/* Document picker dropdown */}
@@ -886,6 +893,11 @@ export default function Chat() {
           </div>
         </div>
       </div>
+
+      {/* Upgrade modal for Teach Me */}
+      {showTeachUpgrade && (
+        <UpgradeModal feature="teach" onClose={() => setShowTeachUpgrade(false)} />
+      )}
 
       {/* Gemini Live Teacher Modal */}
       <GeminiLiveTeacher

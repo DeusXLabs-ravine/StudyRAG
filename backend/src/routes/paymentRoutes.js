@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const monnifyService = require('../services/monnifyService');
 const paystackService = require('../services/paystackService');
+const paypalService = require('../services/paypalService');
 const supabase = require('../config/database');
 const crypto = require('crypto');
 const { appBaseUrl } = require('../config/env');
@@ -12,6 +13,12 @@ const TIER_PRICING = {
   basic: 5000,
   pro: 20000,
   max: 50000,
+};
+
+const TIER_PRICING_USD = {
+  basic: 10,
+  pro: 25,
+  max: 50,
 };
 
 // ── Valid Paystack channels ─────────────────────────────────────────────────
@@ -55,14 +62,15 @@ router.get('/subscription', async (req, res, next) => {
 
 router.post('/checkout', async (req, res, next) => {
   try {
-    const { tier, gateway = 'paystack', channel } = req.body;
+    const { tier, gateway = 'paystack', channel, currency = 'NGN' } = req.body;
     const user = req.user;
 
     if (!tier || !TIER_PRICING[tier.toLowerCase()]) {
       return res.status(400).json({ error: 'Invalid tier specified.' });
     }
 
-    const amount = TIER_PRICING[tier.toLowerCase()];
+    const reqCurrency = currency === 'USD' ? 'USD' : 'NGN';
+    const amount = reqCurrency === 'USD' ? TIER_PRICING_USD[tier.toLowerCase()] : TIER_PRICING[tier.toLowerCase()];
     const paymentReference = `SRAG_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 
     let checkoutUrl = '';
@@ -93,6 +101,7 @@ router.post('/checkout', async (req, res, next) => {
         try {
           response = await paystackService.initializeTransaction({
             amount,
+            currency: reqCurrency,
             customerEmail: user.email,
             paymentReference,
             callbackUrl: `${appBaseUrl}/payment/verify?reference=${paymentReference}`,
@@ -114,6 +123,7 @@ router.post('/checkout', async (req, res, next) => {
           console.warn('[PaymentRoutes] Apple Pay init failed, retrying with card fallback:', initErr.message);
           response = await paystackService.initializeTransaction({
             amount,
+            currency: reqCurrency,
             customerEmail: user.email,
             paymentReference,
             callbackUrl: `${appBaseUrl}/payment/verify?reference=${paymentReference}`,
@@ -146,6 +156,25 @@ router.post('/checkout', async (req, res, next) => {
         transactionReference = response.transactionReference;
         actualGateway = 'monnify';
       }
+    } else if (gateway === 'paypal') {
+      try {
+        const response = await paypalService.createOrder({
+          amount,
+          currency: reqCurrency,
+          paymentReference,
+          callbackUrl: `${appBaseUrl}/payment/verify?reference=${paymentReference}&gateway=paypal`,
+          cancelUrl: `${appBaseUrl}/pricing`,
+          tier: tier.toLowerCase(),
+          userEmail: user.email,
+          userId: user.id,
+        });
+        checkoutUrl = response.checkoutUrl;
+        transactionReference = response.id;
+        actualGateway = 'paypal';
+      } catch (err) {
+        console.error('[PaymentRoutes] PayPal init failed', err);
+        return res.status(500).json({ error: 'PayPal initialization failed.' });
+      }
     } else {
       const response = await monnifyService.initializeTransaction({
         amount,
@@ -169,7 +198,7 @@ router.post('/checkout', async (req, res, next) => {
         payment_reference: paymentReference,
         transaction_reference: transactionReference,
         amount,
-        currency: 'NGN',
+        currency: reqCurrency,
         payment_method: actualGateway,
         status: 'PENDING',
         description: `StudyRAG ${tier.toUpperCase()} Subscription`,
@@ -243,9 +272,9 @@ router.get('/verify/:reference', async (req, res) => {
 
     // 5. Determine tier from amount, with metadata fallback
     let newTier = 'free';
-    if (transaction.amount == 5000) newTier = 'basic';
-    if (transaction.amount == 20000) newTier = 'pro';
-    if (transaction.amount == 50000) newTier = 'max';
+    if (transaction.amount == 5000 || transaction.amount == 10) newTier = 'basic';
+    if (transaction.amount == 20000 || transaction.amount == 25) newTier = 'pro';
+    if (transaction.amount == 50000 || transaction.amount == 50) newTier = 'max';
 
     // Metadata fallback
     if (newTier === 'free' && paystackData.metadata?.tier) {
@@ -277,6 +306,81 @@ router.get('/verify/:reference', async (req, res) => {
   } catch (error) {
     console.error('[PaymentVerify] Error:', error);
     res.status(500).json({ error: 'Failed to verify payment.' });
+  }
+});
+
+// ── Verify PayPal ───────────────────────────────────────────────────────────
+
+router.post('/verify-paypal', async (req, res) => {
+  const { reference, token } = req.body;
+  const user = req.user;
+
+  try {
+    if (!token || !reference) {
+      return res.status(400).json({ error: 'Missing token or reference' });
+    }
+
+    // 1. Look up transaction
+    const { data: transaction, error: txError } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('payment_reference', reference)
+      .eq('user_id', user.id)
+      .single();
+
+    if (txError || !transaction) {
+      return res.status(404).json({ error: 'Transaction not found.' });
+    }
+
+    if (transaction.status === 'PAID') {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('subscription_tier')
+        .eq('id', user.id)
+        .single();
+      return res.json({ status: 'success', tier: profile?.subscription_tier, transaction });
+    }
+
+    // 2. Capture PayPal Order
+    const captureData = await paypalService.captureOrder(token);
+
+    // 3. Determine tier
+    let newTier = 'free';
+    if (transaction.amount == 5000 || transaction.amount == 10) newTier = 'basic';
+    if (transaction.amount == 20000 || transaction.amount == 25) newTier = 'pro';
+    if (transaction.amount == 50000 || transaction.amount == 50) newTier = 'max';
+
+    if (newTier === 'free' && captureData.tier) {
+      const metaTier = String(captureData.tier).toLowerCase();
+      if (['basic', 'pro', 'max'].includes(metaTier)) newTier = metaTier;
+    }
+
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + 30);
+
+    // Update Transaction
+    await supabase
+      .from('transactions')
+      .update({ status: 'PAID', updated_at: new Date() })
+      .eq('id', transaction.id);
+
+    // Update Profile
+    await supabase
+      .from('profiles')
+      .update({
+        subscription_tier: newTier,
+        subscription_status: 'active',
+        subscription_end_date: endDate,
+        updated_at: new Date(),
+      })
+      .eq('id', user.id);
+
+    console.log(`[PaymentVerify] Upgraded user ${user.id} to ${newTier.toUpperCase()} via PayPal.`);
+
+    return res.json({ status: 'success', tier: newTier, transaction });
+  } catch (error) {
+    console.error('[PaymentVerify] PayPal Error:', error);
+    res.status(500).json({ error: 'Failed to verify PayPal payment.' });
   }
 });
 

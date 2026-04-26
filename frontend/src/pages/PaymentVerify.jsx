@@ -3,15 +3,21 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { CheckCircle, XCircle, Loader2, ArrowRight } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import api from '../services/api';
+import PricingModal from '../components/paywall/PricingModal';
+import { useSubscription } from '../hooks/useSubscription';
 
 export default function PaymentVerify() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { fetchProfile } = useAuthStore();
   const reference = searchParams.get('reference');
+  const gateway = searchParams.get('gateway');
+  const token = searchParams.get('token');
 
   const [state, setState] = useState('loading'); // loading | success | pending | failed | error
   const [tier, setTier] = useState(null);
+  const [showPricing, setShowPricing] = useState(false);
+  const { tier: currentTier } = useSubscription();
 
   useEffect(() => {
     if (!reference) {
@@ -24,7 +30,14 @@ export default function PaymentVerify() {
   async function verify() {
     setState('loading');
     try {
-      const { data } = await api.get(`/payment/verify/${encodeURIComponent(reference)}`);
+      let data;
+      if (gateway === 'paypal' && token) {
+        const response = await api.post('/payment/verify-paypal', { reference, token });
+        data = response.data;
+      } else {
+        const response = await api.get(`/payment/verify/${encodeURIComponent(reference)}`);
+        data = response.data;
+      }
 
       if (data.status === 'success') {
         setTier(data.tier);
@@ -106,10 +119,10 @@ export default function PaymentVerify() {
               It looks like the payment didn't go through. No charge was made.
             </p>
             <button
-              onClick={() => navigate('/pricing')}
+              onClick={() => setShowPricing(true)}
               className="inline-flex items-center gap-2 bg-primary text-white font-bold px-6 py-3 rounded-2xl hover:bg-primary/90 transition-colors"
             >
-              Back to Pricing
+              View plans
             </button>
           </>
         )}
@@ -137,16 +150,17 @@ export default function PaymentVerify() {
                 </button>
               )}
               <button
-                onClick={() => navigate('/pricing')}
+                onClick={() => setShowPricing(true)}
                 className="inline-flex items-center gap-2 bg-gray-100 text-gray-700 font-bold px-5 py-2.5 rounded-2xl hover:bg-gray-200 transition-colors text-sm"
               >
-                Back to Pricing
+                View plans
               </button>
             </div>
           </>
         )}
 
       </div>
+      <PricingModal isOpen={showPricing} onClose={() => setShowPricing(false)} currentTier={currentTier} />
     </div>
   );
 }

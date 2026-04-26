@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { X, Sparkles, GraduationCap, Gamepad2, FlaskConical, Lock, Radio, Mic, Cpu, Image as ImageIcon } from 'lucide-react';
 import PricingModal from './PricingModal';
 import { useSubscription } from '../../hooks/useSubscription';
@@ -14,10 +13,10 @@ const FEATURE_META = {
   tts:         { icon: Radio,         label: 'Audio Generation',    desc: 'Generate podcast-style audio for any study material.',                           tier: 'Pro' },
   proModels:   { icon: Cpu,           label: 'Pro AI Models',       desc: 'Access advanced reasoning models for deeper analysis.',                         tier: 'Pro' },
   diagrams:    { icon: ImageIcon,     label: 'Diagram Generation',  desc: 'Generate diagrams and illustrations for visual learning.',                      tier: 'Pro' },
+  buddy:       { icon: Sparkles,      label: 'Study Buddy',         desc: 'A voice study partner you set up to match how you learn. More study group than tutor.', tier: 'Max' },
 };
 
 export default function UpgradeModal({ feature, onClose }) {
-  const navigate = useNavigate();
   const { tier: currentTier } = useSubscription();
   const [showPricing, setShowPricing] = useState(false);
   const meta = FEATURE_META[feature] || { icon: Sparkles, label: 'Premium Feature', desc: 'Upgrade to unlock this feature.', tier: 'Pro' };

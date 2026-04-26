@@ -53,21 +53,23 @@ function recordCircuitSuccess() {
 
 // ─── Quick Medical Content Detection (keyword-based) ──────────
 
+// Only include terms that are strongly predictive of medical/clinical content.
+// Deliberately excluded: 'cell', 'tissue', 'organ', 'enzyme', 'receptor' — too
+// common in CS, biology, chemistry, and other non-clinical contexts.
 const MEDICAL_KEYWORDS = [
-  'diagnosis', 'symptom', 'treatment', 'pathology', 'anatomy',
+  'diagnosis', 'symptom', 'treatment', 'pathology',
   'clinical', 'patient', 'disease', 'syndrome', 'therapeutic',
-  'pharmacology', 'drug', 'medication', 'dosage', 'prognosis',
-  'etiology', 'epidemiology', 'morbidity', 'mortality', 'chronic',
-  'acute', 'benign', 'malignant', 'carcinoma', 'tumor', 'lesion',
+  'pharmacology', 'medication', 'dosage', 'prognosis',
+  'etiology', 'epidemiology', 'morbidity', 'mortality',
+  'malignant', 'carcinoma', 'tumor', 'lesion',
   'biopsy', 'surgical', 'cardiac', 'pulmonary', 'hepatic', 'renal',
   'neurological', 'gastrointestinal', 'endocrine', 'hematology',
-  'immunology', 'infection', 'antibiotic', 'vaccine', 'inflammation',
-  'fracture', 'artery', 'vein', 'organ', 'tissue', 'cell',
-  'receptor', 'enzyme', 'hormone', 'insulin', 'hemoglobin',
+  'immunology', 'antibiotic', 'vaccine', 'inflammation',
+  'fracture', 'artery', 'vein', 'insulin', 'hemoglobin',
   'blood pressure', 'cholesterol', 'diabetes', 'hypertension',
-  'asthma', 'pneumonia', 'tuberculosis', 'hiv', 'cancer',
-  'stroke', 'seizure', 'anemia', 'arthritis', 'allergy',
-  'physiology', 'histology', 'microbiology', 'biochemistry',
+  'asthma', 'pneumonia', 'tuberculosis', 'cancer',
+  'stroke', 'seizure', 'anemia', 'arthritis',
+  'physiology', 'histology', 'microbiology',
   'nursing', 'radiology', 'oncology', 'pediatrics', 'obstetrics',
   'dermatology', 'ophthalmology', 'psychiatry', 'orthopedic',
 ];
@@ -396,9 +398,11 @@ async function searchOpenTextbooks(query, maxResults = 3) {
 async function enrichModuleWithMedicalResources({ moduleId, documentId, topic, content, userId }) {
   const prefix = `[MedResources ${(moduleId || '').slice(0, 8)}]`;
 
-  // Quick keyword check first (fast, no LLM call)
+  // Quick keyword check first (fast, no LLM call).
+  // Require ≥2 keyword hits (confidence ≥ 0.4) to avoid false positives on
+  // CS, physics, or other non-clinical domains that share a few biology words.
   const confidence = quickMedicalCheck(content || '');
-  if (confidence < 0.2) {
+  if (confidence < 0.4) {
     console.log(`${prefix} Skipping — content not medical (confidence: ${confidence.toFixed(2)})`);
     return [];
   }
@@ -559,6 +563,94 @@ async function enrichModuleWithMedicalResources({ moduleId, documentId, topic, c
   return unique;
 }
 
+// ─── Generic Web Resource Enrichment ─────────────────────────
+// For non-medical content, use Gemini search grounding to find 3-5 relevant
+// web sources and store them in the same table with source_type='web'.
+
+/**
+ * Search for web resources relevant to a module topic using Gemini grounding.
+ * Returns up to 5 sources: { title, url, snippet }.
+ */
+async function searchWebResourcesForTopic(topic, content) {
+  try {
+    const { getSearchGroundedModel, withRetryOnRateLimit } = require('../config/gemini');
+    const searchModel = getSearchGroundedModel('fast');
+    const contentSnippet = (content || '').slice(0, 1500);
+    const result = await withRetryOnRateLimit(
+      () => searchModel.generateContent(
+        `Find 3-5 high-quality educational web resources (textbooks, reference docs, Wikipedia articles, course pages, official docs) for this topic:\n\nTopic: ${topic}\n\nContent sample: ${contentSnippet}\n\nBe specific to the domain — if it's computer science, find CS resources; if it's chemistry, find chemistry resources. Do NOT suggest medical resources unless the content is medical.`
+      ),
+      2, 0
+    );
+    const chunks = result.response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    return chunks
+      .filter(c => c.web?.uri)
+      .slice(0, 5)
+      .map(c => ({
+        source_type: 'web',
+        title: c.web.title || c.web.uri,
+        url: c.web.uri,
+        snippet: null,
+        topic,
+        extra_data: {},
+      }));
+  } catch (err) {
+    console.warn(`[WebResources] Search failed for "${topic}": ${err.message}`);
+    return [];
+  }
+}
+
+/**
+ * Enrich a module with generic web resources (for non-medical topics).
+ * Stores results in the medical_resources table with source_type='web'.
+ */
+async function enrichModuleWithWebResources({ moduleId, documentId, topic, content, userId }) {
+  const prefix = `[WebResources ${(moduleId || '').slice(0, 8)}]`;
+  try {
+    const resources = await searchWebResourcesForTopic(topic, content);
+    if (resources.length === 0) {
+      console.log(`${prefix} No web resources found for "${topic}"`);
+      return [];
+    }
+
+    // Deduplicate against existing entries for this module
+    const { data: existing } = await supabase
+      .from('medical_resources')
+      .select('url')
+      .eq('module_id', moduleId)
+      .eq('source_type', 'web');
+    const existingUrls = new Set((existing || []).map(r => r.url).filter(Boolean));
+    const unique = resources.filter(r => r.url && !existingUrls.has(r.url));
+
+    if (unique.length === 0) return [];
+
+    const { v4: uuidv4 } = require('uuid');
+    const rows = unique.map(r => ({
+      id: uuidv4(),
+      document_id: documentId,
+      module_id: moduleId,
+      topic: r.topic,
+      source_type: r.source_type,
+      title: r.title,
+      url: r.url || null,
+      snippet: r.snippet || null,
+      extra_data: r.extra_data || {},
+      user_id: userId || null,
+    }));
+
+    const { error } = await supabase.from('medical_resources').insert(rows);
+    if (error) {
+      console.error(`${prefix} DB insert failed: ${error.message}`);
+    } else {
+      console.log(`${prefix} Stored ${rows.length} web resources for "${topic}"`);
+    }
+    return unique;
+  } catch (err) {
+    console.warn(`${prefix} Web enrichment failed: ${err.message}`);
+    return [];
+  }
+}
+
 // ─── CRUD ─────────────────────────────────────────────────────
 
 /**
@@ -611,6 +703,7 @@ module.exports = {
   getMSDManualLink,
   searchOpenTextbooks,
   enrichModuleWithMedicalResources,
+  enrichModuleWithWebResources,
   getMedicalResourcesByModule,
   getMedicalResourcesByDocument,
 };

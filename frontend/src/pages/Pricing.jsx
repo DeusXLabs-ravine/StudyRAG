@@ -1,12 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PublicNavbar from '../components/layout/PublicNavbar';
 import Footer from '../components/layout/Footer';
-import { Check, Star, CheckCircle, CreditCard, Landmark, Send, Loader2, X } from 'lucide-react';
+import { Check, Star, CheckCircle, CreditCard, Landmark, Send, Loader2, X, Wallet } from 'lucide-react';
 import SEO from '../components/common/SEO';
 import useAuthStore from '../store/authStore';
 import api from '../services/api';
-import { formatTierPrice, isNigerianUser } from '../utils/currency';
+import { formatTierPrice, checkIsNigerianUser, isNigerianUserSync } from '../utils/currency';
 import NativePayButton from '../components/paywall/NativePayButton';
 
 
@@ -147,26 +147,49 @@ export default function Pricing() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(null);
+  const [isNG, setIsNG] = useState(isNigerianUserSync());
+
+  useEffect(() => {
+    checkIsNigerianUser().then(setIsNG);
+  }, []);
 
   const tiers = useMemo(() => tierData.map(t => {
-    const price = formatTierPrice(t.ngn, t.usd);
+    const price = formatTierPrice(t.ngn, t.usd, isNG);
     return { ...t, price: price.primary, priceSecondary: price.secondary, priceValue: t.ngn };
-  }), []);
+  }), [isNG]);
 
-  const isNG = isNigerianUser();
+  useEffect(() => {
+    if (user && tiers.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const checkoutTier = params.get('checkoutTier');
+      const checkoutChannel = params.get('checkoutChannel');
+      const checkoutGateway = params.get('checkoutGateway') || 'paystack';
+      
+      if (checkoutTier && checkoutChannel) {
+        const tierObj = tiers.find(t => t.id === checkoutTier);
+        if (tierObj) {
+          setSelectedTier(tierObj);
+          window.history.replaceState({}, '', '/pricing');
+          handleCheckout(checkoutChannel, checkoutGateway, tierObj);
+        }
+      }
+    }
+  }, [user, tiers]);
 
-  // Apple Pay and Google Pay are handled natively via NativePayButton (Stripe).
-  const paymentChannels = [
-    { id: 'card', name: 'Pay with Card', icon: CreditCard, description: 'Visa, Mastercard, Verve' },
-    ...(isNG ? [
-      { id: 'bank_transfer', name: 'Pay via Bank Transfer', icon: Send, description: 'Transfer directly from your bank' },
-      { id: 'bank', name: 'Pay via Bank or USSD', icon: Landmark, description: 'Use your bank account or USSD code' },
-    ] : []),
+  // Apple Pay and Google Pay are handled natively via NativePayButton (Stripe/Paystack).
+  const paymentChannels = isNG ? [
+    { id: 'card', gateway: 'paystack', name: 'Pay with Card', icon: CreditCard, description: 'Visa, Mastercard, Verve' },
+    { id: 'bank_transfer', gateway: 'paystack', name: 'Pay via Bank Transfer', icon: Send, description: 'Transfer directly from your bank' },
+    { id: 'bank', gateway: 'paystack', name: 'Pay via Bank or USSD', icon: Landmark, description: 'Use your bank account or USSD code' },
+  ] : [
+    { id: 'card', gateway: 'paystack', name: 'Pay with Card', icon: CreditCard, description: 'Visa, Mastercard' },
+    { id: 'paypal', gateway: 'paypal', name: 'Pay with PayPal', icon: Wallet, description: 'Pay securely with your PayPal account' },
   ];
 
-  const handleCheckout = async (channelId) => {
+  const handleCheckout = async (channelId, gateway = 'paystack', customTier = selectedTier) => {
     if (!user) {
-      window.location.href = '/login?redirect=/pricing';
+      const redirectUri = encodeURIComponent(`/pricing?checkoutTier=${customTier.id}&checkoutChannel=${channelId}&checkoutGateway=${gateway}`);
+      window.location.href = `/login?redirect=${redirectUri}`;
       return;
     }
 
@@ -175,8 +198,10 @@ export default function Pricing() {
 
     try {
       const { data } = await api.post('/payment/checkout', {
-        tier: selectedTier.id,
+        tier: customTier.id,
         channel: channelId,
+        gateway: gateway,
+        currency: isNG ? 'NGN' : 'USD',
       });
 
       if (!data.accessCode && !data.checkoutUrl) {
@@ -193,7 +218,7 @@ export default function Pricing() {
               await api.get(`/payment/verify/${encodeURIComponent(data.paymentReference)}`);
             } catch { /* webhook handles it */ }
             await fetchProfile();
-            setPaymentSuccess(selectedTier.name);
+            setPaymentSuccess(customTier.name);
             setSelectedTier(null);
           },
           onClose: (error) => {
@@ -313,6 +338,9 @@ export default function Pricing() {
               {/* Apple Pay / Google Pay — native browser buttons, no popup */}
               <NativePayButton
                 tier={selectedTier.id}
+                currency={isNG ? 'NGN' : 'USD'}
+                user={user}
+                onRequireLogin={() => handleCheckout('apple_pay', 'paystack', selectedTier)}
                 onSuccess={async () => {
                   await fetchProfile();
                   setPaymentSuccess(selectedTier.name);
@@ -333,7 +361,7 @@ export default function Pricing() {
                   return (
                     <button
                       key={channel.id}
-                      onClick={() => handleCheckout(channel.id)}
+                      onClick={() => handleCheckout(channel.id, channel.gateway)}
                       disabled={isLoading}
                       className="w-full relative group flex items-center gap-4 p-5 rounded-2xl bg-white border border-gray-100 hover:border-primary/50 hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none text-left cursor-pointer"
                     >

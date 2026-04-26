@@ -1,10 +1,69 @@
-const { getGenerativeModel, getSearchGroundedModel, selectModelTier, withRetryOnRateLimit, requestQueue } = require('../config/gemini');
+const { getGenerativeModel, getSearchGroundedModel, selectModelTier, withRetryOnRateLimit, requestQueue, cacheManager, MODELS } = require('../config/gemini');
 const { isDeepSeekAvailable, callDeepSeekChat } = require('../config/deepseek');
 const { isSTEMQuery } = require('../utils/stemDetector');
 const { getTutorDepthSection } = require('../utils/prompts/depthRouter');
 const vectorStore = require('./vectorStore');
 const { searchPageIndex, searchMultipleDocuments } = require('./pageIndexService');
 const { getUserTeachingLevel, getWeakTopics, getUserProfile, getUserInterests, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
+
+/**
+ * Get or create a Gemini Context Cache for a document.
+ * Caches the entire document text to speed up future queries.
+ */
+async function getOrCreateGeminiCache(docId, docMeta) {
+  if (!cacheManager || !docId) return null;
+
+  const metadata = docMeta?.extractedMetadata || {};
+  const now = Date.now();
+
+  // 1. Check if existing cache is still valid
+  if (metadata.geminiCacheName && metadata.geminiCacheExpiry > now) {
+    try {
+      const cache = await cacheManager.get(metadata.geminiCacheName);
+      if (cache) return cache;
+    } catch (err) {
+      console.warn(`[GeminiCache] Cache ${metadata.geminiCacheName} missing on server, recreating...`);
+    }
+  }
+
+  // 2. Fetch full document text for caching
+  const pages = await vectorStore.getDocumentPages(docId);
+  if (!pages || pages.length === 0) return null;
+
+  const fullText = pages.map(p => `[Page ${p.pageNumber}]\n${p.text}`).join('\n\n');
+  
+  // Gemini Context Caching requires a minimum of 32,768 tokens.
+  // If the document is too small, caching isn't supported/needed.
+  // Approx 4 chars per token -> 131,072 chars.
+  if (fullText.length < 130000) {
+    return null; 
+  }
+
+  try {
+    console.log(`[GeminiCache] Creating cache for document ${docId} (${fullText.length} chars)`);
+    const ttlSeconds = 3600; // 1 hour
+    const cache = await cacheManager.create({
+      model: MODELS.standard,
+      displayName: `studyrag-${docId}`,
+      contents: [{ role: 'user', parts: [{ text: fullText }] }],
+      ttlSeconds,
+    });
+
+    // 3. Update document metadata with cache info
+    await vectorStore.updateDocumentStatus(docId, {
+      extractedMetadata: {
+        ...metadata,
+        geminiCacheName: cache.name,
+        geminiCacheExpiry: now + (ttlSeconds * 1000),
+      }
+    });
+
+    return cache;
+  } catch (err) {
+    console.error(`[GeminiCache] Failed to create cache: ${err.message}`);
+    return null;
+  }
+}
 
 /**
  * Determine whether a user query would benefit from real-time web search.
@@ -376,6 +435,24 @@ Format your response with clear structure using markdown.
 If the student seems confused, offer to explain in simpler terms.`;
 
   const result = await withRetryOnRateLimit(async () => {
+    const tier = selectModelTier({});
+    const useWeb = shouldUseWebSearch(query);
+    const docMeta = await vectorStore.getDocument(docId);
+    
+    // Attempt to use context cache for large documents
+    const cache = await getOrCreateGeminiCache(docId, docMeta);
+    
+    if (cache) {
+      const model = getGenerativeModel(tier);
+      // When using cache, we use a concise prompt as the document text is already cached
+      const cachedPrompt = `You are a helpful, knowledgeable tutor.\n${teachingHint}\n${learningStyleHint}\n${paceHint}\n${conversationContext}\n${resourceContext}\n${weakTopicHint}\nStudent's question: ${query}\n\nBase your answer on the study materials in your context. Cite page numbers. Format with markdown.`;
+      
+      return model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: cachedPrompt }] }],
+        cachedContent: cache.name,
+      });
+    }
+
     const model = useWeb ? getSearchGroundedModel(tier) : getGenerativeModel(tier);
     return model.generateContent(prompt);
   }, 3, 0);
@@ -737,14 +814,8 @@ async function tutorChat(moduleContent, moduleTitle, moduleTopic, message, conve
  * @yields {{ type: 'text', text: string } | { type: 'done', sources: Array, webSources: Array, suggestSolver: boolean }}
  */
 async function* queryWithRAGStream(query, docId, conversationHistory, userId) {
-  // If web search is needed, fall back to non-streaming (search grounding + streaming not supported)
-  if (shouldUseWebSearch(query)) {
-    const result = await queryWithRAG(query, docId, conversationHistory, userId);
-    // Emit full text as a single chunk, then done
-    yield { type: 'text', text: result.answer };
-    yield { type: 'done', sources: result.sources, webSources: result.webSources || [], suggestSolver: result.suggestSolver || false };
-    return;
-  }
+  // Streaming is now supported for all paths including web search in Gemini 2.0
+
 
   // Resolve content + prompt in parallel
   let prompt, sources, suggestSolver;
@@ -841,7 +912,23 @@ async function* queryWithRAGStream(query, docId, conversationHistory, userId) {
   let fullText = '';
   try {
     const streamResult = await requestQueue.execute(async () => {
-      const model = getGenerativeModel(tier);
+      const useWeb = shouldUseWebSearch(query);
+      const docMeta = docId ? await vectorStore.getDocument(docId) : null;
+      const cache = docId ? await getOrCreateGeminiCache(docId, docMeta) : null;
+      
+      const model = useWeb ? getSearchGroundedModel(tier) : getGenerativeModel(tier);
+      
+      if (cache) {
+        // Use a concise prompt for cached turns to save tokens and prevent payload bloat
+        const { teachingHint, learningStyleHint, paceHint, conversationContext, resourceContext, weakTopicHint } = promptParts || {};
+        const cachedPrompt = `You are a helpful tutor.\n${teachingHint || ''}\n${learningStyleHint || ''}\n${paceHint || ''}\n${conversationContext || ''}\n${resourceContext || ''}\n${weakTopicHint || ''}\nStudent's question: ${query}\n\nBase your answer on the study materials in your context. Cite page numbers. Format with markdown.`;
+
+        return model.generateContentStream({
+          contents: [{ role: 'user', parts: [{ text: cachedPrompt }] }],
+          cachedContent: cache.name,
+        });
+      }
+      
       return model.generateContentStream(prompt);
     }, 0);
 

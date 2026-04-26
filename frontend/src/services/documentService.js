@@ -178,3 +178,8 @@ export async function registerTopic(topic, description) {
   const { data } = await api.post('/documents/register-topic', { topic, description });
   return data;
 }
+
+export async function getDocumentViewUrl(id) {
+  const { data } = await api.get(`/documents/${id}/view-url`);
+  return data;
+}

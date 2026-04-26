@@ -78,6 +78,7 @@ const FEATURE_MAP = {
   allow_live: 'live',
   allow_tts: 'tts',
   allow_pro_models: 'proModels',
+  allow_buddy: 'buddy',
 };
 
 function requireFeature(feature) {

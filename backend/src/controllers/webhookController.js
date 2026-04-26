@@ -290,12 +290,12 @@ async function handlePaystackWebhook(req, res) {
         return;
       }
 
-      // 2. Determine tier from Paystack-confirmed amount (in kobo → NGN)
-      const amountNaira = (paymentData.amount || 0) / 100;
+      // 2. Determine tier from Paystack-confirmed amount (in subunits → major units)
+      const amountUnit = (paymentData.amount || 0) / 100;
       let newTier = 'free';
-      if (amountNaira == 5000)  newTier = 'basic';
-      if (amountNaira == 20000) newTier = 'pro';
-      if (amountNaira == 50000) newTier = 'max';
+      if (amountUnit == 5000 || amountUnit == 10)  newTier = 'basic';
+      if (amountUnit == 20000 || amountUnit == 25) newTier = 'pro';
+      if (amountUnit == 50000 || amountUnit == 50) newTier = 'max';
 
       // Fallback: read tier from metadata if amount mapping gave 'free'
       if (newTier === 'free' && paymentData.metadata?.tier) {
@@ -321,8 +321,8 @@ async function handlePaystackWebhook(req, res) {
           user_id: userId,
           payment_reference: paymentReference,
           transaction_reference: paymentData.access_code || paymentReference,
-          amount: amountNaira,
-          currency: 'NGN',
+          amount: amountUnit,
+          currency: paymentData.currency || 'NGN',
           payment_method: 'paystack',
           status: 'PAID',
           description: `StudyRAG ${newTier.toUpperCase()} Subscription`,

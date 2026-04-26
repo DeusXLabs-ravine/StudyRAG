@@ -103,7 +103,14 @@ async function generateBridgeContent(parentModule, wrongAnswers, struggledTopics
   }, 3, 0);
   const text = result.response.text();
   const jsonStr = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  return JSON.parse(jsonStr);
+  try {
+    return JSON.parse(jsonStr);
+  } catch (err) {
+    // If it's a list or multiple modules, try to salvage the first one
+    const { tryExtractModulesFromJSON } = require('./moduleGenerator');
+    const modules = tryExtractModulesFromJSON(jsonStr);
+    return modules[0] || JSON.parse(jsonStr); // Fallback to original error if nothing found
+  }
 }
 
 /**
@@ -124,9 +131,9 @@ async function insertBridgeModule(docId, parentModuleId, parentOrderIndex, bridg
     order_index: parentOrderIndex + 1,
     title: bridgeData.title || `Review: ${bridgeMeta?.struggledTopics?.[0] || 'Concepts'}`,
     topic: bridgeData.topic || bridgeMeta?.struggledTopics?.[0] || 'Review',
-    objectives: bridgeData.objectives || [],
-    content: bridgeData.content || '',
-    takeaways: bridgeData.takeaways || [],
+    objectives: Array.isArray(bridgeData.objectives) ? bridgeData.objectives : [`Review ${bridgeMeta?.struggledTopics?.[0] || 'struggled concepts'}`],
+    content: bridgeData.content || 'Content generation failed for this review module.',
+    takeaways: Array.isArray(bridgeData.takeaways) ? bridgeData.takeaways : [],
     module_type: 'bridge',
     parent_module_id: parentModuleId,
     bridge_meta: bridgeMeta || {},
@@ -136,16 +143,22 @@ async function insertBridgeModule(docId, parentModuleId, parentOrderIndex, bridg
   if (modErr) throw modErr;
 
   // Insert bridge quiz questions
-  const questionRows = (bridgeData.questions || []).map(q => ({
-    id: uuidv4(),
-    module_id: bridgeId,
-    type: q.type,
-    question: q.question,
-    options: q.options || null,
-    correct: q.correct,
-    explanation: q.explanation || null,
-    topic: q.topic || moduleRow.topic,
-  }));
+  const questions = bridgeData.questions || bridgeData.comprehension_questions || [];
+  const questionRows = questions.map(q => {
+    const qType = q.type || (q.options ? 'multiple_choice' : 'true_false');
+    const qOptions = Array.isArray(q.options) ? q.options : (qType === 'multiple_choice' ? ['A) Option 1', 'B) Option 2', 'C) Option 3', 'D) Option 4'] : null);
+    
+    return {
+      id: uuidv4(),
+      module_id: bridgeId,
+      type: qType,
+      question: q.question || 'Comprehension check question.',
+      options: qOptions,
+      correct: String(q.correct || (qType === 'true_false' ? 'true' : 'A')),
+      explanation: q.explanation || 'Answer based on the review content.',
+      topic: q.topic || moduleRow.topic,
+    };
+  }).filter(q => q.question);
 
   if (questionRows.length > 0) {
     const { error: qErr } = await supabase.from('questions').insert(questionRows);

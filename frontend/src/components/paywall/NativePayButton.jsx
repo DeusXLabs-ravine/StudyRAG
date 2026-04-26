@@ -11,7 +11,7 @@ import useAuthStore from '../../store/authStore';
  *
  * Renders nothing if Apple Pay is not available on the device/browser.
  */
-export default function NativePayButton({ tier, onSuccess, onError }) {
+export default function NativePayButton({ tier, currency = 'NGN', user, onRequireLogin, onSuccess, onError }) {
   const [canPay, setCanPay] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { fetchProfile } = useAuthStore();
@@ -26,12 +26,18 @@ export default function NativePayButton({ tier, onSuccess, onError }) {
   }, []);
 
   const handleApplePay = async () => {
+    if (!user) {
+      if (onRequireLogin) onRequireLogin();
+      return;
+    }
+
     setIsLoading(true);
     try {
       // Initialize a Paystack transaction restricted to apple_pay channel
       const { data } = await api.post('/payment/checkout', {
         tier,
         channel: 'apple_pay',
+        currency,
       });
 
       if (!data.accessCode && !data.checkoutUrl) {

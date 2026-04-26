@@ -74,12 +74,18 @@ export class GeminiLiveSession {
     onToolCall,
     onToolResult,
     listenOnly = false,
+    mode,             // 'teacher' (default) | 'buddy'
+    buddyProfileId,   // only when mode === 'buddy'
+    sessionContext,   // only when mode === 'buddy' — free-form object
   }) {
     this.wsUrl = wsUrl;
     this.authToken = authToken;
     this.systemInstruction = systemInstruction;
     this.toolContext = toolContext || {};
     this.listenOnly = listenOnly;
+    this.mode = mode === 'buddy' ? 'buddy' : 'teacher';
+    this.buddyProfileId = buddyProfileId || null;
+    this.sessionContext = sessionContext || null;
     this.onTranscript = onTranscript || (() => {});
     this.onUserTranscript = onUserTranscript || (() => {});
     this.onStateChange = onStateChange || (() => {});
@@ -158,13 +164,18 @@ export class GeminiLiveSession {
       }, CONNECT_TIMEOUT_MS);
 
       this.ws.onopen = () => {
-        console.log('[GeminiLive] WebSocket open, sending init...');
-        // Send init immediately — backend creates the Gemini session
-        this._send({
+        console.log(`[GeminiLive] WebSocket open, sending init (mode=${this.mode})...`);
+        const initFrame = {
           type: 'init',
+          mode: this.mode,
           systemInstruction: this.systemInstruction,
           toolContext: this.toolContext,
-        });
+        };
+        if (this.mode === 'buddy') {
+          initFrame.buddyProfileId = this.buddyProfileId;
+          initFrame.sessionContext = this.sessionContext || {};
+        }
+        this._send(initFrame);
       };
 
       let msgCount = 0;
@@ -341,7 +352,7 @@ export class GeminiLiveSession {
     console.log('[GeminiLive] Requesting mic permissions...');
     this._micStream = await navigator.mediaDevices.getUserMedia({
       audio: {
-        sampleRate: INPUT_SAMPLE_RATE,
+        sampleRate: { ideal: INPUT_SAMPLE_RATE },
         channelCount: 1,
         echoCancellation: true,
         noiseSuppression: true,
@@ -349,24 +360,47 @@ export class GeminiLiveSession {
       },
     });
     console.log('[GeminiLive] Mic stream obtained.');
+    // Expose for components that want to read mic level / toggle mute.
+    try { window.__buddyMicStream = this._micStream; } catch {}
 
     console.log('[GeminiLive] Creating AudioContext for mic...');
     this._micInputCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: INPUT_SAMPLE_RATE });
+
+    // Chrome creates AudioContexts in 'suspended' state when not directly inside
+    // a synchronous user-gesture handler. Resume explicitly so the ScriptProcessor
+    // fires. This is a no-op on browsers that auto-start the context.
+    if (this._micInputCtx.state === 'suspended') {
+      try { await this._micInputCtx.resume(); } catch { /* proceed — some browsers allow it lazily */ }
+    }
+    // Re-resume if the context gets suspended later (e.g. tab backgrounded then foregrounded)
+    this._micInputCtx.addEventListener('statechange', () => {
+      if (this._micInputCtx?.state === 'suspended' && !this._closed) {
+        this._micInputCtx.resume().catch(() => {});
+      }
+    });
+    console.log(`[GeminiLive] Mic AudioContext state: ${this._micInputCtx.state} (sample rate: ${this._micInputCtx.sampleRate}Hz)`);
+
     const source = this._micInputCtx.createMediaStreamSource(this._micStream);
     this._micProcessor = this._micInputCtx.createScriptProcessor(4096, 1, 1);
 
+    let chunksSent = 0;
     this._micProcessor.onaudioprocess = (e) => {
       if (this._closed || this.ws?.readyState !== WebSocket.OPEN) return;
       const pcm = floatTo16BitPCM(e.inputBuffer.getChannelData(0));
       this._send({
         type: 'audio',
         data: arrayBufferToBase64(pcm),
-        mimeType: 'audio/pcm;rate=16000',
+        mimeType: `audio/pcm;rate=${this._micInputCtx.sampleRate}`,
       });
+      chunksSent++;
+      if (chunksSent === 1 || chunksSent === 10) {
+        console.log(`[GeminiLive] Mic sending audio chunks (total=${chunksSent}, ctxState=${this._micInputCtx?.state})`);
+      }
     };
 
     source.connect(this._micProcessor);
     this._micProcessor.connect(this._micInputCtx.destination);
+    console.log('[GeminiLive] Mic pipeline connected — ScriptProcessor running.');
   }
 
   _stopMic() {
@@ -378,6 +412,28 @@ export class GeminiLiveSession {
     }
     if (this._micInputCtx) { try { this._micInputCtx.close(); } catch {} this._micInputCtx = null; }
     if (this._micStream) { this._micStream.getTracks().forEach(t => t.stop()); this._micStream = null; }
+    try { if (window.__buddyMicStream) delete window.__buddyMicStream; } catch {}
+  }
+
+  /**
+   * Tell the backend the user is now reading a different page of the picked
+   * PDF. Backend pulls the page's text from its own DB (truth source) and
+   * injects it into Buddy's next turn as a hidden stage cue — never shown to
+   * the user transcript. Safe to call on every page change; backend coalesces.
+   */
+  sendPageUpdate(pageNumber) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (!Number.isFinite(pageNumber)) return;
+    this._send({ type: 'page_update', pageNumber: Math.max(1, Math.floor(pageNumber)) });
+  }
+
+  /**
+   * Tell the backend where the user is in the app (route, page title, active doc).
+   * Used to give Buddy "vision" of the user's current activity.
+   */
+  sendContextUpdate({ path, title, metadata = {} }) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this._send({ type: 'context_update', path, title, metadata });
   }
 
   _setState(state) {
@@ -386,8 +442,9 @@ export class GeminiLiveSession {
       this.onStateChange(state);
 
       // Safety net: if we enter "listening" and no audio arrives within 8s,
-      // send a nudge to make sure Gemini starts speaking.
-      if (state === 'listening' && !this._hasReceivedAudio) {
+      // send a nudge to make sure Gemini starts speaking. Skip for Buddy mode
+      // because ambient sessions are *supposed* to wait for the user.
+      if (state === 'listening' && !this._hasReceivedAudio && this.mode !== 'buddy') {
         clearTimeout(this._nudgeTimer);
         this._nudgeTimer = setTimeout(() => {
           if (this.state === 'listening' && !this._hasReceivedAudio && !this._closed) {

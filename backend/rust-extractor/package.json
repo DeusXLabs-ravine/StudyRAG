@@ -1,0 +1,20 @@
+{
+  "name": "rust-extractor",
+  "version": "1.0.0",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "napi": {
+    "name": "rust-extractor",
+    "package": {
+      "name": "rust-extractor"
+    }
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.4"
+  },
+  "scripts": {
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform"
+  }
+}

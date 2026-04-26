@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { FileText, Trash2, AlertCircle, CheckCircle, Clock, X, Brain, Sparkles, Upload, Link2, StickyNote, Star, Globe, Shield, ShieldAlert, ShieldCheck, BookOpen, Search, FolderOpen, ChevronDown, ChevronRight } from 'lucide-react';
 import useDocumentStore from '../store/documentStore';
 import useCourseStore from '../store/courseStore';
-import { listModules } from '../services/moduleService';
+import { deleteModulesByDocument } from '../services/moduleService';
 
 import ProgressBar from '../components/common/ProgressBar';
 import { FileUpload } from '@/components/ui/file-upload';
@@ -60,6 +60,20 @@ const processingMessages = [
   "Almost done: polishing your modules...",
 ];
 
+const processingStepsConfig = [
+  { id: 'extracting', label: 'Extracting Knowledge', icon: FileText },
+  { id: 'indexing', label: 'Building Search Index', icon: Search },
+  { id: 'generating_modules', label: 'Crafting Core Modules', icon: Brain },
+  { id: 'generating_remaining', label: 'Synthesizing Curriculum', icon: Sparkles },
+  { id: 'researching', label: 'Deep Dive Research', icon: Globe },
+  { id: 'enriching', label: 'Finalizing Resources', icon: FolderOpen },
+];
+
+const getStepIndex = (step) => {
+  const idx = processingStepsConfig.findIndex(s => s.id === step);
+  return idx === -1 ? 0 : idx;
+};
+
 const tabs = [
   { id: 'file', label: 'Upload File', icon: Upload },
   { id: 'url', label: 'Add URL', icon: Link2 },
@@ -98,8 +112,7 @@ export default function Documents() {
     fetchCourses();
   }, [fetchDocuments, fetchCourses]);
 
-  // Track doc IDs that are ready but waiting for modules before redirect
-  const pendingRedirectRef = useRef(null);
+
 
   // Poll processing documents and auto-redirect when modules are ready
   useEffect(() => {
@@ -110,9 +123,10 @@ export default function Documents() {
     for (const id of processingIdsRef.current) {
       if (!currentProcessingIds.has(id)) {
         const doc = (documents || []).find(d => d.id === id);
-        if (doc && doc.status === 'ready' && !pendingRedirectRef.current) {
-          // Doc is ready — start polling for modules before redirecting
-          pendingRedirectRef.current = id;
+        if (doc && doc.status === 'ready') {
+          // Doc is ready — redirect immediately!
+          // The Learn page will handle the 'generating modules' state
+          navigate(`/learn/${id}`);
         }
       }
     }
@@ -120,33 +134,41 @@ export default function Documents() {
     // Update tracking set
     processingIdsRef.current = currentProcessingIds;
 
-    if (currentProcessing.length === 0 && !pendingRedirectRef.current) return;
+    if (currentProcessing.length === 0) return;
 
     const interval = setInterval(async () => {
       // Poll processing docs for status changes
       currentProcessing.forEach(doc => refreshDocument(doc.id));
-
-      // If a doc is ready, check if modules exist before redirecting
-      if (pendingRedirectRef.current) {
-        try {
-          const { modules } = await listModules(pendingRedirectRef.current);
-          if (modules && modules.length > 0) {
-            const docId = pendingRedirectRef.current;
-            pendingRedirectRef.current = null;
-            navigate(`/learn/${docId}`);
-          }
-        } catch {
-          // module check failed — keep polling
-        }
-      }
     }, 3000);
 
     return () => clearInterval(interval);
   }, [documents, refreshDocument, navigate]);
 
+  // Track the elapsed time for processing documents to show the 3-minute warning
+  const [processingTimeElapsed, setProcessingTimeElapsed] = useState({});
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      const newElapsed = {};
+      (documents || []).forEach(doc => {
+        if (doc.status === 'processing' && doc.uploadDate) {
+          const elapsed = (now - new Date(doc.uploadDate)) / 1000;
+          newElapsed[doc.id] = elapsed;
+        }
+      });
+      setProcessingTimeElapsed(newElapsed);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [documents]);
+
   const handleFilesSelected = useCallback((newFiles) => {
     if (isAtDocLimit) { setShowDocUpgradeModal(true); return; }
-    newFiles.forEach(file => uploadDocument(file).catch(() => { }));
+    newFiles.forEach(file =>
+      uploadDocument(file).catch(err => {
+        toast.error(err?.message || 'Upload failed. Please try again.');
+      })
+    );
   }, [uploadDocument, isAtDocLimit]);
 
   const handleDelete = async (id) => {
@@ -413,90 +435,144 @@ export default function Documents() {
         </div>
       </div>
 
-      {/* Progress banners grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        {/* Active upload progress */}
-        {activeUploads.length > 0 && (
-          <div className="space-y-3">
-            <h3 className="text-xs font-black text-primary uppercase tracking-widest ml-1">Current Uploads</h3>
-            {activeUploads.map(([fileName, upload]) => (
-              <div key={fileName} className="sleek-card p-3 md:p-4 bg-white/50 backdrop-blur-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <FileText className="h-3.5 w-3.5 text-primary opacity-50 flex-shrink-0" />
-                    <span className="text-xs font-bold text-gray-700 truncate">{fileName}</span>
+      {/* ── Upload + Processing banners ── */}
+      {(activeUploads.length > 0 || showProcessingBanner) && (
+        <div className="mb-8 space-y-3">
+          {/* Individual file upload bars */}
+          {activeUploads.map(([fileName, upload]) => (
+            <div key={fileName} className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                    <Upload className="h-3.5 w-3.5 text-blue-600" />
                   </div>
-                  <div className="flex items-center gap-2">
-                    {upload.status === 'error' ? (
-                      <button
-                        onClick={() => clearUploadError(fileName)}
-                        className="p-1 hover:bg-red-50 text-red-500 rounded-lg transition-all"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    ) : (
-                      <span className="text-[9px] font-black text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full uppercase">
-                        {upload.status}
-                      </span>
-                    )}
+                  <span className="text-[13px] font-semibold text-blue-900 truncate">{fileName}</span>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {upload.status === 'error' ? (
+                    <button onClick={() => clearUploadError(fileName)} className="p-1 hover:bg-red-50 text-red-500 rounded-md transition-colors cursor-pointer">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  ) : (
+                    <span className="text-[10px] font-bold text-blue-500 tracking-widest uppercase">{upload.status}</span>
+                  )}
+                </div>
+              </div>
+              {upload.status === 'error' ? (
+                <p className="text-[11px] text-red-700 bg-red-50 px-2.5 py-1.5 rounded-lg border border-red-100">{upload.error}</p>
+              ) : (
+                <ProgressBar value={upload.progress} max={100} className="h-1.5 rounded-full" />
+              )}
+            </div>
+          ))}
+
+          {/* Uploading hint */}
+          {hasUploading && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-blue-50 border border-blue-100 animate-in fade-in duration-400">
+              <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                <Upload className="h-3.5 w-3.5 text-blue-600" />
+              </div>
+              <div className="flex-1 min-w-0 h-5 overflow-hidden">
+                <TextLoop interval={3} className="text-[13px] font-medium text-blue-800">
+                  {uploadingMessages.map(msg => <span key={msg}>{msg}</span>)}
+                </TextLoop>
+              </div>
+            </div>
+          )}
+
+          {/* AI Processing card — the cinematic moment */}
+          {showProcessingBanner && !hasUploading && processingDocs.slice(0, 1).map(doc => {
+            const currentStep = doc.extractedMetadata?.processingStep || 'extracting';
+            const currentStepIdx = getStepIndex(currentStep);
+            const isStalled = (processingTimeElapsed[doc.id] || 0) > 180;
+            const percent = Math.min(97, Math.round(((currentStepIdx + 0.5) / processingStepsConfig.length) * 100));
+
+            return (
+              <div key={doc.id} className="doc-processing-card relative overflow-hidden rounded-2xl border border-violet-200/40 bg-gradient-to-br from-slate-900 via-violet-950 to-slate-900 p-6 animate-in fade-in duration-700">
+                {/* Animated orbs */}
+                <div className="doc-processing-orb doc-processing-orb--1" />
+                <div className="doc-processing-orb doc-processing-orb--2" />
+                <div className="doc-processing-orb doc-processing-orb--3" />
+
+                {/* Header */}
+                <div className="relative z-10 flex items-start justify-between mb-5">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="relative w-10 h-10 flex-shrink-0">
+                      <div className="absolute inset-0 rounded-full bg-violet-500/20 animate-ping" />
+                      <div className="relative w-10 h-10 rounded-full bg-violet-500/30 flex items-center justify-center">
+                        <Brain className="h-5 w-5 text-violet-300" />
+                      </div>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold text-violet-400 uppercase tracking-[0.18em] mb-0.5">AI Processing</p>
+                      <p className="text-[13px] font-semibold text-white truncate" title={doc.originalName}>
+                        {doc.originalName}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[28px] font-black text-white/20 tabular-nums flex-shrink-0 leading-none">{percent}%</span>
+                </div>
+
+                {/* Progress track */}
+                <div className="relative z-10 mb-5">
+                  <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full doc-processing-progress transition-all duration-1000 ease-out"
+                      style={{ width: `${percent}%` }}
+                    />
                   </div>
                 </div>
-                {upload.status === 'error' ? (
-                  <p className="text-[9px] text-red-600 font-bold bg-red-50 p-2 rounded-lg border border-red-100 italic">
-                    {upload.error}
-                  </p>
-                ) : (
-                  <ProgressBar value={upload.progress} max={100} className="h-1 rounded-full" />
+
+                {/* Step grid */}
+                <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {processingStepsConfig.map((step, idx) => {
+                    const Icon = step.icon;
+                    const isDone = idx < currentStepIdx;
+                    const isActive = idx === currentStepIdx;
+                    return (
+                      <div
+                        key={step.id}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-500 ${
+                          isActive
+                            ? 'bg-violet-500/20 border border-violet-400/30'
+                            : isDone
+                            ? 'bg-white/5 border border-white/5'
+                            : 'opacity-25 border border-transparent'
+                        }`}
+                      >
+                        <span className={`flex-shrink-0 ${isActive ? 'text-violet-300' : isDone ? 'text-emerald-400' : 'text-white/30'}`}>
+                          {isDone
+                            ? <CheckCircle className="h-3.5 w-3.5" />
+                            : <Icon className={`h-3.5 w-3.5 ${isActive ? 'animate-pulse' : ''}`} />}
+                        </span>
+                        <span className={`text-[11px] font-medium leading-tight ${isActive ? 'text-violet-100' : isDone ? 'text-white/60' : 'text-white/20'}`}>
+                          {step.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Rotating message */}
+                <div className="relative z-10 mt-4 h-5 overflow-hidden">
+                  <TextLoop interval={4} className="text-[11px] text-violet-300/70 font-medium">
+                    {processingMessages.map(msg => <span key={msg}>{msg}</span>)}
+                  </TextLoop>
+                </div>
+
+                {isStalled && (
+                  <div className="relative z-10 mt-4 flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 animate-in fade-in duration-500">
+                    <AlertCircle className="h-3.5 w-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-amber-200 leading-relaxed">
+                      Taking a bit longer than usual — large documents can take up to 5 minutes. Hang tight!
+                    </p>
+                  </div>
                 )}
               </div>
-            ))}
-          </div>
-        )}
-
-        <div className="space-y-4">
-          {/* Uploading text loop */}
-          {hasUploading && (
-            <div className="flex flex-col gap-3 p-6 bg-blue-600 text-white rounded-3xl shadow-xl shadow-blue-200 animate-in slide-in-from-right-8 duration-500">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                  <Upload className="h-5 w-5 animate-bounce" />
-                </div>
-                <div className="flex-1">
-                  <span className="block text-xs font-black text-blue-200 uppercase tracking-widest mb-1">Transferring</span>
-                  <div className="h-5 overflow-hidden">
-                    <TextLoop interval={3} className="text-sm font-bold">
-                      {uploadingMessages.map((msg) => (
-                        <span key={msg}>{msg}</span>
-                      ))}
-                    </TextLoop>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Processing / AI analyzing text loop */}
-          {showProcessingBanner && !hasUploading && (
-            <div className="flex flex-col gap-3 p-6 bg-emerald-600 text-white rounded-3xl shadow-xl shadow-emerald-200 animate-in slide-in-from-right-8 duration-500">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                  <Brain className="h-5 w-5 animate-pulse" />
-                </div>
-                <div className="flex-1">
-                  <span className="block text-xs font-black text-emerald-200 uppercase tracking-widest mb-1">AI Processing</span>
-                  <div className="h-5 overflow-hidden">
-                    <TextLoop interval={4} className="text-sm font-bold">
-                      {processingMessages.map((msg) => (
-                        <span key={msg}>{msg}</span>
-                      ))}
-                    </TextLoop>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+            );
+          })}
         </div>
-      </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border-2 border-red-100 text-red-700 p-6 rounded-2xl mb-10 flex items-center gap-4 animate-in shake-in-from-bottom-2 duration-500">
