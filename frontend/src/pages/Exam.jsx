@@ -3,6 +3,7 @@ import {
   Timer, AlertTriangle, CheckCircle, XCircle, Trophy, ArrowRight, ArrowLeft,
   GraduationCap, Plus, BookOpen, HelpCircle, ClipboardList,
   Upload, FileText, Trash2, ChevronDown, ChevronUp, X, Activity, LineChart, MessageCircle,
+  Zap, Target, Loader2, Dna,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
@@ -317,7 +318,7 @@ export default function Exam() {
         </div>
 
         {sessionsLoading ? (
-          <div className="flex justify-center py-12"><MorphingSquare /></div>
+          <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 text-primary animate-spin" /></div>
         ) : sessions.length > 0 ? (
           <div className="space-y-4">
             <h2 className="text-sm font-black text-gray-900 mb-6 flex items-center gap-2">
@@ -591,12 +592,10 @@ export default function Exam() {
           ))}
         </div>
 
-        {uploadingMaterial && (
           <div className="flex items-center gap-4 mb-8 p-5 bg-primary/5 rounded-2xl border-2 border-primary/10">
-            <MorphingSquare size="sm" />
+            <Loader2 className="h-5 w-5 text-primary animate-spin" />
             <span className="text-[10px] font-black uppercase tracking-widest text-primary">AI is absorbing material...</span>
           </div>
-        )}
 
         <div className="flex flex-col sm:flex-row gap-3">
           <button
@@ -697,7 +696,7 @@ export default function Exam() {
             disabled={generating}
             className="order-1 sm:order-2 flex-1 flex items-center justify-center gap-3 px-8 py-4 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-primary/90 transition-all shadow-xl shadow-primary/20 active:scale-95 disabled:opacity-50"
           >
-            {generating ? <MorphingSquare size="sm" /> : <Activity className="h-5 w-5" />}
+            {generating ? <Loader2 className="h-5 w-5 text-white animate-spin" /> : <Activity className="h-5 w-5" />}
             Execute Protocol
           </button>
         </div>
@@ -821,7 +820,7 @@ export default function Exam() {
               }}
               className="flex items-center gap-2 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all shadow-lg shadow-amber-200"
             >
-              <Sparkles className="h-4 w-4" />
+              <Target className="h-4 w-4" />
               Study with Buddy
             </button>
             <button
@@ -868,8 +867,8 @@ export default function Exam() {
                 <div className="space-y-6">
                   {/* Executive Summary Card */}
                   <div className="sleek-card p-8 bg-primary/5 border-primary/10 overflow-hidden relative">
-                    <div className="absolute top-0 right-0 p-4 opacity-5">
-                      <Sparkles className="h-24 w-24 text-primary" />
+                    <div className="absolute top-0 right-0 p-4 opacity-5 text-primary">
+                      <Target className="h-24 w-24" />
                     </div>
                     <div className="relative z-10 font-bold text-gray-800 leading-relaxed whitespace-pre-wrap text-sm md:text-base">
                       {guide.executive_summary}
@@ -947,8 +946,9 @@ export default function Exam() {
                   </div>
 
                   {questions.length === 0 ? (
-                    <div className="text-center py-16 bg-gray-50/50 rounded-3xl border-2 border-dashed border-gray-100 uppercase tracking-widest mt-4">
-                      <MorphingSquare message="Generating focus questions..." />
+                    <div className="flex flex-col items-center gap-4 py-16 bg-gray-50/50 rounded-3xl border-2 border-dashed border-gray-100 uppercase tracking-widest mt-4">
+                      <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                      <p className="text-[10px] font-black text-gray-400">Generating focus questions...</p>
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -968,7 +968,7 @@ export default function Exam() {
                               >
                                 <div className="flex items-center justify-between">
                                   <span>{expandedQs[i] ? 'Revealed' : 'Reveal Answer'}</span>
-                                  <Sparkles className={`h-4 w-4 ${expandedQs[i] ? 'text-white' : 'text-gray-300'}`} />
+                                  <Target className={`h-4 w-4 ${expandedQs[i] ? 'text-white' : 'text-gray-300'}`} />
                                 </div>
                                 {expandedQs[i] && (
                                   <>
@@ -1082,102 +1082,7 @@ export default function Exam() {
     );
   }
 
-  // ─── PHASE: Practice Exam ────────────────────────────────
 
-  if (phase === 'practice-exam' && exam) {
-    const question = exam.questions[currentQ];
-    const totalQ = exam.questions.length;
-    const isLowTime = timeLeft <= 120;
-
-    return (
-      <div className="max-w-xl mx-auto px-4 py-8">
-        {/* Timer header */}
-        <div className={`flex items-center justify-between mb-6 p-3 rounded-lg ${isLowTime ? 'bg-red-50 border border-red-200' : 'bg-gray-50 border border-gray-200'}`}>
-          <span className="text-sm font-medium text-gray-700">
-            Question {currentQ + 1} of {totalQ}
-          </span>
-          <div className={`flex items-center gap-1 text-sm font-mono font-bold ${isLowTime ? 'text-red-600' : 'text-gray-700'}`}>
-            <Timer className="h-4 w-4" />
-            {formatTime(timeLeft)}
-          </div>
-        </div>
-
-        {/* Progress */}
-        <div className="w-full bg-gray-200 rounded-full h-1.5 mb-6">
-          <div
-            className="bg-purple-600 h-1.5 rounded-full transition-all"
-            style={{ width: `${((currentQ + 1) / totalQ) * 100}%` }}
-          />
-        </div>
-
-        {/* Question */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-          <div className="text-base font-medium text-gray-900 mb-4 prose prose-sm max-w-none [&_p]:mb-1">
-            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{question.question}</ReactMarkdown>
-          </div>
-
-          {question.type === 'multiple_choice' && question.options && (
-            <div className="space-y-2">
-              {question.options.map((opt, i) => {
-                const letter = opt.charAt(0);
-                const isSelected = answers[currentQ] === letter;
-                return (
-                  <button
-                    key={i}
-                    onClick={() => setAnswers({ ...answers, [currentQ]: letter })}
-                    className={`w-full text-left p-3 rounded-lg border text-sm transition-colors ${isSelected
-                      ? 'border-purple-500 bg-purple-50 text-purple-700'
-                      : 'border-gray-200 hover:border-gray-300 text-gray-700'
-                      }`}
-                  >
-                    <span className="[&_p]:inline"><ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{opt}</ReactMarkdown></span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {question.type === 'true_false' && (
-            <div className="flex gap-3">
-              {['true', 'false'].map(val => (
-                <button
-                  key={val}
-                  onClick={() => setAnswers({ ...answers, [currentQ]: val })}
-                  className={`flex-1 p-3 rounded-lg border text-sm font-medium capitalize transition-colors ${answers[currentQ] === val
-                    ? 'border-purple-500 bg-purple-50 text-purple-700'
-                    : 'border-gray-200 hover:border-gray-300 text-gray-700'
-                    }`}
-                >
-                  {val}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Next / Submit */}
-        <div className="flex justify-end">
-          {currentQ < totalQ - 1 ? (
-            <button
-              onClick={() => setCurrentQ(currentQ + 1)}
-              className="flex items-center gap-1 px-6 py-2.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700"
-            >
-              Next <ArrowRight className="h-4 w-4" />
-            </button>
-          ) : (
-            <button
-              onClick={() => handleSubmit(false)}
-              disabled={submitting}
-              className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-            >
-              {submitting ? <MorphingSquare size="sm" /> : <CheckCircle className="h-4 w-4" />}
-              Submit Exam
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   // ─── PHASE: Practice Exam ────────────────────────────────
 
@@ -1296,7 +1201,7 @@ export default function Exam() {
 
           {/* Background Decoration */}
           <div className="absolute top-0 left-0 w-full h-1 bg-primary/10" />
-          <Sparkles className="absolute -top-6 -right-6 h-24 w-24 text-primary/5" />
+          <Target className="absolute -top-6 -right-6 h-24 w-24 text-primary/5" />
         </div>
 
         <div className="space-y-4 mb-10">

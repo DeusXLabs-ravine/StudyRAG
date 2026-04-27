@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Flame, Activity, BookOpen, Brain, ChevronRight, ArrowUpRight,
+  Flame, Activity, BookOpen, ChevronRight, ArrowUpRight,
   LogOut, Bell, Shield, User, CreditCard, Trophy, Target,
   Type, Eye, Monitor, Mic, Ruler, AlignJustify, Focus, Moon, Sun,
-  Sparkles, Gem, Clock, Waves,
+  Gem, Clock, Waves,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
@@ -53,7 +53,7 @@ const A11Y_GROUPS = [
     tint: 'text-indigo-600',
     toggles: [
       { key: 'reduced_motion', label: 'Reduced motion', icon: Waves },
-      { key: 'adhd_focus_mode', label: 'Focus mode',     icon: Brain },
+      { key: 'adhd_focus_mode', label: 'Focus mode',     icon: Focus },
       { key: 'voice_input',    label: 'Voice input',    icon: Mic },
       { key: 'reading_ruler',  label: 'Reading ruler',  icon: Ruler },
     ],
@@ -184,7 +184,7 @@ export default function Me() {
               <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight truncate">{name}</h1>
                 <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r ${tierColor} ring-1 ring-white shadow-sm`}>
-                  {tier === 'pro' || tier === 'max' ? <Sparkles className="h-2.5 w-2.5" /> : null}
+                  {tier === 'pro' || tier === 'max' ? <Gem className="h-2.5 w-2.5" /> : null}
                   {tierLabel}
                 </span>
               </div>
@@ -294,7 +294,7 @@ export default function Me() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <div className="h-7 w-7 rounded-lg bg-amber-100 flex items-center justify-center">
-                <Brain className="h-3.5 w-3.5 text-amber-600" strokeWidth={2.3} />
+                <Target className="h-3.5 w-3.5 text-amber-600" strokeWidth={2.3} />
               </div>
               <SectionLabel>Weak areas to review</SectionLabel>
             </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Play, CheckCircle, XCircle, RotateCcw, Trophy, ClipboardCheck, X, Activity, ChevronRight, FileText, Target, LayoutPanelTop } from 'lucide-react';
+import { Play, CheckCircle, XCircle, RotateCcw, Trophy, ClipboardCheck, X, Activity, ChevronRight, FileText, Target, LayoutPanelTop, Loader2, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
@@ -122,8 +122,8 @@ export default function Quiz() {
                     <option key={doc.id} value={doc.id}>{doc.originalName}</option>
                   ))}
                 </select>
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 group-hover:text-blue-500 transition-colors">
-                  <Play className="h-4 w-4 rotate-90" />
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 group-hover:text-primary transition-colors">
+                  <ChevronDown className="h-4 w-4" />
                 </div>
               </div>
             </div>
@@ -194,7 +194,7 @@ export default function Quiz() {
             disabled={loading}
             className="mt-8 w-full flex items-center justify-center gap-3 px-8 py-4 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-primary/90 transition-all shadow-xl shadow-primary/20 active:scale-95 disabled:opacity-50"
           >
-            {loading ? <MorphingSquare size="sm" /> : <Play className="h-5 w-5" />}
+            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
             Generate Quiz
           </button>
         </div>
@@ -288,7 +288,7 @@ export default function Quiz() {
                 disabled={answeredCount < quiz.questions.length || loading}
                 className="px-6 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
               >
-                {loading ? <MorphingSquare size="sm" /> : 'Submit Quiz'}
+                {loading ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : 'Submit Quiz'}
               </button>
             )}
           </div>

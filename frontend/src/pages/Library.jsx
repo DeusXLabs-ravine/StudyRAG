@@ -19,23 +19,23 @@ import { SkeletonList } from '../components/feedback/Skeleton';
 
 const sourceIcon = { file: FileText, url: Link2, note: StickyNote, topic: Search };
 const sourceTint = {
-  file:  { bg: 'bg-slate-100',   icon: 'text-slate-600',  accent: 'from-slate-500/10 to-slate-500/5' },
-  url:   { bg: 'bg-blue-100',    icon: 'text-blue-600',   accent: 'from-blue-500/10 to-blue-500/5' },
-  note:  { bg: 'bg-amber-100',   icon: 'text-amber-600',  accent: 'from-amber-500/10 to-amber-500/5' },
-  topic: { bg: 'bg-purple-100',  icon: 'text-purple-600', accent: 'from-purple-500/10 to-purple-500/5' },
+  file: { bg: 'bg-slate-100', icon: 'text-slate-600', accent: 'from-slate-500/10 to-slate-500/5' },
+  url: { bg: 'bg-blue-100', icon: 'text-blue-600', accent: 'from-blue-500/10 to-blue-500/5' },
+  note: { bg: 'bg-amber-100', icon: 'text-amber-600', accent: 'from-amber-500/10 to-amber-500/5' },
+  topic: { bg: 'bg-purple-100', icon: 'text-purple-600', accent: 'from-purple-500/10 to-purple-500/5' },
 };
 
 const qualityConfig = {
-  trusted:    { icon: ShieldCheck, label: 'Trusted',    cls: 'text-emerald-700 bg-emerald-50 border-emerald-200/70' },
-  acceptable: { icon: Shield,      label: 'Acceptable', cls: 'text-blue-700 bg-blue-50 border-blue-200/70' },
+  trusted: { icon: ShieldCheck, label: 'Trusted', cls: 'text-emerald-700 bg-emerald-50 border-emerald-200/70' },
+  acceptable: { icon: Shield, label: 'Acceptable', cls: 'text-blue-700 bg-blue-50 border-blue-200/70' },
   unverified: { icon: ShieldAlert, label: 'Unverified', cls: 'text-amber-700 bg-amber-50 border-amber-200/70' },
 };
 
 const STATUS_FILTERS = [
-  { value: 'all',        label: 'All' },
-  { value: 'ready',      label: 'Ready' },
+  { value: 'all', label: 'All' },
+  { value: 'ready', label: 'Ready' },
   { value: 'processing', label: 'Processing' },
-  { value: 'failed',     label: 'Needs attention' },
+  { value: 'failed', label: 'Needs attention' },
 ];
 
 // ─── Reusable bento card wrapper ────────────────────────────────────────────
@@ -116,11 +116,11 @@ export default function Library() {
   const stats = useMemo(() => {
     const docs = documents || [];
     return {
-      total:      docs.length,
-      ready:      docs.filter(d => d.status === 'ready').length,
+      total: docs.length,
+      ready: docs.filter(d => d.status === 'ready').length,
       processing: docs.filter(d => d.status === 'processing').length,
-      failed:     docs.filter(d => d.status === 'failed').length,
-      primary:    docs.filter(d => d.isPrimary).length,
+      failed: docs.filter(d => d.status === 'failed').length,
+      primary: docs.filter(d => d.isPrimary).length,
     };
   }, [documents]);
 
@@ -234,11 +234,10 @@ export default function Library() {
                 initial={{ width: 0 }}
                 animate={{ width: `${quotaPct}%` }}
                 transition={{ duration: 0.8, ease: 'easeOut' }}
-                className={`h-full rounded-full ${
-                  isAtDocLimit ? 'bg-gradient-to-r from-red-400 to-red-500' :
-                  quotaPct > 75 ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
-                  'bg-gradient-to-r from-sky-400 to-sky-500'
-                }`}
+                className={`h-full rounded-full ${isAtDocLimit ? 'bg-gradient-to-r from-red-400 to-red-500' :
+                    quotaPct > 75 ? 'bg-gradient-to-r from-amber-400 to-amber-500' :
+                      'bg-gradient-to-r from-sky-400 to-sky-500'
+                  }`}
               />
             </div>
           )}
@@ -260,10 +259,10 @@ export default function Library() {
         transition={{ duration: 0.4, delay: 0.05 }}
         className="grid grid-cols-2 sm:grid-cols-4 gap-3"
       >
-        <StatTile icon={BookOpen}   label="Ready to study" value={stats.ready}      tint="emerald" />
-        <StatTile icon={Loader2}    label="In progress"    value={stats.processing} tint="amber" pulsing={stats.processing > 0} />
-        <StatTile icon={Star}       label="Starred"        value={stats.primary}    tint="yellow" />
-        <StatTile icon={TrendingUp} label="Total"          value={stats.total}      tint="sky" />
+        <StatTile icon={BookOpen} label="Ready to study" value={stats.ready} tint="emerald" />
+        <StatTile icon={Loader2} label="In progress" value={stats.processing} tint="amber" pulsing={stats.processing > 0} />
+        <StatTile icon={Star} label="Starred" value={stats.primary} tint="yellow" />
+        <StatTile icon={TrendingUp} label="Total" value={stats.total} tint="sky" />
       </motion.section>
 
       {/* ─── Continue studying carousel ──────────────────────────────── */}
@@ -307,11 +306,10 @@ export default function Library() {
             <button
               key={f.value}
               onClick={() => setStatusFilter(f.value)}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
-                statusFilter === f.value
+              className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${statusFilter === f.value
                   ? 'bg-gray-900 text-white border-gray-900 shadow-sm'
                   : 'bg-white text-gray-600 border-gray-200/80 hover:border-gray-300 hover:text-gray-800'
-              }`}
+                }`}
             >
               {f.label}
             </button>
@@ -413,9 +411,9 @@ export default function Library() {
 function StatTile({ icon: Icon, label, value, tint, pulsing }) {
   const tints = {
     emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600', ring: 'ring-emerald-100' },
-    amber:   { bg: 'bg-amber-50',   icon: 'text-amber-600',   ring: 'ring-amber-100' },
-    yellow:  { bg: 'bg-yellow-50',  icon: 'text-yellow-600',  ring: 'ring-yellow-100' },
-    sky:     { bg: 'bg-sky-50',     icon: 'text-sky-600',     ring: 'ring-sky-100' },
+    amber: { bg: 'bg-amber-50', icon: 'text-amber-600', ring: 'ring-amber-100' },
+    yellow: { bg: 'bg-yellow-50', icon: 'text-yellow-600', ring: 'ring-yellow-100' },
+    sky: { bg: 'bg-sky-50', icon: 'text-sky-600', ring: 'ring-sky-100' },
   };
   const t = tints[tint] || tints.sky;
   return (
@@ -541,11 +539,10 @@ function CollectionChip({ active, label, count, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
-        active
+      className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${active
           ? 'bg-gray-900 text-white border-gray-900 shadow-sm'
           : 'bg-white text-gray-700 border-gray-200/80 hover:border-gray-300 hover:shadow-sm'
-      }`}
+        }`}
     >
       <span>{label}</span>
       <span className={`px-1.5 py-0.5 rounded-md text-[10px] tabular-nums ${active ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
@@ -583,11 +580,10 @@ function DocCard({ doc, index, onOpen, onDelete, onTogglePrimary }) {
             <div className="flex items-center gap-1">
               <button
                 onClick={onTogglePrimary}
-                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                  doc.isPrimary
+                className={`p-1.5 rounded-lg transition-all cursor-pointer ${doc.isPrimary
                     ? 'text-amber-500 hover:bg-amber-50'
                     : 'text-gray-300 hover:text-amber-400 opacity-0 group-hover:opacity-100'
-                }`}
+                  }`}
                 aria-label={doc.isPrimary ? 'Remove from primary' : 'Mark as primary'}
               >
                 <Star className={`h-3.5 w-3.5 ${doc.isPrimary ? 'fill-current' : ''}`} />
@@ -669,11 +665,10 @@ function DocRow({ doc, onOpen, onDelete, onTogglePrimary }) {
         <StatusPill status={doc.status} />
         <button
           onClick={onTogglePrimary}
-          className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-            doc.isPrimary
+          className={`p-1.5 rounded-lg transition-all cursor-pointer ${doc.isPrimary
               ? 'text-amber-500'
               : 'text-gray-300 hover:text-amber-400 opacity-0 group-hover:opacity-100'
-          }`}
+            }`}
         >
           <Star className={`h-3.5 w-3.5 ${doc.isPrimary ? 'fill-current' : ''}`} />
         </button>

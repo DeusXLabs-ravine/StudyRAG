@@ -244,40 +244,40 @@ export default function Flashcards() {
                 return (
                   <div
                     key={deck.id}
-                    className="bg-white rounded-[2rem] p-5 flex flex-col sm:flex-row items-center justify-between gap-6 hover:shadow-lg border border-gray-100 transition-all group hover:border-purple-200"
+                    className="bg-white rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 hover:shadow-md border border-gray-100 transition-all group hover:border-blue-200"
                   >
                     <button
                       onClick={() => { setCurrentDeck(deck); setCurrentIndex(0); setFlipped(false); setStudyMode(false); setSessionStartTime(Date.now()); }}
-                      className="flex items-center gap-5 min-w-0 w-full flex-1 text-left"
+                      className="flex items-center gap-4 min-w-0 w-full flex-1 text-left"
                     >
-                      <div className="w-16 h-16 bg-blue-50 rounded-[1.25rem] flex items-center justify-center flex-shrink-0 group-hover:bg-blue-100 transition-colors">
-                        <Layers className="h-7 w-7 text-blue-400 group-hover:text-blue-600 transition-colors" />
+                      <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-blue-100 transition-colors">
+                        <Layers className="h-6 w-6 text-blue-500 transition-colors" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-lg font-black text-gray-900 truncate mb-1.5 group-hover:text-blue-600 transition-colors">
+                        <p className="text-base font-bold text-gray-900 truncate mb-1 group-hover:text-blue-600 transition-colors">
                           {deck.name || `${deck.cards.length} Cards`}
                         </p>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg uppercase tracking-wider">{stats.new} New</span>
-                          <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2.5 py-1 rounded-lg uppercase tracking-wider">{stats.learning} Study</span>
-                          <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg uppercase tracking-wider">{stats.mastered} Done</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] font-bold text-blue-600 bg-blue-50/50 px-2 py-0.5 rounded-md uppercase tracking-wider">{stats.new} New</span>
+                          <span className="text-[9px] font-bold text-amber-600 bg-amber-50/50 px-2 py-0.5 rounded-md uppercase tracking-wider">{stats.learning} Study</span>
+                          <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50/50 px-2 py-0.5 rounded-md uppercase tracking-wider">{stats.mastered} Done</span>
                         </div>
                       </div>
                     </button>
-                    <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-3 pt-4 sm:pt-0 border-t sm:border-t-0 border-gray-50">
+                    <div className="w-full sm:w-auto flex items-center justify-end gap-2 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-50">
                       <button
                         onClick={() => startSmartStudy(deck.id)}
-                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3 bg-blue-50 text-blue-700 rounded-2xl font-black text-xs hover:bg-blue-100 hover:text-blue-800 transition-all active:scale-95 shadow-sm"
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all active:scale-95 shadow-sm shadow-blue-200"
                         title="Smart Study"
                       >
-                        <Clock className="h-4 w-4" /> Smart Study
+                        <Clock className="h-3.5 w-3.5" /> Smart Study
                       </button>
                       <button
                         onClick={(e) => handleDeleteDeck(deck.id, e)}
-                        className="p-3 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all"
+                        className="p-2.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
                         title="Delete deck"
                       >
-                        <Trash2 className="h-5 w-5" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
