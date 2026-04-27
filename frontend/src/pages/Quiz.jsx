@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Play, CheckCircle, XCircle, RotateCcw, Trophy, ClipboardCheck, X, Timer, ChevronRight, FileText, Zap } from 'lucide-react';
+import { Play, CheckCircle, XCircle, RotateCcw, Trophy, ClipboardCheck, X, Activity, ChevronRight, FileText, Target, LayoutPanelTop } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
@@ -68,39 +68,43 @@ export default function Quiz() {
 
   if (view === 'config') {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8 md:py-12">
-        <div className="mb-10">
-          <h1 className="text-2xl md:text-4xl font-black text-gray-900 tracking-tight uppercase">Assessments</h1>
-          <p className="text-sm md:text-base text-gray-500 mt-2 font-medium leading-relaxed">Validate your technical proficiency through adaptive testing protocols.</p>
+      <div className="max-w-xl mx-auto px-4 py-8 md:py-12">
+        <div className="mb-12">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/5 border border-primary/10 text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-4">
+            <Target className="h-3 w-3" /> Technical Protocols
+          </div>
+          <h1 className="text-3xl md:text-5xl font-black text-gray-950 tracking-tight uppercase leading-none">Assessments</h1>
+          <p className="text-sm md:text-lg text-gray-500 mt-4 font-medium leading-relaxed max-w-md">Validate your proficiency through standardized testing modules and adaptive simulations.</p>
         </div>
 
         {/* High-Visibility Exam Mode CTA */}
         <Link
           to="/exam"
-          className="mb-8 w-full flex items-center justify-between p-8 bg-gray-900 rounded-[2rem] hover:bg-black transition-all group shadow-xl shadow-gray-200"
+          className="mb-8 w-full flex items-center justify-between p-8 bg-gray-950 rounded-3xl hover:bg-black transition-all group shadow-2xl shadow-gray-200/50 relative overflow-hidden"
         >
-          <div className="flex items-center gap-6">
-            <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner border border-white/5">
-              <Timer className="h-8 w-8 text-primary" />
+          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 rounded-full blur-[80px] -mr-32 -mt-32 pointer-events-none" />
+          <div className="flex items-center gap-6 relative z-10">
+            <div className="w-16 h-16 rounded-2xl bg-white/5 backdrop-blur-md flex items-center justify-center group-hover:scale-105 transition-transform border border-white/10">
+              <Activity className="h-8 w-8 text-primary" />
             </div>
             <div>
               <p className="text-xl font-black text-white uppercase tracking-tight">Exam Simulation</p>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">High-stakes performance analytics</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1 opacity-70">High-fidelity performance analytics</p>
             </div>
           </div>
-          <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center group-hover:translate-x-2 transition-all">
+          <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center group-hover:translate-x-2 transition-all border border-white/5 relative z-10">
             <ChevronRight className="h-6 w-6 text-white" />
           </div>
         </Link>
 
-        <div className="sleek-card p-6 md:p-10 border border-gray-100 shadow-sm mb-10">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-sm font-black text-gray-900 uppercase tracking-[0.2em] flex items-center gap-2">
-              <ClipboardCheck className="h-4 w-4 text-primary" />
-              Quiz Configuration
+        <div className="bg-white p-6 md:p-8 rounded-3xl border border-gray-100 shadow-sm mb-10 relative">
+          <div className="flex items-center justify-between mb-8 pb-4 border-b border-gray-50">
+            <h2 className="text-[10px] font-black text-gray-950 uppercase tracking-[0.3em] flex items-center gap-2">
+              <LayoutPanelTop className="h-3.5 w-3.5 text-primary" />
+              Module Config
             </h2>
-            <div className="px-2 py-0.5 rounded bg-primary/5 text-[8px] font-black text-primary uppercase tracking-widest border border-primary/10">
-              Adaptive v2
+            <div className="px-2 py-0.5 rounded-lg bg-gray-50 text-[8px] font-black text-gray-500 uppercase tracking-widest border border-gray-100">
+              Protocol v4.2
             </div>
           </div>
 
@@ -175,11 +179,11 @@ export default function Quiz() {
                   <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${config.adaptive ? 'translate-x-4' : ''}`} />
                 </div>
                 <div className="flex-1">
-                  <span className="text-sm font-black text-gray-700 flex items-center gap-1.5">
-                    <Zap className={`h-4 w-4 ${config.adaptive ? 'text-blue-500 animate-pulse' : 'text-gray-400'}`} />
+                  <span className="text-sm font-black text-gray-900 flex items-center gap-2">
+                    <Target className={`h-4 w-4 ${config.adaptive ? 'text-primary' : 'text-gray-300'}`} />
                     Adaptive Mode
                   </span>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Focuses on your weak topics</p>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Dynamic difficulty calibration</p>
                 </div>
               </label>
             </div>
@@ -303,16 +307,16 @@ export default function Quiz() {
       >
         <div className={`relative sleek-card overflow-hidden shadow-2xl mb-8 ${passed ? 'bg-gradient-to-b from-emerald-50 to-white' : 'bg-gradient-to-b from-red-50 to-white'}`}>
           <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
-            <div className={`absolute -top-10 -left-10 w-40 h-40 rounded-full blur-3xl ${passed ? 'bg-emerald-400' : 'bg-red-400'}`} />
+            <div className={`absolute -top-8 -left-10 w-40 h-40 rounded-full blur-3xl ${passed ? 'bg-emerald-400' : 'bg-red-400'}`} />
             <div className={`absolute -bottom-10 -right-10 w-40 h-40 rounded-full blur-3xl ${passed ? 'bg-emerald-400' : 'bg-red-400'}`} />
           </div>
 
-          <div className="relative z-10 p-12 text-center">
+          <div className="relative z-10 p-8 text-center">
             <motion.div
               initial={{ scale: 0.5, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: "spring", stiffness: 200, damping: 20 }}
-              className={`w-24 h-24 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-2xl ${passed ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}
+              className={`w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl ${passed ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}
             >
               <Trophy className="h-12 w-12" />
             </motion.div>
@@ -384,7 +388,7 @@ export default function Quiz() {
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 1 + (i * 0.1) }}
-                className={`group relative p-8 rounded-[2.5rem] border-2 transition-all duration-300 shadow-sm hover:shadow-md ${r.isCorrect ? 'bg-emerald-50/20 border-emerald-100/50 hover:border-emerald-200' : 'bg-red-50/20 border-red-100/50 hover:border-red-200'}`}
+                className={`group relative p-8 rounded-3xl border-2 transition-all duration-300 shadow-sm hover:shadow-md ${r.isCorrect ? 'bg-emerald-50/20 border-emerald-100/50 hover:border-emerald-200' : 'bg-red-50/20 border-red-100/50 hover:border-red-200'}`}
               >
                 <div className="flex items-start gap-6">
                   <div className={`mt-1 w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm ${r.isCorrect ? 'bg-emerald-100 text-emerald-600 border border-emerald-200' : 'bg-red-100 text-red-600 border border-red-200'}`}>

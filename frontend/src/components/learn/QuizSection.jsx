@@ -74,10 +74,10 @@ export default function QuizSection({ module, onBack, onComplete, startTime }) {
         animate={{ opacity: 1, y: 0 }}
         className="sleek-card overflow-hidden"
       >
-        <div className={`relative p-6 md:p-12 text-center overflow-hidden ${passed ? 'bg-gradient-to-b from-emerald-50 to-white' : 'bg-gradient-to-b from-red-50 to-white'}`}>
+        <div className={`relative p-6 md:p-8 text-center overflow-hidden ${passed ? 'bg-gradient-to-b from-emerald-50 to-white' : 'bg-gradient-to-b from-red-50 to-white'}`}>
           {/* Background Decorative Elements */}
           <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
-            <div className={`absolute -top-10 -left-10 w-40 h-40 rounded-full blur-3xl ${passed ? 'bg-emerald-400' : 'bg-red-400'}`} />
+            <div className={`absolute -top-8 -left-10 w-40 h-40 rounded-full blur-3xl ${passed ? 'bg-emerald-400' : 'bg-red-400'}`} />
             <div className={`absolute -bottom-10 -right-10 w-40 h-40 rounded-full blur-3xl ${passed ? 'bg-emerald-400' : 'bg-red-400'}`} />
           </div>
 
@@ -145,7 +145,7 @@ export default function QuizSection({ module, onBack, onComplete, startTime }) {
           )}
         </div>
 
-        <div className="p-5 md:p-10 bg-white">
+        <div className="p-5 md:p-8 bg-white">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 px-2 gap-4">
             <div>
               <h3 className="text-xl font-black text-gray-900">Question Review</h3>
@@ -215,7 +215,7 @@ export default function QuizSection({ module, onBack, onComplete, startTime }) {
           </div>
         </div>
 
-        <div className="p-6 md:p-10 bg-gray-50/80 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-center gap-4">
+        <div className="p-6 md:p-8 bg-gray-50/80 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-center gap-4">
           <button
             onClick={onBack}
             className="w-full sm:w-auto px-10 py-4 bg-white border-2 border-gray-200 text-gray-700 rounded-2xl text-sm font-black hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm active:scale-95 flex items-center justify-center gap-3"
@@ -257,7 +257,7 @@ export default function QuizSection({ module, onBack, onComplete, startTime }) {
         </div>
       </div>
 
-      <div className="p-6 md:p-10">
+      <div className="p-6 md:p-8">
         <div className="mb-8 md:mb-10 text-center">
           <span className="inline-block px-3 py-1 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-[0.2em] rounded-full mb-4">
             Question {currentQ + 1} of {questions.length}

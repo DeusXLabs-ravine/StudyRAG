@@ -359,7 +359,7 @@ export default function PodcastPlayer({
         </div>
 
         {/* Main content */}
-        <div className="relative z-10 flex-1 flex flex-col items-center justify-center gap-10 px-8 min-h-0">
+        <div className="relative z-10 flex-1 flex flex-col items-center justify-center gap-8 px-8 min-h-0">
           {/* Episode info */}
           <div className="text-center max-w-xs">
             <p className="text-[10px] font-black tracking-[0.4em] text-white/20 uppercase mb-2">Now Playing</p>
@@ -392,7 +392,7 @@ export default function PodcastPlayer({
           </div>
 
           {/* Hosts row (static, no speaking state) */}
-          <div className="flex items-center gap-12">
+          <div className="flex items-center gap-8">
             <HostPortrait name="Alex" isSpeaking={false} color={colorA} side="left" initial="A" />
             <div className="flex flex-col items-center gap-3 mb-2">
               <div className="w-px h-12 bg-white/5" />
@@ -405,7 +405,7 @@ export default function PodcastPlayer({
 
         {/* Bottom controls */}
         <div
-          className="relative z-10 flex items-center justify-center gap-10 px-8 py-7 flex-shrink-0"
+          className="relative z-10 flex items-center justify-center gap-8 px-8 py-7 flex-shrink-0"
           style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
         >
           {/* Restart */}
@@ -553,7 +553,7 @@ export default function PodcastPlayer({
       <div className="relative z-10 flex-1 flex min-h-0">
 
         {/* Left: studio / hosts */}
-        <div className="flex-1 flex flex-col items-center justify-center gap-10 px-8 min-h-0">
+        <div className="flex-1 flex flex-col items-center justify-center gap-8 px-8 min-h-0">
 
           {/* Episode info */}
           <div className="text-center max-w-xs">
@@ -639,7 +639,7 @@ export default function PodcastPlayer({
 
       {/* ── Bottom controls ───────────────────────────────────────────────── */}
       <div
-        className="relative z-10 flex items-center justify-center gap-10 px-8 py-7 flex-shrink-0"
+        className="relative z-10 flex items-center justify-center gap-8 px-8 py-7 flex-shrink-0"
         style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
       >
         {/* Restart */}

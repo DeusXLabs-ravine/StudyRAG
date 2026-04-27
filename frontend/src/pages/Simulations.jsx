@@ -245,7 +245,7 @@ export default function Simulations() {
                 transition={{ duration: 0.5, ease: "circOut" }}
                 className="relative"
               >
-                <div className="absolute -inset-4 bg-white/40 backdrop-blur-3xl rounded-[2.5rem] border-2 border-white pointer-events-none shadow-[0_30px_60px_-15px_rgba(0,0,0,0.05)]" />
+                <div className="absolute -inset-4 bg-white/40 backdrop-blur-3xl rounded-3xl border-2 border-white pointer-events-none shadow-[0_30px_60px_-15px_rgba(0,0,0,0.05)]" />
 
                 <div className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 p-4">
                   {filtered.map((sim, i) => (
@@ -283,7 +283,7 @@ export default function Simulations() {
           </AnimatePresence>
 
           {/* Lab Notes / Industrial details at bottom */}
-          <div className="mt-16 flex items-center justify-center gap-12 border-t border-gray-200 pt-12">
+          <div className="mt-16 flex items-center justify-center gap-8 border-t border-gray-200 pt-12">
             <div className="flex flex-col items-center gap-1 opacity-40">
               <span className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em]">Facility Status</span>
               <span className="text-[9px] font-bold text-green-600 flex items-center gap-1.5">

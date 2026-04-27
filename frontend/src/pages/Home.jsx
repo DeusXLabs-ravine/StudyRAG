@@ -372,7 +372,7 @@ export default function Home() {
                     onMouseEnter={() => setHoveredIdx(i)}
                     onMouseLeave={() => setHoveredIdx(null)}
                     onClick={() => setActivePreview(item.title)}
-                    className="group relative flex flex-col p-8 rounded-[2.5rem] bg-slate-50 border border-slate-100 transition-all hover:shadow-[0_20px_50px_rgba(14,165,233,0.08)] overflow-hidden cursor-pointer active:scale-95"
+                    className="group relative flex flex-col p-8 rounded-3xl bg-slate-50 border border-slate-100 transition-all hover:shadow-[0_20px_50px_rgba(14,165,233,0.08)] overflow-hidden cursor-pointer active:scale-95"
                   >
                     <div className="absolute top-0 right-0 w-32 h-32 bg-white rounded-full blur-2xl -mr-16 -mt-16 opacity-0 group-hover:opacity-100 transition-opacity" />
 
@@ -383,7 +383,7 @@ export default function Home() {
                     <div className="flex-1 relative z-10 text-left">
                       <h3 className="text-xl font-black text-slate-900 mb-3 flex items-center gap-2">
                         {item.title}
-                        <Sparkles className="h-3 w-3 text-cyan-400" />
+                        <Target className="h-3 w-3 text-primary opacity-20" />
                       </h3>
                       <p className="text-slate-500 text-sm font-medium leading-relaxed">
                         {item.text}
@@ -559,7 +559,7 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="mt-12 rounded-[2rem] bg-slate-950 p-8 md:p-10 text-white">
+            <div className="mt-12 rounded-[2rem] bg-slate-950 p-8 md:p-8 text-white">
               <h4 className="text-2xl font-black mb-4">Where StudyRAG stands out</h4>
               <p className="text-slate-300 text-base sm:text-lg font-medium leading-relaxed max-w-4xl">
                 StudyRAG is not trying to replace every course platform or every flashcard tool. It is strongest when your studying starts with your own material and you want one place to chat with it, understand it, test yourself on it, and remember it with better context.

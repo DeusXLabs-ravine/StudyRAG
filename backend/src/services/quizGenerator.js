@@ -4,6 +4,7 @@ const { QUIZ_GENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection
 const vectorStore = require('./vectorStore');
 const { getUserTeachingLevel, getUserInterests, getWeakTopics, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
 const { v4: uuidv4 } = require('uuid');
+const { extractJSON, tryExtractArrayItems } = require('../utils/jsonHelper');
 
 async function generateQuiz({ numQuestions = 10, difficulty = 'medium', docId = null, adaptive = false, isExam = false, timeLimitSeconds = null, userId = null }) {
   // Try page-based content first, fall back to chunks
@@ -59,13 +60,11 @@ async function generateQuiz({ numQuestions = 10, difficulty = 'medium', docId = 
   });
   const responseText = result.response.text();
 
-  let parsed;
-  try {
-    const jsonStr = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    parsed = JSON.parse(jsonStr);
-  } catch (e) {
+  const questionsRaw = tryExtractArrayItems(responseText, 'questions');
+  if (!questionsRaw || questionsRaw.length === 0) {
     throw new Error('Failed to parse quiz generation response');
   }
+  const parsed = { questions: questionsRaw };
 
   const sessionId = uuidv4();
   const questions = parsed.questions.map(q => ({

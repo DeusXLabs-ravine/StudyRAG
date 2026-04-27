@@ -133,7 +133,7 @@ export default function About() {
                 whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.8 }}
-                className="p-8 md:p-12 rounded-[3.5rem] bg-slate-50 border border-slate-100 shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)] relative overflow-hidden group"
+                className="p-8 md:p-8 rounded-[3.5rem] bg-slate-50 border border-slate-100 shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)] relative overflow-hidden group"
               >
                 <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -mr-32 -mt-32" />
                 <div className="space-y-10 relative z-10">
@@ -171,7 +171,7 @@ export default function About() {
               ))}
             </div>
 
-            <div className="grid md:grid-cols-3 gap-12 pt-24 mt-24 border-t border-slate-100">
+            <div className="grid md:grid-cols-3 gap-8 pt-24 mt-24 border-t border-slate-100">
               {[
                 { title: 'Source-grounded answers', desc: 'Designed to keep study help closer to your uploaded material.' },
                 { title: 'Document-first workflow', desc: 'Built around notes, slides, PDFs, readings, and research documents.' },

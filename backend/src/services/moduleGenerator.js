@@ -5,6 +5,7 @@ const { getUserTeachingLevel, getUserInterests, getEffectiveLearningStyle, getEf
 const { prepareTextForLLM } = require('./chunkingService');
 const { moduleCache } = require('../config/cache');
 const { v4: uuidv4 } = require('uuid');
+const { extractJSON, tryExtractArrayItems } = require('../utils/jsonHelper');
 
 // Max chars per LLM segment — Gemini Flash handles large contexts,
 // but keeping segments reasonable ensures quality per-segment output.
@@ -118,120 +119,12 @@ async function generateOutlineForSegment(segmentText, segmentIndex, totalSegment
     const model = getGenerativeModel('fast');
     return model.generateContent(prompt);
   }, 3, 1);
-  const text = result.response.text();
-  const jsonStr = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  const parsed = JSON.parse(jsonStr);
-  return parsed.modules || [];
+  const parsed = extractJSON(text);
+  return parsed?.modules || [];
 }
 
-/**
- * Sanitize a raw LLM JSON string before parsing:
- * - Escape literal control characters (actual newlines/tabs) inside string values
- * - Fix invalid escape sequences (e.g. \q → \\q so the backslash is literal)
- */
-function sanitizeJSONContent(str) {
-  const VALID_ESCAPE = new Set(['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u']);
-  let out = '';
-  let inStr = false;
-  let esc = false;
+// Deprecated local logic replaced by shared jsonHelper utility
 
-  for (let i = 0; i < str.length; i++) {
-    const ch = str[i];
-    const code = ch.charCodeAt(0);
-
-    if (esc) {
-      esc = false;
-      if (VALID_ESCAPE.has(ch)) {
-        out += ch;
-      } else {
-        // Invalid escape sequence — make the backslash literal
-        out += '\\' + ch;
-      }
-      continue;
-    }
-
-    if (ch === '\\' && inStr) { esc = true; out += ch; continue; }
-    if (ch === '"') { inStr = !inStr; out += ch; continue; }
-
-    // Unescaped control character inside a JSON string — must escape it
-    if (inStr && code < 0x20) {
-      if      (code === 9)  out += '\\t';
-      else if (code === 10) out += '\\n';
-      else if (code === 13) out += '\\r';
-      else if (code === 8)  out += '\\b';
-      else if (code === 12) out += '\\f';
-      else out += `\\u${code.toString(16).padStart(4, '0')}`;
-      continue;
-    }
-
-    out += ch;
-  }
-
-  return out;
-}
-
-/**
- * Extract as many complete module objects as possible from a (potentially truncated) JSON string.
- * Returns an array of module objects. Falls back to [] if nothing can be salvaged.
- */
-function tryExtractModulesFromJSON(jsonStr) {
-  // Sanitize control chars / bad escapes before any parse attempt
-  const sanitized = sanitizeJSONContent(jsonStr);
-
-  // Try full parse on sanitized string
-  try {
-    const result = JSON.parse(sanitized);
-    return result.modules || [];
-  } catch (_) {
-    // Fall through to partial extraction
-  }
-
-  // Locate the modules array in the sanitized string
-  const arrayStart = (() => {
-    const m = sanitized.match(/"modules"\s*:\s*\[/);
-    if (!m) return -1;
-    return sanitized.indexOf('[', m.index);
-  })();
-  if (arrayStart === -1) return [];
-
-  const modules = [];
-  let i = arrayStart + 1;
-
-  while (i < sanitized.length) {
-    // Skip whitespace
-    while (i < sanitized.length && /\s/.test(sanitized[i])) i++;
-    if (i >= sanitized.length || sanitized[i] === ']') break;
-    if (sanitized[i] !== '{') break;
-
-    // Walk to the matching closing brace
-    let depth = 0;
-    let inString = false;
-    let escaped = false;
-    const objStart = i;
-
-    for (; i < sanitized.length; i++) {
-      const ch = sanitized[i];
-      if (escaped) { escaped = false; continue; }
-      if (ch === '\\' && inString) { escaped = true; continue; }
-      if (ch === '"') { inString = !inString; continue; }
-      if (inString) continue;
-      if (ch === '{') depth++;
-      else if (ch === '}') {
-        depth--;
-        if (depth === 0) {
-          try { modules.push(JSON.parse(sanitized.slice(objStart, i + 1))); } catch (_) { /* skip malformed */ }
-          i++;
-          break;
-        }
-      }
-    }
-
-    if (depth !== 0) break; // Incomplete object — stop here
-    while (i < sanitized.length && /[\s,]/.test(sanitized[i])) i++;
-  }
-
-  return modules;
-}
 
 /**
  * Phase 2: Generate full module content for a batch of outlined modules.
@@ -271,12 +164,10 @@ async function generateModuleBatch(segmentText, fullOutline, batchModules, batch
     });
   }, 3, 1);
   const text = result.response.text();
-  const jsonStr = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  const modules = tryExtractModulesFromJSON(jsonStr);
+  const modules = tryExtractArrayItems(text, 'modules');
   if (modules.length === 0) {
-    // Nothing salvageable — log detailed error for debugging
-    console.warn(`[moduleGenerator] Batch ${batchStart + 1} failed to parse JSON. Length: ${jsonStr.length} chars. Snippet: ${jsonStr.slice(0, 100)}...`);
-    JSON.parse(jsonStr); // Trigger original parse error for withRetry to catch
+    console.warn(`[moduleGenerator] Batch ${batchStart + 1} failed to parse JSON. Text: ${text.slice(0, 100)}...`);
+    throw new Error('Failed to parse module batch');
   }
   return { modules };
 }
@@ -311,11 +202,9 @@ async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalS
       generationConfig: { maxOutputTokens: 8192, temperature: 0.3 },
     });
   }, 3, 1);
-  const responseText = result.response.text();
-
+  const text = result.response.text();
   try {
-    const jsonStr = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    return { modules: tryExtractModulesFromJSON(jsonStr) };
+    return { modules: tryExtractArrayItems(text, 'modules') };
   } catch (e) {
     console.error(`[moduleGenerator] Legacy salvage failed for segment ${segmentIndex + 1}:`, e.message);
     return { modules: [] };

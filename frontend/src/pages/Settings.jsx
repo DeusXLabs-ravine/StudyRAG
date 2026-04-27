@@ -362,8 +362,8 @@ export default function Settings() {
         </div>
 
         {/* Board Environment - The "Longer Grid" with Full Customization */}
-        <section className="bg-white rounded-[2.5rem] border border-gray-100 p-8 sm:p-12 shadow-sm">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+        <section className="bg-white rounded-3xl border border-gray-100 p-8 sm:p-8 shadow-sm">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div className="lg:col-span-5 space-y-8">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center border border-amber-100">
@@ -701,7 +701,7 @@ export default function Settings() {
               const Icon = st.icon;
               const isS = (settings.learning_style || 'auto') === st.id;
               return (
-                <button key={st.id} onClick={() => { setLearningStyle(st.id); toast.success(`Style: ${st.label}`); }} className={`p-6 rounded-[2.5rem] border-2 transition-all flex flex-col items-center text-center gap-4 ${isS ? 'border-primary bg-primary/5' : 'border-gray-50 hover:bg-gray-50'}`}>
+                <button key={st.id} onClick={() => { setLearningStyle(st.id); toast.success(`Style: ${st.label}`); }} className={`p-6 rounded-3xl border-2 transition-all flex flex-col items-center text-center gap-4 ${isS ? 'border-primary bg-primary/5' : 'border-gray-50 hover:bg-gray-50'}`}>
                   <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isS ? 'bg-primary text-white' : 'bg-gray-100 text-gray-400'}`}><Icon size={20} /></div>
                   <div>
                     <p className="text-sm font-bold text-gray-900">{st.label}</p>

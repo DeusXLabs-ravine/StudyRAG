@@ -660,11 +660,11 @@ export default function Documents() {
         </div>
 
         {loading && (documents || []).length === 0 ? (
-          <div className="sleek-card p-12 md:p-20 flex flex-col items-center justify-center gap-4 text-center">
+          <div className="sleek-card p-8 md:p-20 flex flex-col items-center justify-center gap-4 text-center">
             <MorphingSquare message="Synchronizing" />
           </div>
         ) : (documents || []).length === 0 ? (
-          <div className="sleek-card p-12 md:p-24 text-center group">
+          <div className="sleek-card p-8 md:p-24 text-center group">
             <div className="w-16 h-16 md:w-20 md:h-20 bg-gray-50 text-gray-300 rounded-3xl flex items-center justify-center mx-auto mb-6 md:mb-8 transition-transform group-hover:scale-110 duration-500">
               <FileText className="h-8 w-8 md:h-10 md:w-10 opacity-30" />
             </div>

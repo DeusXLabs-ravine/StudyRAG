@@ -124,12 +124,12 @@ export default function Analytics() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Progress Charts */}
         <div className="lg:col-span-2 space-y-8">
           
           {/* Document Mastery Table */}
-          <section className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm">
+          <section className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
             <h2 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-3">
               <FileText className="h-6 w-6 text-blue-500" />
               Source Coverage
@@ -162,7 +162,7 @@ export default function Analytics() {
           </section>
 
           {/* Quiz Performance Chart */}
-          <section className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm overflow-hidden">
+          <section className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm overflow-hidden">
             <h2 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-3">
               <TrendingUp className="h-6 w-6 text-green-500" />
               Performance Trend
@@ -199,7 +199,7 @@ export default function Analytics() {
           </section>
 
           {/* Daily Activity (Time Trend) */}
-          <section className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm overflow-hidden">
+          <section className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm overflow-hidden">
             <h2 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-3">
               <Zap className="h-6 w-6 text-yellow-500" />
               Study Intensity
@@ -253,7 +253,7 @@ export default function Analytics() {
         <div className="space-y-8">
           
           {/* Study Time Distribution */}
-          <section className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm">
+          <section className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
             <h2 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-3">
               <Clock className="h-6 w-6 text-orange-500" />
               Time Allocation
@@ -284,7 +284,7 @@ export default function Analytics() {
           </section>
 
           {/* Flashcard Mastery */}
-          <section className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm">
+          <section className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
             <h2 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-3">
               <Brain className="h-6 w-6 text-purple-500" />
               Retention
@@ -317,7 +317,7 @@ export default function Analytics() {
 
           {/* Recommendation */}
           {recommendation && (
-            <section className="bg-gray-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-xl">
+            <section className="bg-gray-900 rounded-2xl p-6 text-white relative overflow-hidden shadow-xl">
               <div className="absolute top-0 right-0 p-4">
                 <Zap className="h-8 w-8 text-yellow-400 fill-current opacity-20" />
               </div>
@@ -351,7 +351,7 @@ function StatCard({ icon, label, value, sub, color }) {
   };
 
   return (
-    <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 border ${colorMap[color]}`}>
         {icon}
       </div>
@@ -369,7 +369,7 @@ function StatCard({ icon, label, value, sub, color }) {
 
 function EmptyState({ message }) {
   return (
-    <div className="h-full min-h-[160px] flex flex-col items-center justify-center text-gray-400 bg-gray-50/50 rounded-3xl border border-dashed border-gray-200 p-8">
+    <div className="h-full min-h-[160px] flex flex-col items-center justify-center text-gray-400 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200 p-6">
       <PieChartIcon className="h-8 w-8 mb-3 opacity-20" />
       <p className="uppercase tracking-widest text-[10px] font-black text-center">{message}</p>
     </div>

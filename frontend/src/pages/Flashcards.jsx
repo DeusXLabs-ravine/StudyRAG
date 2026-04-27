@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Layers, RotateCcw, ChevronLeft, ChevronRight, ChevronDown, Shuffle, Play, Zap, Trash2, Clock, Sparkles } from 'lucide-react';
+import { Layers, RotateCcw, ChevronLeft, ChevronRight, ChevronDown, Shuffle, Play, Trash2, Clock, Library, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -160,20 +160,17 @@ export default function Flashcards() {
   // Deck selection / generation view
   if (!currentDeck) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8 md:py-12">
-        <div className="mb-10">
-          <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">Flashcard Decks</h1>
-          <p className="text-sm md:text-base text-gray-500 mt-2 font-medium">Master key concepts through spaced repetition.</p>
+      <div className="max-w-xl mx-auto px-4 py-8 md:py-8">
+        <div className="mb-12">
+          <h1 className="text-3xl md:text-5xl font-black text-gray-950 tracking-tight uppercase leading-none">Spaced Repetition</h1>
+          <p className="text-sm md:text-lg text-gray-500 mt-4 font-medium max-w-md">Systematically master key concepts through science-backed recall protocols.</p>
         </div>
 
         {/* Generate new deck */}
-        <div className="bg-white rounded-[2rem] p-6 md:p-8 mb-6 shadow-sm border border-gray-100 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50 rounded-full blur-3xl -mr-32 -mt-32 opacity-50 pointer-events-none" />
-          <h2 className="text-lg font-black text-gray-900 mb-5 flex items-center gap-3 relative z-10">
-            <div className="w-10 h-10 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600">
-              <Sparkles className="h-5 w-5" />
-            </div>
-            Create New Deck
+        <div className="bg-white rounded-3xl p-6 md:p-8 mb-6 shadow-sm border border-gray-100 relative overflow-hidden">
+          <h2 className="text-[10px] font-black text-gray-950 uppercase tracking-[0.3em] mb-6 flex items-center gap-2">
+            <Library className="h-3.5 w-3.5 text-primary" />
+            Inventory Protocol
           </h2>
           <div className="flex flex-col sm:flex-row items-end gap-4 relative z-10">
             <div className="w-full">
@@ -197,33 +194,33 @@ export default function Flashcards() {
             <button
               onClick={handleGenerate}
               disabled={generating}
-              className="w-full sm:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-blue-500 text-white rounded-2xl font-black text-sm hover:bg-blue-600 transition-all shadow-lg shadow-blue-200 active:scale-95 disabled:opacity-50"
+              className="w-full sm:w-auto flex items-center justify-center gap-3 px-10 py-4 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-primary/90 transition-all shadow-xl shadow-primary/20 active:scale-95 disabled:opacity-50"
             >
               {generating ? <MorphingSquare size="sm" /> : <Play className="h-5 w-5" />}
-              Generate Deck
+              Initialize Deck
             </button>
           </div>
         </div>
 
-        <div className="p-8 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-[2rem] shadow-xl shadow-blue-200 text-white mb-10 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-48 h-48 bg-white/20 rounded-full -mr-20 -mt-20 blur-3xl transition-transform group-hover:scale-150 duration-700 pointer-events-none" />
+        <div className="p-8 bg-gray-950 rounded-3xl shadow-2xl shadow-gray-200/50 text-white mb-10 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 rounded-full -mr-32 -mt-32 blur-[80px] transition-transform group-hover:scale-110 duration-700 pointer-events-none" />
           <div className="relative z-10">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-white/20">
-                <Zap className="h-6 w-6 text-amber-300 animate-pulse" />
+              <div className="w-12 h-12 bg-white/5 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/10">
+                <BookOpen className="h-6 w-6 text-primary" />
               </div>
-              <h2 className="text-xl font-black tracking-tight">Smart Review</h2>
+              <h2 className="text-xl font-black tracking-tight uppercase">Smart Review</h2>
             </div>
-            <p className="text-white/90 font-medium mb-6 max-w-md leading-relaxed">
-              AI-generated cards focused on concepts where you've shown lower mastery across all materials.
+            <p className="text-sm text-gray-400 font-medium mb-6 max-w-md leading-relaxed">
+              Focus specifically on concepts with lower mastery across your entire library.
             </p>
             <button
               onClick={handleGenerateAdaptive}
               disabled={generating}
-              className="flex items-center gap-3 px-8 py-3.5 bg-white text-blue-600 rounded-2xl font-black text-sm hover:bg-blue-50 transition-all shadow-lg active:scale-95 disabled:opacity-50"
+              className="flex items-center gap-3 px-8 py-3 bg-primary text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-primary/90 transition-all shadow-xl shadow-primary/20 active:scale-95 disabled:opacity-50"
             >
-              {generating ? <MorphingSquare size="sm" /> : <Zap className="h-5 w-5" />}
-              Create Smart Deck
+              {generating ? <MorphingSquare size="sm" /> : <Play className="h-4 w-4" />}
+              Start Adaptive session
             </button>
           </div>
         </div>
@@ -305,7 +302,7 @@ export default function Flashcards() {
   const stats = getCardStats(currentDeck.cards);
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8 md:py-12">
+    <div className="max-w-xl mx-auto px-4 py-8 md:py-8">
       <div className="flex items-center justify-between mb-6">
         <button
           onClick={() => { setCurrentDeck(null); setStudyMode(false); loadDecks(); }}
@@ -357,7 +354,7 @@ export default function Flashcards() {
                 animate={{ rotateY: 0, opacity: 1 }}
                 exit={{ rotateY: -90, opacity: 0 }}
                 transition={{ type: 'spring', damping: 20, stiffness: 100 }}
-                className={`w-full min-h-[300px] md:min-h-[400px] flex items-center justify-center p-8 md:p-12 rounded-[2.5rem] border text-center shadow-xl transition-colors ${flipped
+                className={`w-full min-h-[220px] md:min-h-[280px] flex items-center justify-center p-6 md:p-8 rounded-3xl border text-center shadow-xl transition-colors ${flipped
                   ? 'bg-emerald-50/50 border-emerald-100 shadow-emerald-50/40 text-emerald-900'
                   : 'bg-white border-blue-100 shadow-blue-50/50'
                   }`}

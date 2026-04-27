@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Timer, AlertTriangle, CheckCircle, XCircle, Trophy, ArrowRight, ArrowLeft,
-  GraduationCap, Plus, Brain, Sparkles, BookOpen, HelpCircle, ClipboardList,
-  Upload, FileText, Trash2, ChevronDown, ChevronUp, X, Dna, Zap, LineChart, MessageCircle,
+  GraduationCap, Plus, BookOpen, HelpCircle, ClipboardList,
+  Upload, FileText, Trash2, ChevronDown, ChevronUp, X, Activity, LineChart, MessageCircle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
@@ -282,28 +282,28 @@ export default function Exam() {
 
   if (phase === 'landing') {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8 md:py-12">
-        <div className="mb-10">
-          <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">Exam Prep</h1>
-          <p className="text-sm md:text-base text-gray-500 mt-2 font-medium">Master your subjects with AI-powered study sessions.</p>
+      <div className="max-w-xl mx-auto px-4 py-8 md:py-12">
+        <div className="mb-12">
+          <h1 className="text-3xl md:text-5xl font-black text-gray-950 tracking-tight uppercase leading-none">Exam Prep</h1>
+          <p className="text-sm md:text-lg text-gray-500 mt-4 font-medium max-w-md leading-relaxed">High-fidelity examination protocols and adaptive study guides.</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 mb-12">
-          <button
-            onClick={() => {
-              resetToLanding();
-              setPhase('select-docs');
-            }}
-            className="group relative flex flex-col items-center gap-4 p-8 bg-white rounded-3xl border-2 border-dashed border-gray-200 hover:border-primary hover:bg-primary/5 transition-all duration-300 shadow-sm hover:shadow-xl"
-          >
-            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner">
-              <Plus className="h-8 w-8 text-primary" />
-            </div>
-            <div className="text-center">
-              <p className="font-black text-gray-900 text-lg uppercase tracking-tight">Begin Prep</p>
-              <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-widest">Study Guides & Exams</p>
-            </div>
-          </button>
+            <button
+              onClick={() => {
+                resetToLanding();
+                setPhase('select-docs');
+              }}
+              className="group relative flex flex-col items-center gap-4 p-8 bg-gray-950 rounded-3xl hover:bg-black transition-all duration-300 shadow-2xl shadow-gray-200/50"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-white/5 backdrop-blur-md flex items-center justify-center group-hover:scale-105 transition-transform border border-white/10 shadow-inner">
+                <Plus className="h-8 w-8 text-primary" />
+              </div>
+              <div className="text-center">
+                <p className="font-black text-white text-lg uppercase tracking-tight">Initialize Prep</p>
+                <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-[0.2em] opacity-70">Study Guides & Exams</p>
+              </div>
+            </button>
 
           <div className="flex flex-col items-center gap-4 p-8 bg-gray-50/50 rounded-3xl border-2 border-transparent">
             <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center shadow-sm">
@@ -394,7 +394,7 @@ export default function Exam() {
 
   if (phase === 'select-docs') {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8 md:py-12">
+      <div className="max-w-xl mx-auto px-4 py-8 md:py-12">
         <div className="mb-10">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center text-primary font-black text-xs">01</div>
@@ -463,7 +463,7 @@ export default function Exam() {
 
   if (phase === 'add-materials') {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8 md:py-12">
+      <div className="max-w-xl mx-auto px-4 py-8 md:py-12">
         <div className="mb-10">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center text-primary font-black text-xs">02</div>
@@ -628,7 +628,7 @@ export default function Exam() {
 
   if (phase === 'configure') {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8 md:py-12">
+      <div className="max-w-xl mx-auto px-4 py-8 md:py-12">
         <div className="mb-10">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center text-primary font-black text-xs">03</div>
@@ -638,7 +638,7 @@ export default function Exam() {
           <p className="text-sm md:text-base text-gray-500 mt-2 font-medium">Customize your study program's intensity and depth.</p>
         </div>
 
-        <div className="sleek-card p-6 md:p-10 space-y-10 mb-10 shadow-2xl shadow-gray-100">
+        <div className="sleek-card p-6 md:p-8 space-y-10 mb-10 shadow-2xl shadow-gray-100">
           <div>
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4 block">Session Name</label>
             <input
@@ -697,8 +697,8 @@ export default function Exam() {
             disabled={generating}
             className="order-1 sm:order-2 flex-1 flex items-center justify-center gap-3 px-8 py-4 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-primary/90 transition-all shadow-xl shadow-primary/20 active:scale-95 disabled:opacity-50"
           >
-            {generating ? <MorphingSquare size="sm" /> : <Sparkles className="h-5 w-5" />}
-            Ignite Intelligence
+            {generating ? <MorphingSquare size="sm" /> : <Activity className="h-5 w-5" />}
+            Execute Protocol
           </button>
         </div>
       </div>
@@ -743,13 +743,13 @@ export default function Exam() {
             <div className="relative inline-block">
               <motion.div
                 animate={{
-                  scale: [1, 1.15, 1],
-                  rotate: [0, 5, -5, 0]
+                  scale: [1, 1.05, 1],
+                  opacity: [0.8, 1, 0.8]
                 }}
                 transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                className="w-24 h-24 rounded-[32px] bg-primary/10 flex items-center justify-center relative z-10"
+                className="w-24 h-24 rounded-[32px] bg-gray-950 flex items-center justify-center relative z-10"
               >
-                <Brain className="h-10 w-10 text-primary" />
+                <Activity className="h-10 w-10 text-primary" />
               </motion.div>
               <motion.div
                 animate={{ scale: [1, 1.5, 1], opacity: [0.1, 0, 0.1] }}
@@ -759,14 +759,14 @@ export default function Exam() {
             </div>
 
             <div>
-              <h2 className="text-2xl font-black text-gray-900 tracking-tight mb-4">Constructing Intelligence</h2>
+              <h2 className="text-2xl font-black text-gray-900 tracking-tight mb-4 uppercase">Optimizing Parameters</h2>
               <div className="h-6 overflow-hidden">
                 <TextLoop interval={3} className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
                   <span>Analyzing document structure</span>
                   <span>Synthesizing critical domains</span>
                   <span>Optimizing revision vectors</span>
-                  <span>Generating exam simulations</span>
-                  <span>Refining study pathways</span>
+                  <span>Calibrating exam simulations</span>
+                  <span>Validating study pathways</span>
                 </TextLoop>
               </div>
             </div>
@@ -1014,7 +1014,7 @@ export default function Exam() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <button
                       onClick={() => handleCreatePracticeExam('mixed')}
-                      className="group flex flex-col items-center gap-6 p-10 sleek-card hover:border-primary hover:bg-primary/5 transition-all text-center"
+                      className="group flex flex-col items-center gap-6 p-8 sleek-card hover:border-primary hover:bg-primary/5 transition-all text-center"
                     >
                       <div className="w-20 h-20 bg-primary/10 rounded-[28px] flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner">
                         <Dna className="h-10 w-10 text-primary" />
@@ -1027,7 +1027,7 @@ export default function Exam() {
 
                     <button
                       onClick={() => handleCreatePracticeExam('weighted')}
-                      className="group flex flex-col items-center gap-6 p-10 sleek-card hover:border-emerald-500 hover:bg-emerald-50/50 transition-all text-center"
+                      className="group flex flex-col items-center gap-6 p-8 sleek-card hover:border-emerald-500 hover:bg-emerald-50/50 transition-all text-center"
                     >
                       <div className="w-20 h-20 bg-emerald-100 rounded-[28px] flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner">
                         <LineChart className="h-10 w-10 text-emerald-600" />
@@ -1090,7 +1090,7 @@ export default function Exam() {
     const isLowTime = timeLeft <= 120;
 
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8">
+      <div className="max-w-xl mx-auto px-4 py-8">
         {/* Timer header */}
         <div className={`flex items-center justify-between mb-6 p-3 rounded-lg ${isLowTime ? 'bg-red-50 border border-red-200' : 'bg-gray-50 border border-gray-200'}`}>
           <span className="text-sm font-medium text-gray-700">
@@ -1187,7 +1187,7 @@ export default function Exam() {
     const isLowTime = timeLeft <= 120;
 
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8 md:py-12">
+      <div className="max-w-xl mx-auto px-4 py-8 md:py-12">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-primary/5 rounded-xl flex items-center justify-center">
@@ -1213,7 +1213,7 @@ export default function Exam() {
           />
         </div>
 
-        <div className="sleek-card p-6 md:p-10 shadow-2xl shadow-gray-100 mb-10">
+        <div className="sleek-card p-6 md:p-8 shadow-2xl shadow-gray-100 mb-10">
           <div className="mb-10">
             <span className="text-[10px] font-black text-primary/50 uppercase tracking-[0.2em] mb-3 block">Knowledge Assessment</span>
             <div className="text-xl md:text-2xl font-black text-gray-900 leading-tight prose prose-xl max-w-none [&_p]:mb-1">
@@ -1276,8 +1276,8 @@ export default function Exam() {
 
   if (phase === 'practice-results' && result) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-8 md:py-12">
-        <div className="sleek-card p-10 mb-8 overflow-hidden relative text-center">
+      <div className="max-w-xl mx-auto px-4 py-8 md:py-12">
+        <div className="sleek-card p-8 mb-8 overflow-hidden relative text-center">
           <div className="relative z-10">
             <div className="w-20 h-20 bg-primary/5 rounded-[28px] flex items-center justify-center mx-auto mb-6">
               <Trophy className={`h-10 w-10 ${result.score >= 70 ? 'text-yellow-500' : 'text-gray-400'}`} />

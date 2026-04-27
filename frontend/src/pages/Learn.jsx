@@ -547,13 +547,13 @@ export default function Learn() {
               }`}
             title={isTutorOpen ? "Hide Sage" : "Show Sage"}
           >
-            <Brain className="h-5 w-5" strokeWidth={2.3} />
+            <Activity className="h-5 w-5" strokeWidth={2.3} />
           </button>
         </div>
       </div>
 
       {!selectedDocId && !selectedCourseId ? (
-        <div className="relative sleek-card overflow-hidden min-h-[400px] flex flex-col items-center justify-center p-12 md:p-24 text-center border-0 shadow-2xl">
+        <div className="relative sleek-card overflow-hidden min-h-[400px] flex flex-col items-center justify-center p-8 md:p-24 text-center border-0 shadow-2xl">
           <div className="absolute inset-0 z-0">
             <img
               src="/images/learn_empty_state_bg.png"
@@ -575,7 +575,7 @@ export default function Learn() {
         <AILoader text="Sage Building" />
       ) : (modules || []).length === 0 ? (
         generating ? (
-          <div className="sleek-card p-12 md:p-20 flex flex-col items-center justify-center gap-6 text-center">
+          <div className="sleek-card p-8 md:p-20 flex flex-col items-center justify-center gap-6 text-center">
             <AILoader text="Generating Lessons" />
             <div>
               <h3 className="text-lg font-bold text-gray-900 mb-2">Generating your lessons...</h3>
@@ -585,7 +585,7 @@ export default function Learn() {
             </div>
           </div>
         ) : (
-          <div className="sleek-card p-12 md:p-20 flex flex-col items-center justify-center gap-4 text-center">
+          <div className="sleek-card p-8 md:p-20 flex flex-col items-center justify-center gap-4 text-center">
             <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center">
               <Lightbulb className="h-7 w-7 text-amber-400" strokeWidth={2.3} />
             </div>
@@ -698,7 +698,7 @@ export default function Learn() {
                 exit={{ opacity: 0, x: 20 }}
                 transition={{ duration: 0.3, ease: 'easeInOut' }}
                 className={`hidden xl:block flex-shrink-0 transition-all duration-500 z-40 ${isTutorMaximized
-                  ? 'fixed bottom-4 right-4 top-28 w-[650px] shadow-2xl rounded-[2.5rem] bg-white border border-blue-50 overflow-hidden'
+                  ? 'fixed bottom-4 right-4 top-28 w-[650px] shadow-2xl rounded-3xl bg-white border border-blue-50 overflow-hidden'
                   : 'xl:w-80 relative'
                   }`}
               >

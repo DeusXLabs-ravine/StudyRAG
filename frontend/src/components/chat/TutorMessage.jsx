@@ -320,7 +320,7 @@ export default function TutorMessage({ msg, onAction, isCompact }) {
     return (
         <div className="flex flex-col gap-6 mb-12 relative">
             {/* Thread Connector Line */}
-            <div className="absolute left-4 top-10 bottom-4 w-px bg-gray-100 hidden sm:block" />
+            <div className="absolute left-4 top-8 bottom-4 w-px bg-gray-100 hidden sm:block" />
 
             {segments.map((segment, idx) => (
                 <motion.div

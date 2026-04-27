@@ -665,7 +665,7 @@ export default function Chat() {
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 md:px-8 lg:px-24 pt-6 md:pt-4 pb-28 space-y-8 md:space-y-10 relative z-10">
           {messages.length === 0 && !loading && (
             <div className="flex flex-col items-center justify-center min-h-full py-10 text-center max-w-xl mx-auto">
-              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-16 h-16 md:w-20 md:h-20 bg-[#f0f9ff] rounded-3xl md:rounded-[2.5rem] flex items-center justify-center mb-6 md:mb-8 border border-[#e0f2fe] shadow-inner">
+              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-16 h-16 md:w-20 md:h-20 bg-[#f0f9ff] rounded-3xl md:rounded-3xl flex items-center justify-center mb-6 md:mb-8 border border-[#e0f2fe] shadow-inner">
                 <Compass className="h-8 w-8 md:h-10 md:w-10 text-[#0ea5e9]" strokeWidth={2.3} />
               </motion.div>
               <h1 className="text-3xl md:text-4xl font-black text-[#0f172a] mb-2 md:mb-3 tracking-tight">What's the plan?</h1>
@@ -736,7 +736,7 @@ export default function Chat() {
         {/* Input area */}
         <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-white via-white/80 to-transparent pt-8 pb-4 md:pb-6 px-4 z-30 pointer-events-none">
           <div className="max-w-4xl mx-auto w-full pointer-events-auto">
-            <div className="bg-white border border-[#e2e8f0] focus-within:border-[#7dd3fc] focus-within:ring-4 focus-within:ring-[#f0f9ff] rounded-[2rem] md:rounded-[2.5rem] shadow-2xl shadow-[#e2e8f0]/40 p-1.5 transition-all">
+            <div className="bg-white border border-[#e2e8f0] focus-within:border-[#7dd3fc] focus-within:ring-4 focus-within:ring-[#f0f9ff] rounded-[2rem] md:rounded-3xl shadow-2xl shadow-[#e2e8f0]/40 p-1.5 transition-all">
               <form onSubmit={e => { e.preventDefault(); handleSend(); }} className="flex flex-col">
                 <InputPreview text={input} />
                 <div className="flex items-end px-3 pt-2">

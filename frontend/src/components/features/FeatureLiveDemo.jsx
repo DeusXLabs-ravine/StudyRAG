@@ -268,7 +268,7 @@ export default function FeatureLiveDemo({ mode, onClose }) {
                             exit={{ rotateX: -90, opacity: 0 }}
                             transition={{ duration: 0.4 }}
                             onClick={() => setIsFlipped(!isFlipped)}
-                            className={`w-full h-full rounded-[2.5rem] p-8 flex flex-col items-center justify-center text-center cursor-pointer shadow-2xl transition-all duration-500 ${isFlipped ? 'bg-slate-900 text-white' : 'bg-white border-2 border-orange-100 text-slate-900'
+                            className={`w-full h-full rounded-3xl p-8 flex flex-col items-center justify-center text-center cursor-pointer shadow-2xl transition-all duration-500 ${isFlipped ? 'bg-slate-900 text-white' : 'bg-white border-2 border-orange-100 text-slate-900'
                                 }`}
                         >
                             <span className="text-[10px] font-black uppercase tracking-[0.4em] opacity-40 mb-4">{isFlipped ? 'Answer' : 'Term'}</span>

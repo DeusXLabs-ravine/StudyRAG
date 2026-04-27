@@ -60,7 +60,7 @@ export default function PaymentVerify() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="bg-white rounded-3xl shadow-xl border border-gray-100 max-w-md w-full p-10 text-center">
+      <div className="bg-white rounded-3xl shadow-xl border border-gray-100 max-w-md w-full p-8 text-center">
 
         {state === 'loading' && (
           <>

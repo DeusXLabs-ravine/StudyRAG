@@ -66,7 +66,7 @@ function Scene({ simulations, onSelect }) {
 export default function PhysicsLab3D({ simulations, onSelect }) {
     const safeSimulations = Array.isArray(simulations) ? simulations : [];
     return (
-        <div className="w-full h-[700px] bg-[#f8f9fa] rounded-[2.5rem] overflow-hidden border-2 border-white shadow-[0_50px_100px_-20px_rgba(0,0,0,0.15)] relative">
+        <div className="w-full h-[700px] bg-[#f8f9fa] rounded-3xl overflow-hidden border-2 border-white shadow-[0_50px_100px_-20px_rgba(0,0,0,0.15)] relative">
             <div className="absolute top-8 left-8 z-10 flex flex-col gap-2 pointer-events-none">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20">

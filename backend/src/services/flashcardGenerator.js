@@ -5,6 +5,7 @@ const vectorStore = require('./vectorStore');
 const { getUserTeachingLevel, getUserInterests, getWeakTopics, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
 const { flashcardCache } = require('../config/cache');
 const { v4: uuidv4 } = require('uuid');
+const { extractJSON, tryExtractArrayItems } = require('../utils/jsonHelper');
 
 async function generateFlashcards({ numCards = 20, docId = null, name = null, userId = null }) {
   // Try page-based content first, fall back to chunks
@@ -51,13 +52,11 @@ async function generateFlashcards({ numCards = 20, docId = null, name = null, us
   });
   const responseText = result.response.text();
 
-  let parsed;
-  try {
-    const jsonStr = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    parsed = JSON.parse(jsonStr);
-  } catch (e) {
+  const flashcardsRaw = tryExtractArrayItems(responseText, 'flashcards');
+  if (!flashcardsRaw || flashcardsRaw.length === 0) {
     throw new Error('Failed to parse flashcard generation response');
   }
+  const parsed = { flashcards: flashcardsRaw };
 
   const deckId = uuidv4();
   const now = new Date().toISOString();
@@ -140,13 +139,11 @@ async function generateAdaptiveFlashcards({ numCards = 20, userId = null }) {
   });
   const responseText = result.response.text();
 
-  let parsed;
-  try {
-    const jsonStr = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    parsed = JSON.parse(jsonStr);
-  } catch (e) {
+  const flashcardsRaw = tryExtractArrayItems(responseText, 'flashcards');
+  if (!flashcardsRaw || flashcardsRaw.length === 0) {
     throw new Error('Failed to parse adaptive flashcard generation response');
   }
+  const parsed = { flashcards: flashcardsRaw };
 
   const deckId = uuidv4();
   const now = new Date().toISOString();

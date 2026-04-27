@@ -222,7 +222,7 @@ export default function Features() {
                       onMouseEnter={() => setHoveredIdx(globalIdx)}
                       onMouseLeave={() => setHoveredIdx(null)}
                       onClick={() => isClickable && setActivePreview(item.title)}
-                      className={`group relative flex flex-col p-8 rounded-[2.5rem] bg-white border border-slate-100 transition-all hover:shadow-[0_20px_50px_rgba(14,165,233,0.08)] overflow-hidden cursor-default ${isClickable ? 'hover:border-primary/20 cursor-pointer active:scale-95' : ''}`}
+                      className={`group relative flex flex-col p-8 rounded-3xl bg-white border border-slate-100 transition-all hover:shadow-[0_20px_50px_rgba(14,165,233,0.08)] overflow-hidden cursor-default ${isClickable ? 'hover:border-primary/20 cursor-pointer active:scale-95' : ''}`}
                     >
                       <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-full blur-2xl -mr-16 -mt-16 opacity-0 group-hover:opacity-100 transition-opacity" />
 
@@ -239,7 +239,7 @@ export default function Features() {
                           className="text-xl font-black text-slate-900 mb-3 flex items-center gap-2"
                         >
                           {item.title}
-                          {item.demo && <Sparkles className="h-3 w-3 text-cyan-400 animate-pulse" />}
+                          {item.demo && <Target className="h-3 w-3 text-primary opacity-20" />}
                         </motion.h3>
 
                         <div className="relative h-[96px] overflow-hidden">
