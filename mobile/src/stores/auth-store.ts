@@ -56,39 +56,51 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   initialize: async () => {
     if (get().initialized) return;
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-    set({
-      session,
-      user: session?.user ?? null,
-    });
-
-    if (session?.user) {
-      await configureRevenueCat(session.user.id);
-      await get().refreshProfile();
-    }
-
-    supabase.auth.onAuthStateChange(async (_event, nextSession) => {
       set({
-        session: nextSession,
-        user: nextSession?.user ?? null,
+        session,
+        user: session?.user ?? null,
       });
 
-      if (nextSession?.user) {
-        await configureRevenueCat(nextSession.user.id);
+      if (session?.user) {
+        try {
+          await configureRevenueCat(session.user.id);
+        } catch (e) {
+          console.warn('[Billing] RevenueCat failed to configure:', e);
+        }
         await get().refreshProfile();
-      } else {
-        await resetRevenueCatIdentity();
-        set({ profile: null });
       }
-    });
 
-    set({
-      initialized: true,
-      loading: false,
-    });
+      supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+        set({
+          session: nextSession,
+          user: nextSession?.user ?? null,
+        });
+
+        if (nextSession?.user) {
+          try {
+            await configureRevenueCat(nextSession.user.id);
+          } catch (e) {
+            console.warn('[Billing] RevenueCat failed to configure:', e);
+          }
+          await get().refreshProfile();
+        } else {
+          await resetRevenueCatIdentity();
+          set({ profile: null });
+        }
+      });
+    } catch (error) {
+      console.warn('[Auth] Session initialization error:', error);
+    } finally {
+      set({
+        initialized: true,
+        loading: false,
+      });
+    }
   },
   refreshProfile: async () => {
     try {
@@ -103,9 +115,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   handleIncomingUrl: async url => {
     try {
       const parsed = new URL(url);
-      const code = parsed.searchParams.get('code');
-      const accessToken = parsed.searchParams.get('access_token');
-      const refreshToken = parsed.searchParams.get('refresh_token');
+      
+      // Supabase sometimes returns tokens in the hash fragment instead of query params.
+      // We combine both search and hash strings to reliably extract the tokens.
+      const paramsString = (parsed.search || '').replace('?', '') + '&' + (parsed.hash || '').replace('#', '');
+      const searchParams = new URLSearchParams(paramsString);
+
+      const code = searchParams.get('code');
+      const accessToken = searchParams.get('access_token');
+      const refreshToken = searchParams.get('refresh_token');
 
       if (code) {
         await supabase.auth.exchangeCodeForSession(code);

@@ -113,7 +113,7 @@ export default function LearnTabScreen() {
                 paddingHorizontal: 14,
                 paddingVertical: 8,
                 borderRadius: 999,
-                backgroundColor: isActive ? colors.primary : '#FFFFFF',
+                backgroundColor: isActive ? colors.primary : colors.surface,
                 borderWidth: 1,
                 borderColor: isActive ? colors.primary : colors.border,
               }}

@@ -77,7 +77,7 @@ export default function SignInScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F9FAFB' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
@@ -97,12 +97,12 @@ export default function SignInScreen() {
               width: '100%',
               maxWidth: 440,
               alignSelf: 'center',
-              backgroundColor: '#FFFFFF',
+              backgroundColor: colors.surface,
               borderRadius: 24,
               borderWidth: 1,
-              borderColor: '#F3F4F6',
+              borderColor: colors.border,
               padding: 28,
-              shadowColor: '#0F172A',
+              shadowColor: colors.text,
               shadowOpacity: 0.08,
               shadowRadius: 24,
               shadowOffset: { width: 0, height: 12 },
@@ -125,7 +125,7 @@ export default function SignInScreen() {
               </Text>
               <Text
                 style={{
-                  color: '#6B7280',
+                  color: colors.textMuted,
                   fontFamily: fonts.uiMedium,
                   fontSize: 13,
                   marginTop: 6,
@@ -175,10 +175,10 @@ export default function SignInScreen() {
 
                 {/* Divider */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-                  <View style={{ flex: 1, height: 1, backgroundColor: '#E5E7EB' }} />
+                  <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
                   <Text
                     style={{
-                      color: '#9CA3AF',
+                      color: colors.textSoft,
                       fontFamily: fonts.uiBlack,
                       fontSize: 10,
                       letterSpacing: 2,
@@ -186,13 +186,13 @@ export default function SignInScreen() {
                   >
                     OR
                   </Text>
-                  <View style={{ flex: 1, height: 1, backgroundColor: '#E5E7EB' }} />
+                  <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
                 </View>
 
                 {/* Email form */}
                 <Text
                   style={{
-                    color: '#374151',
+                    color: colors.text,
                     fontFamily: fonts.uiBold,
                     fontSize: 13,
                     marginBottom: 8,
@@ -202,21 +202,21 @@ export default function SignInScreen() {
                 </Text>
                 <View style={{ position: 'relative', marginBottom: 18 }}>
                   <View style={{ position: 'absolute', left: 14, top: 0, bottom: 0, justifyContent: 'center', zIndex: 1 }}>
-                    <Mail size={18} color="#9CA3AF" />
+                    <Mail size={18} color={colors.textSoft} />
                   </View>
                   <TextInput
                     value={email}
                     onChangeText={setEmail}
                     placeholder="you@example.com"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={colors.textSoft}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
                     autoComplete="email"
                     style={{
-                      backgroundColor: '#FFFFFF',
+                      backgroundColor: colors.surface,
                       borderWidth: 1,
-                      borderColor: '#E5E7EB',
+                      borderColor: colors.border,
                       borderRadius: radius.md,
                       paddingLeft: 44,
                       paddingRight: 14,
@@ -265,7 +265,7 @@ export default function SignInScreen() {
                 </View>
                 <Text
                   style={{
-                    color: '#4B5563',
+                    color: colors.textMuted,
                     fontFamily: fonts.uiMedium,
                     fontSize: 14,
                     textAlign: 'center',
@@ -289,13 +289,13 @@ export default function SignInScreen() {
                     style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                     hitSlop={8}
                   >
-                    <ArrowLeft size={14} color="#6B7280" />
-                    <Text style={{ color: '#6B7280', fontFamily: fonts.uiBold, fontSize: 13 }}>Change email</Text>
+                    <ArrowLeft size={14} color={colors.textMuted} />
+                    <Text style={{ color: colors.textMuted, fontFamily: fonts.uiBold, fontSize: 13 }}>Change email</Text>
                   </Pressable>
                   <Pressable onPress={handleResend} disabled={cooldown > 0 || loading} hitSlop={8}>
                     <Text
                       style={{
-                        color: cooldown > 0 ? '#9CA3AF' : colors.primary,
+                        color: cooldown > 0 ? colors.textSoft : colors.primary,
                         fontFamily: fonts.uiBold,
                         fontSize: 13,
                       }}

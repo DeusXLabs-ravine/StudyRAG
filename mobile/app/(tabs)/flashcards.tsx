@@ -110,7 +110,7 @@ export default function FlashcardsTabScreen() {
           rows.map((row, rowIdx) => (
             <View key={`row-${rowIdx}`} style={{ flexDirection: 'row', gap: 10 }}>
               {row.map(doc => (
-                <Pressable key={doc.id} onPress={() => router.push(`/learn/${doc.id}`)} style={{ flex: 1 }}>
+                <Pressable key={doc.id} onPress={() => router.push({ pathname: '/flashcards', params: { docId: doc.id } })} style={{ flex: 1 }}>
                   <Card>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                       <View

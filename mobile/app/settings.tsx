@@ -70,7 +70,7 @@ export default function SettingsScreen() {
             width: 40,
             height: 40,
             borderRadius: 14,
-            backgroundColor: '#FFFFFF',
+            backgroundColor: colors.surface,
             borderWidth: 1,
             borderColor: colors.border,
             alignItems: 'center',

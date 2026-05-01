@@ -1,132 +1,99 @@
-# StudyRAG Widgets (iOS + Android)
+# StudyRAG Widgets + Watch Apps
 
-Lock-screen and home-screen widgets that surface a daily flashcard (all users)
-and a daily definition (Pro only). The TS layer, backend endpoint, and native
-source files are all in the repo. **The widgets themselves can't run in Expo
-Go — no widget ever can, on any app, anywhere.** This doc explains why and
-what it takes to turn them on without leaving Expo.
+Home-screen widgets (iOS + Android) and Watch apps (watchOS + Wear OS) that
+surface a daily flashcard and streak stats. The native source, config plugins,
+and backend endpoint are all in the repo.
 
-## Honest truth about Expo Go + widgets
+## Quick facts
 
-Expo Go is a pre-built shell app that runs your JavaScript. iOS widgets and
-Android widgets require **native code compiled into the binary** — a
-WidgetKit extension on iOS, a Glance `AppWidgetProvider` on Android. Expo Go
-can't load your widget code because the widget extension has to be signed
-into the app bundle at build time.
+- Widgets and watch apps **cannot run in Expo Go** — they require native code compiled into the binary.
+- `syncWidgets()` silently no-ops when the native bridge isn't present — the main app never crashes.
+- Use **EAS Build** to get a binary that includes them (no Mac / Xcode required).
 
-This isn't a StudyRAG problem — it's an Apple/Google rule. **Every** Expo
-app that has widgets (including the big names) has the same constraint.
-
-**Good news:** The app runs in Expo Go today with zero changes.
-`mobile/src/native/widgets.ts` silently no-ops when the native bridge
-isn't present, so `syncWidgets()` is safe to call everywhere. Widgets just
-won't appear on lock/home screens until you ship a build that includes them.
-
-## Two ways to get widgets into a real build (no ejecting required)
-
-### Path 1 — EAS Build with a dev client (recommended, no `prebuild` commitment)
-
-You stay 100% in the Expo managed workflow. EAS runs prebuild for you in the
-cloud, the widget code gets compiled in, you install the resulting `.ipa`
-/`.apk`, and widgets work.
+## Building with EAS (recommended — no Mac needed)
 
 ```bash
 cd mobile
-npm i -g eas-cli
-eas login
-eas build:configure          # one-time setup
-eas build --profile development --platform ios
-eas build --profile development --platform android
+eas build --profile development --platform ios      # dev client with widgets
+eas build --profile development --platform android  # dev client with widgets
+
+# Production
+eas build --profile production --platform all
 ```
 
-Install the resulting dev client build from the EAS dashboard, then run
-`npx expo start --dev-client` to develop against it. Widgets appear in the
-iOS widget picker + Android home-screen add-widget menu.
+After the build downloads, install it on your device. Widgets appear in the
+iOS widget picker and Android home-screen "Add widget" menu.
 
-To get the widget source into the build, you need an Expo **config plugin**
-that copies `mobile/native-widgets/*` into the right spots at prebuild time.
-A starter plugin is sketched in `plugins/withStudyRAGWidgets.ts` — see the
-next section.
+## What's wired up
 
-### Path 2 — Local `expo prebuild` (gives you an `ios/`+`android/` folder)
-
-If you *do* want the native folders checked into the repo:
-
-```bash
-cd mobile
-npx expo prebuild --clean
-```
-
-Then manually copy files:
-
-- iOS: `mobile/native-widgets/ios/StudyRAGWidget/` → `mobile/ios/StudyRAGWidget/`
-- Android: `mobile/native-widgets/android/src/main/java/...` → `mobile/android/app/src/main/java/...`
-
-Your `.gitignore` can still hide `ios/` and `android/` — EAS Build works
-either way. This path is traditional; Path 1 is cleaner for a team.
-
-## What's in the repo
-
-| Layer | File | Runs in Expo Go? |
+| Layer | Location | Notes |
 |---|---|---|
-| Backend endpoint | `backend/src/routes/widgetRoutes.js` + `widgetController.js` | ✅ Yes — pure HTTP, lives at `GET /api/widgets/daily` |
-| TS sync helper | `mobile/src/native/widgets.ts` | ✅ Yes — silently no-ops without bridge |
-| iOS widget source | `mobile/native-widgets/ios/` | ❌ Needs build |
-| Android widget source | `mobile/native-widgets/android/` | ❌ Needs build |
-| Native RN bridge | `mobile/native-widgets/bridge/` | ❌ Needs build |
-| Config plugin (writing one is Path 1's key step) | `plugins/withStudyRAGWidgets.ts` | — |
+| Backend endpoint | `backend/src/routes/widgetRoutes.js` | `GET /api/widgets/daily` |
+| TS sync helper | `mobile/src/native/widgets.ts` | Called on login + foreground |
+| iOS Widget (WidgetKit) | `mobile/targets/widget/` | `@bacons/apple-targets` compiles it |
+| iOS Watch App (watchOS) | `mobile/targets/watch/` | `@bacons/apple-targets` compiles it |
+| iOS Widget RN bridge | `mobile/ios-extensions/StudyRAGWidget/` | Swift + ObjC bridge |
+| iOS Watch RN bridge | `mobile/ios-extensions/StudyRAGWatch/` | WatchConnectivity bridge |
+| Android Widget | `mobile/android-extensions/StudyRAGWidget/` | Copied into android/ by config plugin |
+| Android Wear OS | `mobile/android-extensions/StudyRAGWear/` | Standalone Wear APK project |
+| Config plugin | `mobile/plugins/withStudyRAGNativeExtensions.js` | App Group entitlement + Android manifest |
 
-## Turn-on checklist (once you're doing a real build)
+## iOS specifics
 
-### 1. App Group entitlement (iOS)
+`@bacons/apple-targets` reads the `targets/` directory and automatically adds
+the widget and watch extension targets during `expo prebuild` / EAS Build.
 
-Both the main app target and the widget extension target need the same
-App Group: `group.co.studyrag.widgets`.
+App Group `group.com.studyrag.app` is set in:
+- `app.json` → `ios.entitlements`
+- `targets/widget/expo-target.config.js`
+- `targets/watch/expo-target.config.js`
 
-In the Apple Developer portal:
-- Identifiers → App Groups → register `group.co.studyrag.widgets`
-- Add it to both app IDs (main + widget extension)
-- Regenerate provisioning profiles
+The widget reads from `UserDefaults(suiteName: "group.com.studyrag.app")`.
+The main app writes via `StudyRAGWidgets.setDailyContent()`.
 
-The widget reads `UserDefaults(suiteName: "group.co.studyrag.widgets")` so
-without this the widget sees no data.
+**Before first TestFlight build:** Register `group.com.studyrag.app` as an
+App Group in the Apple Developer portal and enable it on all three App IDs
+(main app + widget extension + watch app).
 
-### 2. Android: manifest receiver
+## Android specifics
 
-Glance uses `AppWidgetProvider`. The scaffold's `MANIFEST_SNIPPET.xml` shows
-the `<receiver>` + `<meta-data>` entries. Merge those into
-`android/app/src/main/AndroidManifest.xml` (or let your config plugin merge).
+`withStudyRAGNativeExtensions.js` (config plugin) automatically:
+1. Adds `<receiver android:name="com.studyrag.widget.FlashcardWidget">` to `AndroidManifest.xml`
+2. Copies Kotlin source + resources from `android-extensions/StudyRAGWidget/` → `android/app/src/main/`
 
-### 3. Wire sync calls
+The Wear OS app (`android-extensions/StudyRAGWear/`) is a **separate** standalone
+Wear OS module. Build it as a companion APK — it syncs data from the phone via
+the Wearable Data Layer (no internet required on the watch).
 
-Already wired in `mobile/app/_layout.tsx`:
-- After session load (auth store change)
-- On `AppState` change to `'active'`
+## Data flow
 
-Backend sets `Cache-Control: private, max-age=21600` (6h), so repeated
-foreground calls are nearly free.
+```
+Backend /api/widgets/daily
+    ↓ (on login + AppState active)
+syncWidgets() [mobile/src/native/widgets.ts]
+    ↓
+NativeModules.StudyRAGWidgets.setDailyContent()
+    ├── iOS  → UserDefaults (group.com.studyrag.app) → WidgetKit reload
+    └── Android → SharedPreferences → broadcast ACTION_APPWIDGET_UPDATE
+```
 
-## Pro-gating
+Watch sync (iOS):
+```
+WatchConnectivity → StudyRAGWatchBridge.syncToWatch()
+    → WCSession.updateApplicationContext()
+    → watchOS ConnectivityManager.session(_:didReceiveApplicationContext:)
+```
 
-`GET /api/widgets/daily` returns `definition: null` for non-Pro users. The
-iOS and Android widget UIs check for null and fall back to the flashcard,
-so free users still see content — they just never see a definition tile.
+## Pro gating
 
-## Current runtime behaviour without a dev client build
+`GET /api/widgets/daily` returns `definition: null` for free users.
+Free users see the daily flashcard; Pro users also see a definition tile.
 
-- Open the app in Expo Go → app runs normally, every feature works.
-- `syncWidgets()` silently returns (no native bridge found, no crash).
-- Lock/home screen has no StudyRAG widget option — Expo Go doesn't advertise one.
-- Backend `/widgets/daily` endpoint responds normally if hit directly.
+## Build checklist (first time)
 
-So there's nothing to fix to "make Expo Go work" — it already does. The
-widgets are a later feature you ship the first time you do an EAS Build.
-
-## Known TODOs
-
-- [x] ~~Replace placeholder flashcard fallback with real SRS "today's due" logic~~ — shipped in `widgetController.js`
-- [x] ~~Hook AppState listener in `mobile/app/_layout.tsx` to call `syncWidgets()`~~ — shipped
-- [ ] Write the actual `plugins/withStudyRAGWidgets.ts` config plugin
-- [ ] Provision App Group in Apple Developer portal before first TestFlight build
-- [ ] Replace widget icons (placeholders in scaffolded asset catalog) — `mobile/assets/icon.png` is a fine starting point
-- [ ] Add a Settings row to let users pick "Flashcards only" vs. "Flashcards + Definitions" rotation
+- [ ] Register Apple App Group `group.com.studyrag.app` in developer.apple.com → Identifiers → App Groups
+- [ ] Enable the App Group on the main app, widget extension, and watch app App IDs
+- [ ] Regenerate provisioning profiles after enabling the App Group
+- [ ] Run `eas build --profile production --platform ios`
+- [ ] Run `eas build --profile production --platform android`
+- [ ] Sideload the Wear OS APK onto a paired watch

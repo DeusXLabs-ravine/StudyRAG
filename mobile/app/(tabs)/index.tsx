@@ -205,7 +205,7 @@ function StatTile({ label, value, tint }: { label: string; value: number | strin
         borderRadius: 18,
         borderWidth: 1,
         borderColor: colors.border,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: colors.surface,
         padding: 14,
         gap: 4,
       }}
@@ -245,7 +245,7 @@ function QuickTile({
           borderRadius: 18,
           borderWidth: 1,
           borderColor: colors.border,
-          backgroundColor: '#FFFFFF',
+          backgroundColor: colors.surface,
           padding: 14,
           gap: 10,
         }}

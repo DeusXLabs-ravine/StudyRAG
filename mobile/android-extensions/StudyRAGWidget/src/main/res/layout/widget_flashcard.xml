@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:background="@drawable/widget_background"
+    android:padding="16dp">
+
+    <!-- Front (question) -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:padding="4dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="QUESTION"
+            android:textSize="9sp"
+            android:textColor="#0EA5E9"
+            android:letterSpacing="0.12"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_front"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="6dp"
+            android:text="What is spaced repetition?"
+            android:textSize="13sp"
+            android:textColor="#0F172A"
+            android:textStyle="bold"
+            android:maxLines="5"
+            android:ellipsize="end" />
+
+    </LinearLayout>
+
+    <!-- Divider -->
+    <View
+        android:layout_width="1dp"
+        android:layout_height="match_parent"
+        android:background="#E2E8F0"
+        android:layout_marginHorizontal="10dp" />
+
+    <!-- Back (answer) -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:padding="4dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ANSWER"
+            android:textSize="9sp"
+            android:textColor="#8B5CF6"
+            android:letterSpacing="0.12"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_back"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="6dp"
+            android:text="A technique that increases review intervals."
+            android:textSize="12sp"
+            android:textColor="#0F172A"
+            android:maxLines="5"
+            android:ellipsize="end" />
+
+    </LinearLayout>
+
+</LinearLayout>

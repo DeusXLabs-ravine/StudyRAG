@@ -1,4 +1,4 @@
-import { Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
 import { colors, fonts } from '@/lib/theme/tokens';
 
 type Props = {
@@ -13,23 +13,30 @@ export function LogoWordmark({ compact = false, tone = 'light' }: Props) {
   const eyebrow = isDark ? 'rgba(255,255,255,0.75)' : colors.purple;
   const badgeBg = isDark ? 'rgba(255,255,255,0.14)' : colors.primarySoft;
   const badgeBorder = isDark ? 'rgba(255,255,255,0.22)' : '#BAE6FD';
-  const badgeText = isDark ? '#FFFFFF' : colors.primaryDeep;
+
+  const size = compact ? 38 : 52;
 
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
       <View
         style={{
-          width: compact ? 38 : 52,
-          height: compact ? 38 : 52,
+          width: size,
+          height: size,
           borderRadius: compact ? 14 : 18,
           backgroundColor: badgeBg,
           alignItems: 'center',
           justifyContent: 'center',
           borderWidth: 1,
           borderColor: badgeBorder,
+          overflow: 'hidden',
         }}
       >
-        <Text style={{ color: badgeText, fontFamily: fonts.uiBlack, fontSize: compact ? 17 : 21 }}>SR</Text>
+        <Image
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          source={require('../../../assets/icon.png')}
+          style={{ width: size, height: size }}
+          resizeMode="cover"
+        />
       </View>
       <View>
         <Text style={{ color: wordmark, fontFamily: fonts.uiBlack, fontSize: compact ? 20 : 24 }}>
