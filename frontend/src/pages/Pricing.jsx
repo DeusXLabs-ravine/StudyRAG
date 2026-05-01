@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PublicNavbar from '../components/layout/PublicNavbar';
 import Footer from '../components/layout/Footer';
-import { Check, Star, CheckCircle, CreditCard, Landmark, Send, Loader2, X, Wallet } from 'lucide-react';
+import { Check, Star, CheckCircle, CreditCard, Landmark, Send, Loader2, X } from 'lucide-react';
 import SEO from '../components/common/SEO';
 import useAuthStore from '../store/authStore';
 import api from '../services/api';
@@ -118,6 +118,45 @@ const pricingSchema = [
 ];
 
 /**
+ * Open Flutterwave Inline Popup by dynamically loading the Flutterwave v3 script.
+ * Renders inside the current page — no redirect.
+ */
+async function openFlutterwaveInline({ publicKey, txRef, amount, currency, userEmail, userName, tier, onSuccess, onClose }) {
+  // Dynamically load Flutterwave inline script
+  if (!window.FlutterwaveCheckout) {
+    await new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.flutterwave.com/v3.js';
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  }
+  window.FlutterwaveCheckout({
+    public_key: publicKey,
+    tx_ref: txRef,
+    amount,
+    currency,
+    payment_options: 'card',
+    meta: { tier, source: 'studyrag_web' },
+    customer: { email: userEmail, name: userName },
+    callback: (data) => {
+      if (data.status === 'successful' || data.status === 'completed') {
+        onSuccess?.(data);
+      } else {
+        onClose?.(new Error('Payment was not successful'));
+      }
+    },
+    onclose: () => onClose?.(),
+    customizations: {
+      title: 'StudyRAG',
+      description: `StudyRAG ${tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : ''} Subscription`,
+      logo: 'https://studyrag.co/logo.png',
+    },
+  });
+}
+
+/**
  * Open Paystack Inline Popup using @paystack/inline-js.
  * Renders inside the current page — no redirect.
  */
@@ -163,7 +202,7 @@ export default function Pricing() {
       const params = new URLSearchParams(window.location.search);
       const checkoutTier = params.get('checkoutTier');
       const checkoutChannel = params.get('checkoutChannel');
-      const checkoutGateway = params.get('checkoutGateway') || 'paystack';
+      const checkoutGateway = params.get('checkoutGateway') || (params.get('checkoutChannel') === 'card' ? 'flutterwave' : 'paystack');
       
       if (checkoutTier && checkoutChannel) {
         const tierObj = tiers.find(t => t.id === checkoutTier);
@@ -176,14 +215,13 @@ export default function Pricing() {
     }
   }, [user, tiers]);
 
-  // Apple Pay and Google Pay are handled natively via NativePayButton (Stripe/Paystack).
+  // Apple Pay and Google Pay are handled natively via NativePayButton (Paystack).
   const paymentChannels = isNG ? [
-    { id: 'card', gateway: 'paystack', name: 'Pay with Card', icon: CreditCard, description: 'Visa, Mastercard, Verve' },
+    { id: 'card', gateway: 'flutterwave', name: 'Pay with Card', icon: CreditCard, description: 'Visa, Mastercard, Verve — all countries' },
     { id: 'bank_transfer', gateway: 'paystack', name: 'Pay via Bank Transfer', icon: Send, description: 'Transfer directly from your bank' },
     { id: 'bank', gateway: 'paystack', name: 'Pay via Bank or USSD', icon: Landmark, description: 'Use your bank account or USSD code' },
   ] : [
-    { id: 'card', gateway: 'paystack', name: 'Pay with Card', icon: CreditCard, description: 'Visa, Mastercard' },
-    { id: 'paypal', gateway: 'paypal', name: 'Pay with PayPal', icon: Wallet, description: 'Pay securely with your PayPal account' },
+    { id: 'card', gateway: 'flutterwave', name: 'Pay with Card', icon: CreditCard, description: 'Visa, Mastercard — international cards accepted' },
   ];
 
   const handleCheckout = async (channelId, gateway = 'paystack', customTier = selectedTier) => {
@@ -204,12 +242,38 @@ export default function Pricing() {
         currency: isNG ? 'NGN' : 'USD',
       });
 
-      if (!data.accessCode && !data.checkoutUrl) {
+      if (!data.flutterwavePublicKey && !data.accessCode && !data.checkoutUrl) {
         throw new Error('No payment session received');
       }
 
-      // Prefer inline popup (embedded)
-      if (data.accessCode) {
+      if (data.flutterwavePublicKey) {
+        // Flutterwave inline popup
+        setIsLoading(false);
+        await openFlutterwaveInline({
+          publicKey: data.flutterwavePublicKey,
+          txRef: data.txRef || data.paymentReference,
+          amount: data.amount,
+          currency: data.currency,
+          userEmail: data.userEmail,
+          userName: data.userName,
+          tier: customTier.id,
+          onSuccess: async (flwData) => {
+            try {
+              await api.post('/payment/verify-flutterwave', {
+                transactionId: flwData.transaction_id,
+                txRef: data.txRef || data.paymentReference,
+              });
+            } catch { /* webhook handles it */ }
+            await fetchProfile();
+            setPaymentSuccess(customTier.name);
+            setSelectedTier(null);
+          },
+          onClose: (error) => {
+            if (error) setErrorMsg('Payment did not complete. Please try again.');
+          },
+        });
+      } else if (data.accessCode) {
+        // Paystack inline popup
         setIsLoading(false);
         await openPaystackInline({
           accessCode: data.accessCode,
@@ -378,7 +442,7 @@ export default function Pricing() {
               </div>
 
               <p className="text-center text-xs font-semibold text-gray-400 mt-6 flex items-center justify-center gap-1.5">
-                Secured by Stripe &amp; Paystack
+                Secured by Flutterwave &amp; Paystack
               </p>
             </div>
 

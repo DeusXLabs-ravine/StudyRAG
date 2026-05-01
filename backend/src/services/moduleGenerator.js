@@ -119,6 +119,7 @@ async function generateOutlineForSegment(segmentText, segmentIndex, totalSegment
     const model = getGenerativeModel('fast');
     return model.generateContent(prompt);
   }, 3, 1);
+  const text = result.response.text();
   const parsed = extractJSON(text);
   return parsed?.modules || [];
 }

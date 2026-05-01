@@ -175,22 +175,20 @@ async function generatePrepContent(sessionId, userId = null) {
       .single();
     if (sessErr) throw sessErr;
 
-    // 2. Gather study document content
-    const allTexts = [];
-    for (const docId of session.document_ids) {
-      const pages = await vectorStore.getDocumentPages(docId);
-      if (pages.length > 0) {
-        const docText = pages.map(p =>
-          `[Page ${p.pageNumber}${p.heading ? ` - ${p.heading}` : ''}]\n${p.text}`
-        ).join('\n\n');
-        allTexts.push(docText);
-      } else {
-        const chunks = await vectorStore.getDocumentChunks(docId);
-        if (chunks.length > 0) {
-          allTexts.push(chunks.map(c => c.text).join('\n\n---\n\n'));
+    // 2. Gather study document content — all docs in parallel
+    const docTexts = await Promise.all(
+      session.document_ids.map(async (docId) => {
+        const pages = await vectorStore.getDocumentPages(docId);
+        if (pages.length > 0) {
+          return pages.map(p =>
+            `[Page ${p.pageNumber}${p.heading ? ` - ${p.heading}` : ''}]\n${p.text}`
+          ).join('\n\n');
         }
-      }
-    }
+        const chunks = await vectorStore.getDocumentChunks(docId);
+        return chunks.length > 0 ? chunks.map(c => c.text).join('\n\n---\n\n') : '';
+      })
+    );
+    const allTexts = docTexts.filter(Boolean);
 
     const studyContent = prepareTextForLLM(allTexts.join('\n\n===\n\n'), 60000);
 
@@ -333,23 +331,22 @@ async function generatePracticeExam(sessionId, { numQuestions = 20, difficulty =
     .single();
   if (sessErr) throw sessErr;
 
-  // Gather study content
-  const allTexts = [];
-  for (const docId of session.document_ids) {
-    const pages = await vectorStore.getDocumentPages(docId);
-    if (pages.length > 0) {
-      allTexts.push(pages.map(p => p.text).join('\n\n'));
-    } else {
+  // Gather study content — all docs in parallel
+  const docTexts = await Promise.all(
+    session.document_ids.map(async (docId) => {
+      const pages = await vectorStore.getDocumentPages(docId);
+      if (pages.length > 0) return pages.map(p => p.text).join('\n\n');
       const chunks = await vectorStore.getDocumentChunks(docId);
-      if (chunks.length > 0) {
-        allTexts.push(chunks.map(c => c.text).join('\n\n'));
-      }
-    }
-  }
+      return chunks.length > 0 ? chunks.map(c => c.text).join('\n\n') : '';
+    })
+  );
+  const allTexts = docTexts.filter(Boolean);
 
   const studyContent = prepareTextForLLM(allTexts.join('\n\n===\n\n'), 50000);
-  const teachingLevel = await getUserTeachingLevel(userId);
-  const weakTopics = await getWeakTopics(10, 0.6, userId);
+  const [teachingLevel, weakTopics] = await Promise.all([
+    getUserTeachingLevel(userId),
+    getWeakTopics(10, 0.6, userId),
+  ]);
   const weakTopicsSection = weakTopics.length > 0
     ? `Student's weak topics:\n${weakTopics.map(t => `- ${t.topic} (avg score: ${Math.round(t.avg_score * 100)}%)`).join('\n')}`
     : '';

@@ -28,6 +28,7 @@ export default function Flashcards() {
   const [selectedDocId, setSelectedDocId] = useState(null);
   const [studyMode, setStudyMode] = useState(false); // smart study mode
   const [sessionStartTime, setSessionStartTime] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchDocuments();
@@ -49,6 +50,7 @@ export default function Flashcards() {
   };
 
   const handleGenerate = async () => {
+    setError(null);
     setGenerating(true);
     try {
       const deck = await flashcardService.generateFlashcards({
@@ -61,13 +63,14 @@ export default function Flashcards() {
       setFlipped(false);
       setSessionStartTime(Date.now());
     } catch (err) {
-      alert(err.message);
+      setError(err.message || 'Failed to generate flashcards.');
     } finally {
       setGenerating(false);
     }
   };
 
   const handleGenerateAdaptive = async () => {
+    setError(null);
     setGenerating(true);
     try {
       const deck = await flashcardService.generateAdaptiveFlashcards({ numCards: 20 });
@@ -78,13 +81,14 @@ export default function Flashcards() {
       setStudyMode(true);
       setSessionStartTime(Date.now());
     } catch (err) {
-      alert(err.message);
+      setError(err.message || 'Failed to generate adaptive flashcards.');
     } finally {
       setGenerating(false);
     }
   };
 
   const startSmartStudy = async (deckId) => {
+    setError(null);
     try {
       const queue = await flashcardService.getStudyQueue(deckId);
       setCurrentDeck(queue);
@@ -93,7 +97,7 @@ export default function Flashcards() {
       setStudyMode(true);
       setSessionStartTime(Date.now());
     } catch (err) {
-      alert(err.message);
+      setError(err.message || 'Failed to load study queue.');
     }
   };
 
@@ -161,6 +165,12 @@ export default function Flashcards() {
   if (!currentDeck) {
     return (
       <div className="max-w-xl mx-auto px-4 py-8 md:py-8">
+        {error && (
+          <div className="mb-6 flex items-start gap-3 px-5 py-4 bg-red-50 border border-red-100 rounded-2xl text-sm text-red-700 font-bold">
+            <span className="flex-1">{error}</span>
+            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 transition-colors shrink-0">✕</button>
+          </div>
+        )}
         <div className="mb-12">
           <h1 className="text-3xl md:text-5xl font-black text-gray-950 tracking-tight uppercase leading-none">Spaced Repetition</h1>
           <p className="text-sm md:text-lg text-gray-500 mt-4 font-medium max-w-md">Systematically master key concepts through science-backed recall protocols.</p>
@@ -300,6 +310,15 @@ export default function Flashcards() {
 
   // Flashcard study view
   const stats = getCardStats(currentDeck.cards);
+
+  if (!currentDeck.cards || currentDeck.cards.length === 0) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-8 text-center">
+        <p className="text-gray-500 font-medium">This deck has no cards.</p>
+        <button onClick={() => setCurrentDeck(null)} className="mt-4 px-4 py-2 bg-primary text-white rounded-xl font-bold text-sm">Back to Decks</button>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-xl mx-auto px-4 py-8 md:py-8">

@@ -3,6 +3,7 @@ const router = express.Router();
 const monnifyService = require('../services/monnifyService');
 const paystackService = require('../services/paystackService');
 const paypalService = require('../services/paypalService');
+const flutterwaveService = require('../services/flutterwaveService');
 const supabase = require('../config/database');
 const crypto = require('crypto');
 const { appBaseUrl } = require('../config/env');
@@ -156,6 +157,33 @@ router.post('/checkout', async (req, res, next) => {
         transactionReference = response.transactionReference;
         actualGateway = 'monnify';
       }
+    } else if (gateway === 'flutterwave') {
+      const { flutterwavePublicKey } = require('../config/env');
+      // Don't call Flutterwave API to initialize - just return tx_ref + public key
+      // Frontend will open the Flutterwave popup directly
+      checkoutUrl = null;
+      accessCode = null;
+      actualGateway = 'flutterwave';
+      // Return special fields for Flutterwave inline
+      const flwData = {
+        flutterwavePublicKey,
+        txRef: paymentReference,
+        amount,
+        currency: reqCurrency,
+        userEmail: user.email,
+        userName: user.display_name || user.email.split('@')[0],
+        tier: tier.toLowerCase(),
+      };
+      // Save PENDING transaction
+      const { error: dbError2 } = await supabase.from('transactions').insert([{
+        user_id: user.id, payment_reference: paymentReference,
+        transaction_reference: paymentReference, amount, currency: reqCurrency,
+        payment_method: 'flutterwave', status: 'PENDING',
+        description: `StudyRAG ${tier.toUpperCase()} Subscription`,
+        created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }]);
+      if (dbError2) console.warn('[PaymentRoutes] DB insert failed (non-fatal):', dbError2.message);
+      return res.json({ ...flwData, paymentReference });
     } else if (gateway === 'paypal') {
       try {
         const response = await paypalService.createOrder({
@@ -381,6 +409,48 @@ router.post('/verify-paypal', async (req, res) => {
   } catch (error) {
     console.error('[PaymentVerify] PayPal Error:', error);
     res.status(500).json({ error: 'Failed to verify PayPal payment.' });
+  }
+});
+
+// ── Verify Flutterwave ──────────────────────────────────────────────────────
+
+router.post('/verify-flutterwave', async (req, res) => {
+  const { transactionId, txRef } = req.body;
+  const user = req.user;
+  try {
+    if (!transactionId || !txRef) return res.status(400).json({ error: 'Missing transactionId or txRef' });
+
+    const { data: transaction, error: txError } = await supabase
+      .from('transactions').select('*').eq('payment_reference', txRef).eq('user_id', user.id).single();
+    if (txError || !transaction) return res.status(404).json({ error: 'Transaction not found.' });
+    if (transaction.status === 'PAID') {
+      const { data: profile } = await supabase.from('profiles').select('subscription_tier').eq('id', user.id).single();
+      return res.json({ status: 'success', tier: profile?.subscription_tier });
+    }
+
+    const flwData = await flutterwaveService.verifyTransaction(transactionId);
+    if (flwData.status !== 'successful') return res.json({ status: flwData.status });
+
+    // Verify tx_ref matches and amount is correct
+    if (flwData.tx_ref !== txRef) return res.status(400).json({ error: 'Transaction reference mismatch.' });
+
+    let newTier = 'free';
+    if (transaction.amount == 5000 || transaction.amount == 10) newTier = 'basic';
+    if (transaction.amount == 20000 || transaction.amount == 25) newTier = 'pro';
+    if (transaction.amount == 50000 || transaction.amount == 50) newTier = 'max';
+    if (newTier === 'free' && flwData.meta?.tier) {
+      const metaTier = String(flwData.meta.tier).toLowerCase();
+      if (['basic','pro','max'].includes(metaTier)) newTier = metaTier;
+    }
+
+    const endDate = new Date(); endDate.setDate(endDate.getDate() + 30);
+    await supabase.from('transactions').update({ status: 'PAID', updated_at: new Date() }).eq('id', transaction.id);
+    await supabase.from('profiles').update({ subscription_tier: newTier, subscription_status: 'active', subscription_end_date: endDate, updated_at: new Date() }).eq('id', user.id);
+    console.log(`[PaymentVerify] Upgraded user ${user.id} to ${newTier.toUpperCase()} via Flutterwave.`);
+    return res.json({ status: 'success', tier: newTier });
+  } catch (err) {
+    console.error('[PaymentVerify] Flutterwave error:', err);
+    res.status(500).json({ error: 'Failed to verify Flutterwave payment.' });
   }
 });
 

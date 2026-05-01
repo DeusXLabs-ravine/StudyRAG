@@ -46,6 +46,8 @@ export default function Exam() {
   const [activeTab, setActiveTab] = useState('guide');
   const [expandedTopics, setExpandedTopics] = useState({});
   const [expandedQuestions, setExpandedQuestions] = useState({});
+  const [expandedQs, setExpandedQs] = useState({});
+  const [examError, setExamError] = useState(null);
   // Practice exam config
   const [practiceConfig, setPracticeConfig] = useState({ numQuestions: 20, difficulty: 'medium', timeLimitMinutes: 30 });
   // Exam state (reused for practice exams)
@@ -109,7 +111,7 @@ export default function Exam() {
         setPhase('select-docs');
       }
     } catch (err) {
-      alert('Failed to load session: ' + err.message);
+      setExamError('Failed to load session: ' + (err.message || 'Unknown error'));
     }
   }, []);
 
@@ -148,7 +150,7 @@ export default function Exam() {
       const mat = await examService.addPrepMaterialFile(prepSession.id, file, materialType);
       setMaterials(prev => [...prev, mat]);
     } catch (err) {
-      alert('Upload failed: ' + err.message);
+      setExamError('Upload failed: ' + (err.message || 'Unknown error'));
     } finally {
       setUploadingMaterial(false);
     }
@@ -165,7 +167,7 @@ export default function Exam() {
       setTextInputs(prev => ({ ...prev, [materialType]: '' }));
       setShowTextInput(prev => ({ ...prev, [materialType]: false }));
     } catch (err) {
-      alert('Failed to add text: ' + err.message);
+      setExamError('Failed to add text: ' + (err.message || 'Unknown error'));
     } finally {
       setUploadingMaterial(false);
     }
@@ -193,7 +195,7 @@ export default function Exam() {
       setPhase('generating');
       startPolling(session.id);
     } catch (err) {
-      alert('Failed to start generation: ' + err.message);
+      setExamError('Failed to start generation: ' + (err.message || 'Unknown error'));
     } finally {
       setGenerating(false);
     }
@@ -223,13 +225,16 @@ export default function Exam() {
         });
       }, 1000);
     } catch (err) {
-      alert('Failed to generate practice exam: ' + err.message);
+      setExamError('Failed to generate practice exam: ' + (err.message || 'Unknown error'));
     } finally {
       setPracticeLoading(false);
     }
   };
 
   const handleAutoSubmit = () => handleSubmit(true);
+
+  // Alias: practice exam buttons pass a focus mode string but startPracticeExam ignores it.
+  const handleCreatePracticeExam = (_focusMode) => startPracticeExam();
 
   const handleSubmit = async (auto = false) => {
     if (!exam) return;
@@ -242,7 +247,7 @@ export default function Exam() {
       setResult(data);
       setPhase('practice-results');
     } catch (err) {
-      alert(err.message);
+      setExamError(err.message || 'Failed to submit exam.');
     } finally {
       setSubmitting(false);
     }
@@ -258,7 +263,7 @@ export default function Exam() {
         setPhase('landing');
       }
     } catch (err) {
-      alert('Delete failed: ' + err.message);
+      setExamError('Delete failed: ' + (err.message || 'Unknown error'));
     }
   };
 
@@ -284,6 +289,12 @@ export default function Exam() {
   if (phase === 'landing') {
     return (
       <div className="max-w-xl mx-auto px-4 py-8 md:py-12">
+        {examError && (
+          <div className="mb-6 flex items-start gap-3 px-5 py-4 bg-red-50 border border-red-100 rounded-2xl text-sm text-red-700 font-bold">
+            <span className="flex-1">{examError}</span>
+            <button onClick={() => setExamError(null)} className="text-red-400 hover:text-red-600 transition-colors shrink-0">✕</button>
+          </div>
+        )}
         <div className="mb-12">
           <h1 className="text-3xl md:text-5xl font-black text-gray-950 tracking-tight uppercase leading-none">Exam Prep</h1>
           <p className="text-sm md:text-lg text-gray-500 mt-4 font-medium max-w-md leading-relaxed">High-fidelity examination protocols and adaptive study guides.</p>
@@ -465,6 +476,12 @@ export default function Exam() {
   if (phase === 'add-materials') {
     return (
       <div className="max-w-xl mx-auto px-4 py-8 md:py-12">
+        {examError && (
+          <div className="mb-6 flex items-start gap-3 px-5 py-4 bg-red-50 border border-red-100 rounded-2xl text-sm text-red-700 font-bold">
+            <span className="flex-1">{examError}</span>
+            <button onClick={() => setExamError(null)} className="text-red-400 hover:text-red-600 transition-colors shrink-0">✕</button>
+          </div>
+        )}
         <div className="mb-10">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center text-primary font-black text-xs">02</div>
@@ -592,10 +609,12 @@ export default function Exam() {
           ))}
         </div>
 
+        {uploadingMaterial && (
           <div className="flex items-center gap-4 mb-8 p-5 bg-primary/5 rounded-2xl border-2 border-primary/10">
             <Loader2 className="h-5 w-5 text-primary animate-spin" />
             <span className="text-[10px] font-black uppercase tracking-widest text-primary">AI is absorbing material...</span>
           </div>
+        )}
 
         <div className="flex flex-col sm:flex-row gap-3">
           <button
@@ -628,6 +647,12 @@ export default function Exam() {
   if (phase === 'configure') {
     return (
       <div className="max-w-xl mx-auto px-4 py-8 md:py-12">
+        {examError && (
+          <div className="mb-6 flex items-start gap-3 px-5 py-4 bg-red-50 border border-red-100 rounded-2xl text-sm text-red-700 font-bold">
+            <span className="flex-1">{examError}</span>
+            <button onClick={() => setExamError(null)} className="text-red-400 hover:text-red-600 transition-colors shrink-0">✕</button>
+          </div>
+        )}
         <div className="mb-10">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center text-primary font-black text-xs">03</div>
@@ -1093,6 +1118,12 @@ export default function Exam() {
 
     return (
       <div className="max-w-xl mx-auto px-4 py-8 md:py-12">
+        {examError && (
+          <div className="mb-6 flex items-start gap-3 px-5 py-4 bg-red-50 border border-red-100 rounded-2xl text-sm text-red-700 font-bold">
+            <span className="flex-1">{examError}</span>
+            <button onClick={() => setExamError(null)} className="text-red-400 hover:text-red-600 transition-colors shrink-0">✕</button>
+          </div>
+        )}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-primary/5 rounded-xl flex items-center justify-center">
@@ -1165,7 +1196,7 @@ export default function Exam() {
             </button>
           ) : (
             <button
-              onClick={handleSubmitPracticeExam}
+              onClick={() => handleSubmit()}
               disabled={Object.keys(answers).length < totalQ}
               className="px-10 py-4 bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-200 disabled:grayscale disabled:opacity-50"
             >

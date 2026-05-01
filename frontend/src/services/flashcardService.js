@@ -25,8 +25,10 @@ export async function getStudyQueue(deckId) {
   return data;
 }
 
-export async function reviewFlashcard(cardId, quality) {
-  const { data } = await api.put(`/flashcards/${cardId}/review`, { quality });
+export async function reviewFlashcard(cardId, quality, durationSeconds) {
+  const body = { quality };
+  if (durationSeconds != null) body.durationSeconds = durationSeconds;
+  const { data } = await api.put(`/flashcards/${cardId}/review`, body);
   return data;
 }
 

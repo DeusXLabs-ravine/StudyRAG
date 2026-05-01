@@ -43,6 +43,8 @@ const config = {
   paypalClientId: process.env.PAYPAL_CLIENT_ID || null,
   paypalClientSecret: process.env.PAYPAL_CLIENT_SECRET || null,
   paypalEnvironment: process.env.PAYPAL_ENVIRONMENT || 'sandbox',
+  flutterwaveSecretKey: process.env.FLUTTERWAVE_SECRET_KEY || null,
+  flutterwavePublicKey: process.env.FLUTTERWAVE_PUBLIC_KEY || null,
 };
 
 console.log(`[Config] Environment: ${config.nodeEnv}`);

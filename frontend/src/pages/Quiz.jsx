@@ -19,12 +19,14 @@ export default function Quiz() {
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState('config'); // config, quiz, result
   const [startTime, setStartTime] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
 
   useEffect(() => { fetchDocuments(); }, [fetchDocuments]);
 
   const readyDocs = (documents || []).filter(d => d.status === 'ready');
 
   const handleGenerate = async () => {
+    setErrorMsg(null);
     setLoading(true);
     try {
       const data = await quizService.generateQuiz(config);
@@ -34,7 +36,7 @@ export default function Quiz() {
       setStartTime(Date.now());
       setView('quiz');
     } catch (err) {
-      alert(err.message);
+      setErrorMsg(err.message || 'Failed to generate quiz.');
     } finally {
       setLoading(false);
     }
@@ -45,6 +47,7 @@ export default function Quiz() {
   };
 
   const handleSubmit = async () => {
+    setErrorMsg(null);
     setLoading(true);
     try {
       const timeSpentSeconds = Math.round((Date.now() - startTime) / 1000);
@@ -53,7 +56,7 @@ export default function Quiz() {
       setResult(data);
       setView('result');
     } catch (err) {
-      alert(err.message);
+      setErrorMsg(err.message || 'Failed to submit quiz.');
     } finally {
       setLoading(false);
     }
@@ -69,6 +72,12 @@ export default function Quiz() {
   if (view === 'config') {
     return (
       <div className="max-w-xl mx-auto px-4 py-8 md:py-12">
+        {errorMsg && (
+          <div className="mb-6 flex items-start gap-3 px-5 py-4 bg-red-50 border border-red-100 rounded-2xl text-sm text-red-700 font-bold">
+            <span className="flex-1">{errorMsg}</span>
+            <button onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-red-600 transition-colors shrink-0">✕</button>
+          </div>
+        )}
         <div className="mb-12">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/5 border border-primary/10 text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-4">
             <Target className="h-3 w-3" /> Technical Protocols
@@ -208,6 +217,12 @@ export default function Quiz() {
 
     return (
       <div className="max-w-2xl mx-auto px-4 py-8">
+        {errorMsg && (
+          <div className="mb-4 flex items-start gap-3 px-5 py-4 bg-red-50 border border-red-100 rounded-2xl text-sm text-red-700 font-bold">
+            <span className="flex-1">{errorMsg}</span>
+            <button onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-red-600 transition-colors shrink-0">✕</button>
+          </div>
+        )}
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-lg font-bold text-gray-900">Quiz</h1>
           <span className="text-sm text-gray-500">

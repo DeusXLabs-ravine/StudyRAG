@@ -12,12 +12,12 @@ import {
   Zap,
   ArrowRight,
   Database,
-  Sparkles,
   CheckCircle2,
   Play,
   X,
   FileText,
   Brain,
+  Target,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import FeatureLiveDemo from '../components/features/FeatureLiveDemo';

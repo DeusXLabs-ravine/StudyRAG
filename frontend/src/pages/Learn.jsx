@@ -145,7 +145,7 @@ export default function Learn() {
       // Pick the last accessed (highest progress attempts) or first incomplete
       const lastAccessed = modules.reduce((best, m) =>
         (m.progress?.attempts ?? 0) > (best?.progress?.attempts ?? -1) ? m : best
-      , null);
+        , null);
       const firstIncomplete = modules.find(m => !m.progress?.completed);
       const pick = lastAccessed?.progress?.attempts > 0 ? lastAccessed : (firstIncomplete || modules[0]);
       if (pick) setCurrentModule(pick);
@@ -930,7 +930,7 @@ export default function Learn() {
                   </div>
                 </div>
                 <div className="flex-1 overflow-hidden">
-                   <TutorChat
+                  <TutorChat
                     messages={tutorMessages}
                     input={tutorInput}
                     setInput={setTutorInput}
@@ -1104,11 +1104,10 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
                 key={`sp-${idx}`}
                 onClick={() => isReady && onSectionPodcastClick(sp)}
                 disabled={!isReady}
-                className={`w-full mt-1 flex items-center gap-3 px-3 py-3 rounded-xl text-left text-sm transition-all border ${
-                  isReady
+                className={`w-full mt-1 flex items-center gap-3 px-3 py-3 rounded-xl text-left text-sm transition-all border ${isReady
                     ? 'bg-violet-50 border-violet-200 text-violet-800 hover:bg-violet-100 hover:translate-x-1 cursor-pointer'
                     : 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed'
-                }`}
+                  }`}
               >
                 <div className="flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center bg-violet-100">
                   {isGenerating
