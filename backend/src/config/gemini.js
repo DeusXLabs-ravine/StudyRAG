@@ -130,7 +130,7 @@ if (keys.length > 0) {
 // Primary models per tier. 3-pro is deprecated March 9 2026 → migrated to 3.1-pro.
 const MODELS = {
   fast: 'gemini-2.5-flash',
-  standard: 'gemini-3-flash-preview',
+  standard: 'gemini-3.1-flash-lite',
   advanced: 'gemini-3.1-pro-preview', // 2.0 Flash is currently very strong, use exp for advanced features
   imageGen: [
     'gemini-2.5-flash-image', // Supports image generation in some versions
@@ -145,7 +145,7 @@ const FALLBACK_MODELS = {
   fast: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash-lite'],
   standard: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'],
   advanced: [
-    'gemini-3-flash-preview',   // Flash: free tier, reliable — try before burning paid-only quota
+    'gemini-3.1-flash-lite',   // Flash: free tier, reliable — try before burning paid-only quota
     'gemini-2.5-flash',         // Flash fallback
     'gemini-2.5-flash-lite',    // Flash lite fallback
     'gemini-3-pro-preview',     // Pro: only works with paid keys
@@ -403,12 +403,12 @@ function isOverloadError(err) {
  */
 function isNetworkError(err) {
   const msg = err?.message || String(err);
-  return msg.includes('fetch failed') || 
-         msg.includes('ECONNRESET') || 
-         msg.includes('ETIMEDOUT') ||
-         msg.includes('Socket closed') ||
-         msg.includes('UND_ERR_CONNECT_TIMEOUT') ||
-         msg.includes('Network Error');
+  return msg.includes('fetch failed') ||
+    msg.includes('ECONNRESET') ||
+    msg.includes('ETIMEDOUT') ||
+    msg.includes('Socket closed') ||
+    msg.includes('UND_ERR_CONNECT_TIMEOUT') ||
+    msg.includes('Network Error');
 }
 
 /**
