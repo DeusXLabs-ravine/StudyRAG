@@ -14,6 +14,14 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "duesx-e1",
+          "project": "studyrag",
+          "url": "https://sentry.io/"
+        }
+      ],
       "expo-font",
       "expo-secure-store",
       "expo-web-browser",

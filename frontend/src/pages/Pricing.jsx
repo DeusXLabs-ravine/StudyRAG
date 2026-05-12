@@ -2,15 +2,14 @@ import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PublicNavbar from '../components/layout/PublicNavbar';
 import Footer from '../components/layout/Footer';
-import { Check, Star, CheckCircle, CreditCard, Landmark, Send, Loader2, X } from 'lucide-react';
+import { Check, Star, CheckCircle, CreditCard, Landmark, Send, Loader2, X, GraduationCap } from 'lucide-react';
 import SEO from '../components/common/SEO';
 import useAuthStore from '../store/authStore';
 import api from '../services/api';
 import { formatTierPrice, checkIsNigerianUser, isNigerianUserSync } from '../utils/currency';
 import NativePayButton from '../components/paywall/NativePayButton';
 
-
-const tierData = [
+const MONTHLY_TIERS = [
   {
     id: 'free',
     name: 'Free',
@@ -18,8 +17,8 @@ const tierData = [
     usd: 0,
     desc: 'Start studying with your own material for free.',
     features: [
-      'Up to 2 library documents',
-      '50 chats per month',
+      'Up to 3 library documents',
+      '75 chats per month',
       'Temporary chats only',
       'Learn mode included',
       'Community support',
@@ -32,12 +31,13 @@ const tierData = [
     name: 'Basic',
     ngn: 5000,
     usd: 10,
-    desc: 'Best for regular coursework and weekly revision.',
+    desc: 'Regular coursework with a taste of advanced tools.',
     features: [
       'Up to 10 library documents',
       '200 chats per month',
       'Full chat history',
-      'Learn mode included',
+      '3 Teach Mode sessions/month',
+      '2 Study podcasts/month',
       'Standard support',
     ],
     cta: 'Choose Basic',
@@ -46,14 +46,14 @@ const tierData = [
   {
     id: 'pro',
     name: 'Pro',
-    ngn: 20000,
-    usd: 25,
-    desc: 'Advanced tools for deeper study and heavier usage.',
+    ngn: 15000,
+    usd: 20,
+    desc: 'Unlimited advanced tools for deeper study.',
     features: [
       'Up to 50 library documents',
       '1,500 chats per month',
-      'Unlock Teach Mode',
-      'Study Break podcast',
+      'Unlimited Teach Mode',
+      'Unlimited Study podcasts',
       'Image and diagram generation',
       'Priority processing',
     ],
@@ -63,21 +63,45 @@ const tierData = [
   {
     id: 'max',
     name: 'Max',
-    ngn: 50000,
-    usd: 50,
+    ngn: 45000,
+    usd: 45,
     desc: 'For intensive study loads and power users.',
     features: [
       'Up to 200 library documents',
       'Unlimited AI with fair use',
       'Everything in Pro',
       'Priority AI reasoning models',
-      'Early access to new features',
+      'Study Buddy voice partner',
       '24/7 priority support',
     ],
     cta: 'Get Max',
     popular: false,
   },
 ];
+
+// Annual = 10 months price (2 months free)
+const ANNUAL_MULTIPLIER = 10;
+const STUDENT_DISCOUNT = 0.75; // 25% off
+
+function getAnnualTiers(isStudent) {
+  return MONTHLY_TIERS.map(t => {
+    if (t.id === 'free') return { ...t };
+    const annualNgn = Math.round(t.ngn * ANNUAL_MULTIPLIER * (isStudent ? STUDENT_DISCOUNT : 1));
+    const annualUsd = Math.round(t.usd * ANNUAL_MULTIPLIER * (isStudent ? STUDENT_DISCOUNT : 1));
+    const monthlyEquivNgn = Math.round(annualNgn / 12);
+    const monthlyEquivUsd = Math.round(annualUsd / 12 * 10) / 10;
+    return {
+      ...t,
+      ngn: annualNgn,
+      usd: annualUsd,
+      annualNgn,
+      annualUsd,
+      monthlyEquivNgn,
+      monthlyEquivUsd,
+      isAnnual: true,
+    };
+  });
+}
 
 const pricingHighlights = [
   {
@@ -100,13 +124,13 @@ const pricingSchema = [
     '@type': 'WebPage',
     name: 'StudyRAG Pricing',
     url: 'https://studyrag.co/pricing',
-    description: 'StudyRAG pricing plans for students who want AI-powered study from notes, PDFs, and other source material.',
+    description: 'StudyRAG pricing plans for students who want AI-powered study from notes, PDFs, and other source material. Plans from free to ₦45,000/mo.',
   },
   {
     '@context': 'https://schema.org',
     '@type': 'OfferCatalog',
     name: 'StudyRAG Pricing Plans',
-    itemListElement: tierData.map((tier) => ({
+    itemListElement: MONTHLY_TIERS.map((tier) => ({
       '@type': 'Offer',
       name: tier.name,
       price: String(tier.usd),
@@ -117,12 +141,7 @@ const pricingSchema = [
   },
 ];
 
-/**
- * Open Flutterwave Inline Popup by dynamically loading the Flutterwave v3 script.
- * Renders inside the current page — no redirect.
- */
-async function openFlutterwaveInline({ publicKey, txRef, amount, currency, userEmail, userName, tier, onSuccess, onClose }) {
-  // Dynamically load Flutterwave inline script
+async function openFlutterwaveInline({ publicKey, txRef, amount, currency, userEmail, userName, tier, billing, onSuccess, onClose }) {
   if (!window.FlutterwaveCheckout) {
     await new Promise((resolve, reject) => {
       const script = document.createElement('script');
@@ -138,7 +157,7 @@ async function openFlutterwaveInline({ publicKey, txRef, amount, currency, userE
     amount,
     currency,
     payment_options: 'card',
-    meta: { tier, source: 'studyrag_web' },
+    meta: { tier, billing: billing || 'monthly', source: 'studyrag_web' },
     customer: { email: userEmail, name: userName },
     callback: (data) => {
       if (data.status === 'successful' || data.status === 'completed') {
@@ -156,26 +175,13 @@ async function openFlutterwaveInline({ publicKey, txRef, amount, currency, userE
   });
 }
 
-/**
- * Open Paystack Inline Popup using @paystack/inline-js.
- * Renders inside the current page — no redirect.
- */
 async function openPaystackInline({ accessCode, onSuccess, onClose: onPopupClose }) {
   const { default: PaystackPop } = await import('@paystack/inline-js');
   const popup = new PaystackPop();
   popup.resumeTransaction(accessCode, {
-    onSuccess(transaction) {
-      console.log('[Paystack] Payment successful:', transaction.reference);
-      onSuccess?.(transaction);
-    },
-    onCancel() {
-      console.log('[Paystack] User cancelled payment');
-      onPopupClose?.();
-    },
-    onError(error) {
-      console.error('[Paystack] Payment error:', error);
-      onPopupClose?.(error);
-    },
+    onSuccess(transaction) { onSuccess?.(transaction); },
+    onCancel() { onPopupClose?.(); },
+    onError(error) { onPopupClose?.(error); },
   });
 }
 
@@ -187,15 +193,41 @@ export default function Pricing() {
   const [errorMsg, setErrorMsg] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(null);
   const [isNG, setIsNG] = useState(isNigerianUserSync());
+  const [billing, setBilling] = useState('monthly');
+
+  // Student discount state
+  const [isStudent, setIsStudent] = useState(false);
+  const [showStudentModal, setShowStudentModal] = useState(false);
+  const [studentEmail, setStudentEmail] = useState('');
+  const [studentLoading, setStudentLoading] = useState(false);
+  const [studentError, setStudentError] = useState('');
 
   useEffect(() => {
     checkIsNigerianUser().then(setIsNG);
   }, []);
 
+  const tierData = useMemo(
+    () => billing === 'annual' ? getAnnualTiers(isStudent) : MONTHLY_TIERS,
+    [billing, isStudent]
+  );
+
   const tiers = useMemo(() => tierData.map(t => {
+    if (billing === 'annual' && t.id !== 'free') {
+      // Show per-month equivalent
+      const equiv = isNG ? t.monthlyEquivNgn : t.monthlyEquivUsd;
+      const currency = isNG ? '₦' : '$';
+      const total = isNG ? t.ngn : t.usd;
+      const totalCurrency = isNG ? '₦' : '$';
+      return {
+        ...t,
+        price: `${currency}${equiv?.toLocaleString()}`,
+        priceSecondary: `${totalCurrency}${total?.toLocaleString()} billed annually`,
+        priceValue: t.ngn,
+      };
+    }
     const price = formatTierPrice(t.ngn, t.usd, isNG);
     return { ...t, price: price.primary, priceSecondary: price.secondary, priceValue: t.ngn };
-  }), [isNG]);
+  }), [tierData, isNG, billing]);
 
   useEffect(() => {
     if (user && tiers.length > 0) {
@@ -203,7 +235,7 @@ export default function Pricing() {
       const checkoutTier = params.get('checkoutTier');
       const checkoutChannel = params.get('checkoutChannel');
       const checkoutGateway = params.get('checkoutGateway') || (params.get('checkoutChannel') === 'card' ? 'flutterwave' : 'paystack');
-      
+
       if (checkoutTier && checkoutChannel) {
         const tierObj = tiers.find(t => t.id === checkoutTier);
         if (tierObj) {
@@ -215,7 +247,6 @@ export default function Pricing() {
     }
   }, [user, tiers]);
 
-  // Apple Pay and Google Pay are handled natively via NativePayButton (Paystack).
   const paymentChannels = isNG ? [
     { id: 'card', gateway: 'flutterwave', name: 'Pay with Card', icon: CreditCard, description: 'Visa, Mastercard, Verve — all countries' },
     { id: 'bank_transfer', gateway: 'paystack', name: 'Pay via Bank Transfer', icon: Send, description: 'Transfer directly from your bank' },
@@ -238,8 +269,9 @@ export default function Pricing() {
       const { data } = await api.post('/payment/checkout', {
         tier: customTier.id,
         channel: channelId,
-        gateway: gateway,
+        gateway,
         currency: isNG ? 'NGN' : 'USD',
+        billing,
       });
 
       if (!data.flutterwavePublicKey && !data.accessCode && !data.checkoutUrl) {
@@ -247,7 +279,6 @@ export default function Pricing() {
       }
 
       if (data.flutterwavePublicKey) {
-        // Flutterwave inline popup
         setIsLoading(false);
         await openFlutterwaveInline({
           publicKey: data.flutterwavePublicKey,
@@ -257,6 +288,7 @@ export default function Pricing() {
           userEmail: data.userEmail,
           userName: data.userName,
           tier: customTier.id,
+          billing,
           onSuccess: async (flwData) => {
             try {
               await api.post('/payment/verify-flutterwave', {
@@ -273,7 +305,6 @@ export default function Pricing() {
           },
         });
       } else if (data.accessCode) {
-        // Paystack inline popup
         setIsLoading(false);
         await openPaystackInline({
           accessCode: data.accessCode,
@@ -289,15 +320,31 @@ export default function Pricing() {
             if (error) setErrorMsg('Payment did not complete. Please try again.');
           },
         });
-      } else {
-        // Fallback: redirect (Monnify)
+      } else if (data.checkoutUrl) {
         window.location.href = data.checkoutUrl;
+      } else {
+        throw new Error('Payment gateway unavailable. Please try a different payment method.');
       }
     } catch (err) {
-      console.error('Checkout error:', err);
       const msg = err.response?.data?.error || err.message || 'An error occurred during checkout. Please try again.';
       setErrorMsg(msg);
       setIsLoading(false);
+    }
+  };
+
+  const handleClaimStudent = async () => {
+    setStudentLoading(true);
+    setStudentError('');
+    try {
+      await api.post('/auth/claim-student', { studentEmail });
+      setIsStudent(true);
+      setBilling('annual');
+      setShowStudentModal(false);
+      setStudentEmail('');
+    } catch (err) {
+      setStudentError(err.message || 'Could not verify student status. Check your email and try again.');
+    } finally {
+      setStudentLoading(false);
     }
   };
 
@@ -320,13 +367,51 @@ export default function Pricing() {
       <main className="flex-1 bg-gray-50/50">
         <section className="py-24 px-6">
           <div className="max-w-7xl mx-auto">
-            <div className="text-center mb-20">
+            <div className="text-center mb-12">
               <h1 className="text-4xl md:text-6xl font-black text-gray-900 mb-6 tracking-tight">
                 Focus on Learning, <br /> Not <span className="text-primary">Pricing</span>
               </h1>
-              <p className="text-lg text-gray-600 font-medium max-w-3xl mx-auto">
-                Choose the StudyRAG plan that matches your document volume, chat frequency, and exam-prep intensity. Start free, then upgrade when you need more room for notes, PDFs, flashcards, and guided study.
+              <p className="text-lg text-gray-600 font-medium max-w-3xl mx-auto mb-10">
+                Choose the StudyRAG plan that matches your document volume, chat frequency, and exam-prep intensity.
               </p>
+
+              {/* Billing toggle */}
+              <div className="inline-flex items-center gap-1 bg-gray-100 p-1 rounded-2xl mb-3">
+                <button
+                  onClick={() => setBilling('monthly')}
+                  className={`px-5 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${billing === 'monthly' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Monthly
+                </button>
+                <button
+                  onClick={() => setBilling('annual')}
+                  className={`px-5 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center gap-2 ${billing === 'annual' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Annual
+                  <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded-full">
+                    2 months free
+                  </span>
+                </button>
+              </div>
+
+              {/* Student discount banner */}
+              {!isStudent && (
+                <div className="flex items-center justify-center gap-2 mt-2">
+                  <button
+                    onClick={() => setShowStudentModal(true)}
+                    className="flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-700 underline underline-offset-2 cursor-pointer"
+                  >
+                    <GraduationCap className="h-4 w-4" />
+                    Student? Get an extra 25% off annual plans
+                  </button>
+                </div>
+              )}
+              {isStudent && billing === 'annual' && (
+                <div className="inline-flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-700 text-sm font-bold px-4 py-2 rounded-full mt-2">
+                  <GraduationCap className="h-4 w-4" />
+                  Student discount applied (25% off annual)
+                </div>
+              )}
             </div>
 
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto items-stretch">
@@ -343,7 +428,11 @@ export default function Pricing() {
                     <div className="flex flex-col mb-4">
                       <div className="flex items-baseline gap-1">
                         <span className="text-4xl font-black text-gray-900">{tier.price}</span>
-                        {tier.id !== 'free' && <span className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">/mo</span>}
+                        {tier.id !== 'free' && (
+                          <span className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">
+                            {billing === 'annual' ? '/mo' : '/mo'}
+                          </span>
+                        )}
                       </div>
                       {tier.priceSecondary && <span className="text-gray-400 font-medium text-sm">{tier.priceSecondary}</span>}
                     </div>
@@ -388,7 +477,10 @@ export default function Pricing() {
             <div className="relative p-6 px-8 border-b border-gray-100 flex items-center justify-between bg-white z-10">
               <div>
                 <h3 className="text-xl font-black text-gray-900">Select Payment Method</h3>
-                <p className="text-sm font-medium text-gray-500 mt-1">Upgrading to {selectedTier.name} ({selectedTier.price})</p>
+                <p className="text-sm font-medium text-gray-500 mt-1">
+                  Upgrading to {selectedTier.name} ({selectedTier.price}/mo
+                  {billing === 'annual' ? `, billed annually` : ''})
+                </p>
               </div>
               <button
                 onClick={() => !isLoading && setSelectedTier(null)}
@@ -399,7 +491,6 @@ export default function Pricing() {
             </div>
 
             <div className="p-6 px-8 overflow-y-auto bg-gray-50/50 flex-1">
-              {/* Apple Pay / Google Pay — native browser buttons, no popup */}
               <NativePayButton
                 tier={selectedTier.id}
                 currency={isNG ? 'NGN' : 'USD'}
@@ -466,10 +557,59 @@ export default function Pricing() {
             <h2 className="text-2xl font-black text-gray-900 mb-2">You're on {paymentSuccess}!</h2>
             <p className="text-sm text-gray-500 mb-6">Your upgrade is active. Start exploring your new features.</p>
             <button
-              onClick={() => { setPaymentSuccess(null); navigate('/documents'); }}
+              onClick={() => { setPaymentSuccess(null); navigate('/library'); }}
               className="w-full bg-primary text-white font-bold py-3 rounded-2xl hover:bg-primary/90 transition-colors cursor-pointer"
             >
               Go to Library
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Student discount modal ── */}
+      {showStudentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm" onClick={() => setShowStudentModal(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-indigo-100 flex items-center justify-center">
+                  <GraduationCap className="h-5 w-5 text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-gray-900">Student Discount</h3>
+                  <p className="text-xs text-gray-500 font-medium">25% off all annual plans</p>
+                </div>
+              </div>
+              <button onClick={() => setShowStudentModal(false)} className="h-8 w-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-400 hover:bg-gray-100 cursor-pointer">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-600 font-medium mb-4">
+              Enter your academic email address (.edu, .ac.uk, .edu.ng, etc.) to unlock the student discount on annual plans.
+            </p>
+
+            {studentError && (
+              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm font-medium">
+                {studentError}
+              </div>
+            )}
+
+            <input
+              type="email"
+              value={studentEmail}
+              onChange={e => { setStudentEmail(e.target.value); setStudentError(''); }}
+              placeholder="yourname@university.edu"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-300 mb-4"
+            />
+
+            <button
+              onClick={handleClaimStudent}
+              disabled={studentLoading || !studentEmail.trim()}
+              className="w-full bg-indigo-600 text-white font-bold py-3 rounded-2xl hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:pointer-events-none cursor-pointer flex items-center justify-center gap-2"
+            >
+              {studentLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {studentLoading ? 'Verifying...' : 'Apply Student Discount'}
             </button>
           </div>
         </div>

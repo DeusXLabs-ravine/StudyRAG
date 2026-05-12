@@ -24,16 +24,16 @@ export const SUBSCRIPTION_LIMITS: Record<
   {
     documents: number;
     chats: number;
-    teach: boolean;
+    teach: boolean | number;
     games: boolean;
     simulations: boolean;
-    podcast: boolean;
+    podcast: boolean | number;
   }
 > = {
-  free: { documents: 2, chats: 50, teach: false, games: false, simulations: false, podcast: false },
-  basic: { documents: 10, chats: 200, teach: false, games: false, simulations: false, podcast: false },
-  pro: { documents: 50, chats: 1500, teach: true, games: true, simulations: true, podcast: false },
-  max: { documents: 200, chats: 5000, teach: true, games: true, simulations: true, podcast: true },
+  free:  { documents: 3,   chats: 75,   teach: false, games: false, simulations: false, podcast: false },
+  basic: { documents: 10,  chats: 200,  teach: 3,     games: false, simulations: false, podcast: 2    },
+  pro:   { documents: 50,  chats: 1500, teach: true,  games: true,  simulations: true,  podcast: true  },
+  max:   { documents: 200, chats: 5000, teach: true,  games: true,  simulations: true,  podcast: true  },
 };
 
 export function normalizeTier(tier?: string | null): SubscriptionTier {
@@ -70,10 +70,10 @@ export function resolveSubscriptionAccess(profile?: MobileProfileAccessShape | n
     isAdminGranted,
     isUnlimited: isAdminGranted,
     planLabel: profile?.planLabel || (isAdminGranted ? 'Admin Unlimited' : tier.toUpperCase()),
-    canTeach: featureAccess.canTeach ?? limits.teach,
+    canTeach: featureAccess.canTeach ?? (limits.teach === true || (typeof limits.teach === 'number' && limits.teach > 0)),
     canGame: featureAccess.canGame ?? limits.games,
     canUseSimulations: featureAccess.canUseSimulations ?? limits.simulations,
-    canPodcast: featureAccess.canPodcast ?? limits.podcast,
+    canPodcast: featureAccess.canPodcast ?? (limits.podcast === true || (typeof limits.podcast === 'number' && limits.podcast > 0)),
     canUseLive: featureAccess.canUseLive ?? (limits.teach && tier !== 'free'),
     canUseTts: featureAccess.canUseTts ?? false,
     canUseProModels: featureAccess.canUseProModels ?? (tier === 'pro' || tier === 'max'),

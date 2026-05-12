@@ -16,6 +16,8 @@ if (typeof window !== 'undefined') {
   }
 }
 
+let _initStarted = false;
+
 const useAuthStore = create((set, get) => ({
   user: null,
   session: null,
@@ -23,6 +25,8 @@ const useAuthStore = create((set, get) => ({
   loading: true,
 
   initialize: async () => {
+    if (_initStarted) return;
+    _initStarted = true;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
@@ -55,8 +59,8 @@ const useAuthStore = create((set, get) => ({
             toast.success('Successfully Signed In', {
               description: 'Welcome back to your personalized study dashboard.'
             });
-            if (window.location.pathname === '/' || window.location.pathname === '') {
-              window.location.href = '/documents';
+            if (window.location.pathname === '/' || window.location.pathname === '' || window.location.pathname === '/auth/callback') {
+              window.location.href = '/library';
             }
           }
         } else {
@@ -72,7 +76,7 @@ const useAuthStore = create((set, get) => ({
   sendMagicLink: async (email) => {
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/documents` },
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
     if (error) throw error;
   },
@@ -80,7 +84,7 @@ const useAuthStore = create((set, get) => ({
   signInWithGoogle: async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/documents` },
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
     if (error) throw error;
   },
@@ -88,7 +92,7 @@ const useAuthStore = create((set, get) => ({
   signInWithApple: async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'apple',
-      options: { redirectTo: `${window.location.origin}/documents` },
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
     if (error) throw error;
   },
@@ -106,7 +110,9 @@ const useAuthStore = create((set, get) => ({
       try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(data.profile)); } catch {}
     } catch (err) {
       if (err.response?.status === 401) {
-        get().signOut();
+        // Verify session is actually gone before signing out (avoids sign-out on transient 401)
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) get().signOut();
       }
       // fetch profile failed — cached profile (if any) remains in use
     }

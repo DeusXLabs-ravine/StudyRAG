@@ -1,9 +1,10 @@
 import '../global.css';
+import { Sentry } from '@/lib/sentry';
 
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import * as Linking from 'expo-linking';
-import { Redirect, Stack, usePathname, useSegments } from 'expo-router';
+import { Stack, usePathname, useSegments, useRouter, useRootNavigationState } from 'expo-router';
 import { ActivityIndicator, Text, View } from 'react-native';
 import {
   Caveat_600SemiBold,
@@ -106,17 +107,20 @@ function RootNavigator() {
   const isAuthRoute = topSegment === '(auth)';
   const needsProfile = Boolean(session?.user && !profile?.onboardingCompleted);
 
-  if (!session?.user && !isIntroRoute && !isAuthRoute) {
-    return <Redirect href="/(intro)" />;
-  }
+  const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
 
-  if (session?.user && needsProfile && pathname !== '/profile-onboarding') {
-    return <Redirect href="/profile-onboarding" />;
-  }
+  useEffect(() => {
+    if (!fontsReady || loading || !rootNavigationState?.key) return;
 
-  if (session?.user && (isIntroRoute || isAuthRoute)) {
-    return <Redirect href="/(tabs)" />;
-  }
+    if (!session?.user && !isIntroRoute && !isAuthRoute) {
+      router.replace('/(intro)');
+    } else if (session?.user && needsProfile && pathname !== '/profile-onboarding') {
+      router.replace('/profile-onboarding');
+    } else if (session?.user && !needsProfile && (isIntroRoute || isAuthRoute || pathname === '/')) {
+      router.replace('/(tabs)');
+    }
+  }, [session?.user, needsProfile, isIntroRoute, isAuthRoute, pathname, fontsReady, loading, rootNavigationState?.key, router]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
@@ -137,7 +141,7 @@ function RootNavigator() {
   );
 }
 
-export default function RootLayout() {
+function RootLayout() {
   return (
     <AppProviders>
       <TutorialProvider>
@@ -146,3 +150,5 @@ export default function RootLayout() {
     </AppProviders>
   );
 }
+
+export default Sentry.wrap(RootLayout);

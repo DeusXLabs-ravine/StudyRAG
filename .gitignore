@@ -8,3 +8,4 @@ dist/
 backend/data/
 *.p8
 mobile/.expo/
+video/

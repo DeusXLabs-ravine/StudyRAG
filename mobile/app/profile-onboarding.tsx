@@ -63,9 +63,13 @@ export default function ProfileOnboardingScreen() {
           .map(item => item.trim())
           .filter(Boolean),
       });
-
-      await Promise.all(a11ySelections.map(key => setSetting(key, 'true')));
       router.replace('/(tabs)');
+
+      if (a11ySelections.length > 0) {
+        // These preferences are non-blocking; save in the background so the
+        // user can enter the app immediately after profile creation.
+        void Promise.allSettled(a11ySelections.map(key => setSetting(key, 'true')));
+      }
     } catch (error) {
       Alert.alert('Could not finish onboarding', error instanceof Error ? error.message : 'Please try again.');
     } finally {

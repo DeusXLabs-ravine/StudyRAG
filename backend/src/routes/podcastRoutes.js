@@ -70,7 +70,7 @@ Write only the dialogue lines now — no preamble, no summary, no labels outside
  * }
  * Response: { transcript, audioBase64, hostAName, hostBName }
  */
-router.post('/generate', enforceUsageCap('tts'), async (req, res) => {
+router.post('/generate', enforceUsageCap('podcast'), async (req, res) => {
   const {
     moduleTitle, moduleTopic, content, userName,
     hostAName, hostAVoice,

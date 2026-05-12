@@ -3,6 +3,7 @@ const router = express.Router();
 const { listModules, getModule, updateProgress, regenerateQuestions } = require('../controllers/moduleController');
 const { explainSimply, tutorGreeting, tutorChat } = require('../services/ragService');
 const { cacheResponse } = require('../middleware/responseCache');
+const { enforceUsageCap } = require('../middleware/tierAuth');
 
 router.get('/', cacheResponse(60_000), listModules);        // 1 min cache
 router.get('/:id', cacheResponse(2 * 60_000), getModule);   // 2 min cache
@@ -25,8 +26,8 @@ router.post('/:id/explain', async (req, res, next) => {
   }
 });
 
-// Sage tutor — greeting
-router.post('/:id/tutor/greeting', async (req, res, next) => {
+// Sage tutor — greeting (counts as 1 teach session against the monthly cap)
+router.post('/:id/tutor/greeting', enforceUsageCap('teach'), async (req, res, next) => {
   try {
     const { getModuleById } = require('../services/moduleGenerator');
     const mod = await getModuleById(req.params.id);

@@ -5,7 +5,7 @@
 use tauri::{
     menu::{AboutMetadata, Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, Submenu, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, WebviewUrl, WebviewWindowBuilder,
+    Manager,
 };
 
 const SITE_URL: &str = "https://studyrag.co";
@@ -17,6 +17,15 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .build(app)?;
     let reload = MenuItemBuilder::with_id("reload", "Reload")
         .accelerator("CmdOrCtrl+R")
+        .build(app)?;
+    let zoom_in = MenuItemBuilder::with_id("zoom-in", "Zoom In")
+        .accelerator("CmdOrCtrl+=")
+        .build(app)?;
+    let zoom_out = MenuItemBuilder::with_id("zoom-out", "Zoom Out")
+        .accelerator("CmdOrCtrl+-")
+        .build(app)?;
+    let zoom_reset = MenuItemBuilder::with_id("zoom-reset", "Actual Size")
+        .accelerator("CmdOrCtrl+0")
         .build(app)?;
     let support = MenuItemBuilder::with_id("support", "Support").build(app)?;
 
@@ -39,6 +48,10 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
     let view_menu = SubmenuBuilder::new(app, "View")
         .item(&reload)
+        .separator()
+        .item(&zoom_in)
+        .item(&zoom_out)
+        .item(&zoom_reset)
         .separator()
         .item(&PredefinedMenuItem::fullscreen(app, None)?)
         .build()?;
@@ -104,21 +117,33 @@ fn main() {
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
             "new-document" => {
-                // Spawn a second window pointed at /upload. If studyrag.co handles
-                // deep-link routes differently, swap the path.
-                let label = format!("new-{}", rand_id());
-                let _ = WebviewWindowBuilder::new(
-                    app,
-                    &label,
-                    WebviewUrl::External(format!("{SITE_URL}/").parse().unwrap()),
-                )
-                .title("StudyRAG — New Document")
-                .inner_size(1100.0, 760.0)
-                .build();
+                // Navigate main window to the new-document flow.
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.eval(&format!("window.location.href = '{SITE_URL}/documents/new'"));
+                }
             }
             "reload" => {
                 if let Some(win) = app.get_webview_window("main") {
                     let _ = win.eval("window.location.reload()");
+                }
+            }
+            "zoom-in" => {
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.eval(
+                        "document.body.style.zoom = String(Math.min(2, parseFloat(document.body.style.zoom || '1') + 0.1))"
+                    );
+                }
+            }
+            "zoom-out" => {
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.eval(
+                        "document.body.style.zoom = String(Math.max(0.5, parseFloat(document.body.style.zoom || '1') - 0.1))"
+                    );
+                }
+            }
+            "zoom-reset" => {
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.eval("document.body.style.zoom = '1'");
                 }
             }
             "support" => {
@@ -132,8 +157,3 @@ fn main() {
         .expect("error while running StudyRAG desktop");
 }
 
-fn rand_id() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    format!("{:x}", nanos)
-}

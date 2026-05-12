@@ -19,8 +19,8 @@ const ADMIN_UNLIMITED_LIMITS = Object.freeze({
 });
 
 const TIER_LIMITS = {
-  free:  { documents: 2,   chats: 50,   teach: false, games: false, simulations: false, podcast: false, live: 0,   tts: 0,   diagrams: 5,   proModels: false, buddy: false, buddyMinutesSoft: 0,   buddyMinutesHard: 0   },
-  basic: { documents: 10,  chats: 200,  teach: false, games: false, simulations: false, podcast: false, live: 0,   tts: 0,   diagrams: 20,  proModels: false, buddy: false, buddyMinutesSoft: 0,   buddyMinutesHard: 0   },
+  free:  { documents: 3,   chats: 75,   teach: false, games: false, simulations: false, podcast: false, live: 0,   tts: 0,   diagrams: 5,   proModels: false, buddy: false, buddyMinutesSoft: 0,   buddyMinutesHard: 0   },
+  basic: { documents: 10,  chats: 200,  teach: 3,     games: false, simulations: false, podcast: 2,     live: 0,   tts: 0,   diagrams: 20,  proModels: false, buddy: false, buddyMinutesSoft: 0,   buddyMinutesHard: 0   },
   pro:   { documents: 50,  chats: 1500, teach: true,  games: true,  simulations: true,  podcast: true,  live: 20,  tts: 30,  diagrams: 100, proModels: true,  buddy: false, buddyMinutesSoft: 0,   buddyMinutesHard: 0   },
   max:   { documents: 200, chats: 5000, teach: true,  games: true,  simulations: true,  podcast: true,  live: 60,  tts: 100, diagrams: 500, proModels: true,  buddy: true,  buddyMinutesSoft: 120, buddyMinutesHard: 300 },
 };
@@ -84,7 +84,7 @@ function buildSubscriptionSnapshot(profile = {}, email = null) {
 async function getSubscriptionSnapshotForUser(userId, email = null) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('email, subscription_tier, subscription_status, subscription_end_date, document_count')
+    .select('email, subscription_tier, subscription_status, subscription_end_date, document_count, is_student')
     .eq('id', userId)
     .single();
 
@@ -96,6 +96,7 @@ async function getSubscriptionSnapshotForUser(userId, email = null) {
   return {
     ...snapshot,
     documentCount: data?.document_count || 0,
+    isStudent: Boolean(data?.is_student),
   };
 }
 

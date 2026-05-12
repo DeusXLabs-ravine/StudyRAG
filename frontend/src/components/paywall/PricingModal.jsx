@@ -6,6 +6,40 @@ import useAuthStore from '../../store/authStore';
 import api from '../../services/api';
 import NativePayButton from './NativePayButton';
 
+async function openFlutterwaveInline({ publicKey, txRef, amount, currency, userEmail, userName, tier, onSuccess, onClose }) {
+  if (!window.FlutterwaveCheckout) {
+    await new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.flutterwave.com/v3.js';
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  }
+  window.FlutterwaveCheckout({
+    public_key: publicKey,
+    tx_ref: txRef,
+    amount,
+    currency,
+    payment_options: 'card',
+    meta: { tier, source: 'studyrag_web' },
+    customer: { email: userEmail, name: userName },
+    callback: (data) => {
+      if (data.status === 'successful' || data.status === 'completed') {
+        onSuccess?.(data);
+      } else {
+        onClose?.(new Error('Payment was not successful'));
+      }
+    },
+    onclose: () => onClose?.(),
+    customizations: {
+      title: 'StudyRAG',
+      description: `StudyRAG ${tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : ''} Subscription`,
+      logo: 'https://studyrag.co/logo.png',
+    },
+  });
+}
+
 const TIERS = [
   {
     id: 'free',
@@ -14,7 +48,7 @@ const TIERS = [
     usd: 0,
     icon: Zap,
     desc: 'Get started for free',
-    features: ['2 documents', '50 chats/mo', 'Learn mode'],
+    features: ['3 documents', '75 chats/mo', 'Learn mode'],
     cta: 'Current Plan',
   },
   {
@@ -23,29 +57,29 @@ const TIERS = [
     ngn: 5000,
     usd: 10,
     icon: Sparkles,
-    desc: 'For regular coursework',
-    features: ['10 documents', '200 chats/mo', 'Chat history', 'Standard support'],
+    desc: 'Regular coursework + taste of Pro',
+    features: ['10 documents', '200 chats/mo', 'Chat history', '3 Teach sessions/mo', '2 podcasts/mo'],
     cta: 'Choose Basic',
   },
   {
     id: 'pro',
     name: 'Pro',
-    ngn: 20000,
-    usd: 25,
+    ngn: 15000,
+    usd: 20,
     icon: Star,
     popular: true,
-    desc: 'Unlock advanced tools',
-    features: ['50 documents', '1,500 chats/mo', 'Teach Mode', 'Games & diagrams', 'Study podcasts', 'Priority AI'],
+    desc: 'Unlimited advanced tools',
+    features: ['50 documents', '1,500 chats/mo', 'Unlimited Teach Mode', 'Games & diagrams', 'Unlimited podcasts', 'Priority AI'],
     cta: 'Go Pro',
   },
   {
     id: 'max',
     name: 'Max',
-    ngn: 50000,
-    usd: 50,
+    ngn: 45000,
+    usd: 45,
     icon: Crown,
     desc: 'For power users',
-    features: ['200 documents', 'Unlimited chats', 'Everything in Pro', 'Pro AI models', 'Early access', 'Priority support'],
+    features: ['200 documents', 'Unlimited chats', 'Everything in Pro', 'Pro AI models', 'Study Buddy', 'Priority support'],
     cta: 'Get Max',
   },
 ];
@@ -98,7 +132,8 @@ export default function PricingModal({ isOpen, onClose, highlightTier, currentTi
   const [selectedTier, setSelectedTier] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [paymentSuccess, setPaymentSuccess] = useState(null); // tier name after success
+  const [paymentSuccess, setPaymentSuccess] = useState(null);
+  const [billing, setBilling] = useState('monthly');
 
   if (!isOpen) return null;
 
@@ -116,26 +151,51 @@ export default function PricingModal({ isOpen, onClose, highlightTier, currentTi
   };
 
   const handleCheckout = async (channelId) => {
+    const gateway = channelId === 'card' ? 'flutterwave' : 'paystack';
     setIsLoading(true);
     setErrorMsg('');
     try {
-      // 1. Initialize transaction on backend — get access_code
       const { data } = await api.post('/payment/checkout', {
         tier: selectedTier.id,
         channel: channelId,
+        gateway,
+        currency: isNigerianUser() ? 'NGN' : 'USD',
+        billing,
       });
 
-      if (!data.accessCode && !data.checkoutUrl) {
+      if (!data.flutterwavePublicKey && !data.accessCode && !data.checkoutUrl) {
         throw new Error('No payment session received');
       }
 
-      // 2. If backend returned access_code, use Paystack Inline Popup (embedded)
-      if (data.accessCode) {
-        setIsLoading(false); // hide our loader — Paystack shows its own
+      if (data.flutterwavePublicKey) {
+        setIsLoading(false);
+        await openFlutterwaveInline({
+          publicKey: data.flutterwavePublicKey,
+          txRef: data.txRef || data.paymentReference,
+          amount: data.amount,
+          currency: data.currency,
+          userEmail: data.userEmail,
+          userName: data.userName,
+          tier: selectedTier.id,
+          onSuccess: async (flwData) => {
+            try {
+              await api.post('/payment/verify-flutterwave', {
+                transactionId: flwData.transaction_id,
+                txRef: data.txRef || data.paymentReference,
+              });
+            } catch { /* webhook handles it */ }
+            await fetchProfile();
+            setPaymentSuccess(selectedTier.name);
+          },
+          onClose: (error) => {
+            if (error) setErrorMsg('Payment did not complete. Please try again.');
+          },
+        });
+      } else if (data.accessCode) {
+        setIsLoading(false);
         await openPaystackInline({
           accessCode: data.accessCode,
-          onSuccess: async (transaction) => {
-            // Verify on backend & refresh profile
+          onSuccess: async () => {
             try {
               await api.get(`/payment/verify/${encodeURIComponent(data.paymentReference)}`);
             } catch { /* webhook handles it anyway */ }
@@ -143,15 +203,13 @@ export default function PricingModal({ isOpen, onClose, highlightTier, currentTi
             setPaymentSuccess(selectedTier.name);
           },
           onClose: (error) => {
-            if (error) {
-              setErrorMsg('Payment did not complete. Please try again.');
-            }
-            // If just cancelled, do nothing — user stays on modal
+            if (error) setErrorMsg('Payment did not complete. Please try again.');
           },
         });
-      } else {
-        // Fallback: redirect to hosted checkout (Monnify fallback)
+      } else if (data.checkoutUrl) {
         window.location.href = data.checkoutUrl;
+      } else {
+        throw new Error('Payment gateway unavailable. Please try a different payment method.');
       }
     } catch (err) {
       const msg = err.response?.data?.error || err.message || 'Checkout failed. Try again.';
@@ -207,6 +265,27 @@ export default function PricingModal({ isOpen, onClose, highlightTier, currentTi
           </button>
         </div>
 
+        {/* Billing toggle */}
+        {!selectedTier && (
+          <div className="px-6 sm:px-8 pt-4 pb-0 flex justify-center">
+            <div className="inline-flex items-center gap-1 bg-gray-100 p-1 rounded-2xl">
+              <button
+                onClick={() => setBilling('monthly')}
+                className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${billing === 'monthly' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setBilling('annual')}
+                className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${billing === 'annual' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
+              >
+                Annual
+                <span className="bg-emerald-100 text-emerald-700 text-[9px] font-black px-1.5 py-0.5 rounded-full">2mo free</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Tier cards */}
         <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6">
           {selectedTier ? (
@@ -225,12 +304,17 @@ export default function PricingModal({ isOpen, onClose, highlightTier, currentTi
                   {selectedTier.name}
                 </div>
                 <p className="text-2xl font-black text-gray-900">
-                  {formatTierPrice(selectedTier.ngn, selectedTier.usd).primary}
-                  <span className="text-sm text-gray-400 font-bold ml-1">/mo</span>
+                  {formatTierPrice(
+                    billing === 'annual' ? selectedTier.ngn * 10 : selectedTier.ngn,
+                    billing === 'annual' ? selectedTier.usd * 10 : selectedTier.usd
+                  ).primary}
+                  <span className="text-sm text-gray-400 font-bold ml-1">
+                    {billing === 'annual' ? '/yr' : '/mo'}
+                  </span>
                 </p>
-                <p className="text-xs text-gray-400 font-medium mt-1">
-                  {formatTierPrice(selectedTier.ngn, selectedTier.usd).secondary}
-                </p>
+                {billing === 'annual' && (
+                  <p className="text-xs text-emerald-600 font-bold mt-1">2 months free vs monthly</p>
+                )}
               </div>
 
               {/* Apple Pay / Google Pay — native browser buttons, no popup */}
@@ -272,14 +356,25 @@ export default function PricingModal({ isOpen, onClose, highlightTier, currentTi
               </div>
 
               <p className="text-center text-[10px] font-semibold text-gray-300 mt-5 uppercase tracking-wider">
-                Secured by Stripe &amp; Paystack
+                Secured by Flutterwave &amp; Paystack
               </p>
             </div>
           ) : (
             /* Tier grid */
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {TIERS.map((tier) => {
-                const price = formatTierPrice(tier.ngn, tier.usd);
+                const isNG = isNigerianUser();
+                let displayNgn = tier.ngn;
+                let displayUsd = tier.usd;
+                let annualNote = null;
+                if (billing === 'annual' && tier.id !== 'free') {
+                  displayNgn = tier.ngn * 10;
+                  displayUsd = tier.usd * 10;
+                  const perMoNgn = Math.round(tier.ngn * 10 / 12);
+                  const perMoUsd = Math.round(tier.usd * 10 / 12 * 10) / 10;
+                  annualNote = isNG ? `₦${perMoNgn.toLocaleString()}/mo` : `$${perMoUsd}/mo`;
+                }
+                const price = formatTierPrice(displayNgn, displayUsd);
                 const Icon = tier.icon;
                 const isCurrent = tier.id === currentTier;
                 const isDowngrade = TIER_ORDER.indexOf(tier.id) <= currentIdx && tier.id !== 'free';
@@ -311,8 +406,15 @@ export default function PricingModal({ isOpen, onClose, highlightTier, currentTi
 
                     <div className="mb-3">
                       <span className="text-2xl font-black text-gray-900">{price.primary}</span>
-                      {tier.id !== 'free' && <span className="text-[10px] text-gray-400 font-bold ml-0.5">/mo</span>}
-                      {price.secondary && (
+                      {tier.id !== 'free' && (
+                        <span className="text-[10px] text-gray-400 font-bold ml-0.5">
+                          {billing === 'annual' ? '/yr' : '/mo'}
+                        </span>
+                      )}
+                      {billing === 'annual' && annualNote && (
+                        <p className="text-[10px] text-emerald-600 font-bold mt-0.5">{annualNote} equiv.</p>
+                      )}
+                      {billing === 'monthly' && price.secondary && (
                         <p className="text-[10px] text-gray-400 font-medium mt-0.5">{price.secondary}</p>
                       )}
                     </div>

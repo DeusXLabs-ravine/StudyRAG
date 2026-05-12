@@ -40,7 +40,9 @@ api.interceptors.response.use(
   response => response,
   error => {
     const raw = error.response?.data?.error?.message || error.message || 'An error occurred';
-    return Promise.reject(new Error(friendlyError(raw)));
+    const enriched = new Error(friendlyError(raw));
+    enriched.response = error.response;
+    return Promise.reject(enriched);
   },
 );
 

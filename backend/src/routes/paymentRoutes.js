@@ -12,15 +12,30 @@ const { getSubscriptionSnapshotForUser } = require('../services/subscriptionServ
 // ── Tier pricing (NGN) ──────────────────────────────────────────────────────
 const TIER_PRICING = {
   basic: 5000,
-  pro: 20000,
-  max: 50000,
+  pro: 15000,
+  max: 45000,
 };
 
 const TIER_PRICING_USD = {
   basic: 10,
-  pro: 25,
-  max: 50,
+  pro: 20,
+  max: 45,
 };
+
+// Annual = 10 months price (2 months free ~17% off)
+const TIER_PRICING_ANNUAL = {
+  basic: 50000,
+  pro: 150000,
+  max: 450000,
+};
+
+const TIER_PRICING_ANNUAL_USD = {
+  basic: 100,
+  pro: 200,
+  max: 450,
+};
+
+const STUDENT_DISCOUNT = 0.75; // 25% off annual
 
 // ── Valid Paystack channels ─────────────────────────────────────────────────
 // See https://paystack.com/docs/payments/payment-channels/
@@ -63,7 +78,7 @@ router.get('/subscription', async (req, res, next) => {
 
 router.post('/checkout', async (req, res, next) => {
   try {
-    const { tier, gateway = 'paystack', channel, currency = 'NGN' } = req.body;
+    const { tier, gateway = 'paystack', channel, currency = 'NGN', billing = 'monthly' } = req.body;
     const user = req.user;
 
     if (!tier || !TIER_PRICING[tier.toLowerCase()]) {
@@ -71,7 +86,22 @@ router.post('/checkout', async (req, res, next) => {
     }
 
     const reqCurrency = currency === 'USD' ? 'USD' : 'NGN';
-    const amount = reqCurrency === 'USD' ? TIER_PRICING_USD[tier.toLowerCase()] : TIER_PRICING[tier.toLowerCase()];
+    const isAnnual = billing === 'annual';
+
+    // Load is_student from profile for student discount
+    const { data: profileRow } = await require('../config/database')
+      .from('profiles').select('is_student').eq('id', user.id).single();
+    const isStudent = Boolean(profileRow?.is_student);
+
+    let baseAmount;
+    if (isAnnual) {
+      baseAmount = reqCurrency === 'USD' ? TIER_PRICING_ANNUAL_USD[tier.toLowerCase()] : TIER_PRICING_ANNUAL[tier.toLowerCase()];
+      if (isStudent) baseAmount = Math.round(baseAmount * STUDENT_DISCOUNT);
+    } else {
+      baseAmount = reqCurrency === 'USD' ? TIER_PRICING_USD[tier.toLowerCase()] : TIER_PRICING[tier.toLowerCase()];
+    }
+    const amount = baseAmount;
+    const billingLabel = isAnnual ? (isStudent ? 'Annual (Student)' : 'Annual') : 'Monthly';
     const paymentReference = `SRAG_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
 
     let checkoutUrl = '';
@@ -109,9 +139,10 @@ router.post('/checkout', async (req, res, next) => {
             channels: paystackChannels,
             metadata: {
               tier: tier.toLowerCase(),
+              billing: isAnnual ? 'annual' : 'monthly',
               userId: user.id,
               custom_fields: [
-                { display_name: 'Plan', variable_name: 'plan', value: `StudyRAG ${tier.toUpperCase()}` },
+                { display_name: 'Plan', variable_name: 'plan', value: `StudyRAG ${tier.toUpperCase()} ${billingLabel}` },
               ],
             },
           });
@@ -131,9 +162,10 @@ router.post('/checkout', async (req, res, next) => {
             channels: ['apple_pay', 'card'],
             metadata: {
               tier: tier.toLowerCase(),
+              billing: isAnnual ? 'annual' : 'monthly',
               userId: user.id,
               custom_fields: [
-                { display_name: 'Plan', variable_name: 'plan', value: `StudyRAG ${tier.toUpperCase()}` },
+                { display_name: 'Plan', variable_name: 'plan', value: `StudyRAG ${tier.toUpperCase()} ${billingLabel}` },
               ],
             },
           });
@@ -173,13 +205,14 @@ router.post('/checkout', async (req, res, next) => {
         userEmail: user.email,
         userName: user.display_name || user.email.split('@')[0],
         tier: tier.toLowerCase(),
+        billing: isAnnual ? 'annual' : 'monthly',
       };
       // Save PENDING transaction
       const { error: dbError2 } = await supabase.from('transactions').insert([{
         user_id: user.id, payment_reference: paymentReference,
         transaction_reference: paymentReference, amount, currency: reqCurrency,
         payment_method: 'flutterwave', status: 'PENDING',
-        description: `StudyRAG ${tier.toUpperCase()} Subscription`,
+        description: `StudyRAG ${tier.toUpperCase()} ${billingLabel} Subscription`,
         created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       }]);
       if (dbError2) console.warn('[PaymentRoutes] DB insert failed (non-fatal):', dbError2.message);
@@ -229,7 +262,7 @@ router.post('/checkout', async (req, res, next) => {
         currency: reqCurrency,
         payment_method: actualGateway,
         status: 'PENDING',
-        description: `StudyRAG ${tier.toUpperCase()} Subscription`,
+        description: `StudyRAG ${tier.toUpperCase()} ${billingLabel} Subscription`,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }]);
@@ -301,8 +334,8 @@ router.get('/verify/:reference', async (req, res) => {
     // 5. Determine tier from amount, with metadata fallback
     let newTier = 'free';
     if (transaction.amount == 5000 || transaction.amount == 10) newTier = 'basic';
-    if (transaction.amount == 20000 || transaction.amount == 25) newTier = 'pro';
-    if (transaction.amount == 50000 || transaction.amount == 50) newTier = 'max';
+    if (transaction.amount == 15000 || transaction.amount == 20) newTier = 'pro';
+    if (transaction.amount == 45000 || transaction.amount == 45) newTier = 'max';
 
     // Metadata fallback
     if (newTier === 'free' && paystackData.metadata?.tier) {
@@ -310,8 +343,9 @@ router.get('/verify/:reference', async (req, res) => {
       if (['basic', 'pro', 'max'].includes(metaTier)) newTier = metaTier;
     }
 
+    const isAnnualTx = paystackData.metadata?.billing === 'annual' || transaction.description?.includes('Annual');
     const endDate = new Date();
-    endDate.setDate(endDate.getDate() + 30);
+    endDate.setDate(endDate.getDate() + (isAnnualTx ? 365 : 30));
 
     await supabase
       .from('transactions')
@@ -328,7 +362,7 @@ router.get('/verify/:reference', async (req, res) => {
       })
       .eq('id', user.id);
 
-    console.log(`[PaymentVerify] Upgraded user ${user.id} to ${newTier.toUpperCase()} via callback verify.`);
+    console.log(`[PaymentVerify] Upgraded user ${user.id} to ${newTier.toUpperCase()} ${isAnnualTx ? 'annual' : 'monthly'} via callback verify.`);
 
     return res.json({ status: 'success', tier: newTier, transaction });
   } catch (error) {
@@ -375,16 +409,17 @@ router.post('/verify-paypal', async (req, res) => {
     // 3. Determine tier
     let newTier = 'free';
     if (transaction.amount == 5000 || transaction.amount == 10) newTier = 'basic';
-    if (transaction.amount == 20000 || transaction.amount == 25) newTier = 'pro';
-    if (transaction.amount == 50000 || transaction.amount == 50) newTier = 'max';
+    if (transaction.amount == 15000 || transaction.amount == 20) newTier = 'pro';
+    if (transaction.amount == 45000 || transaction.amount == 45) newTier = 'max';
 
     if (newTier === 'free' && captureData.tier) {
       const metaTier = String(captureData.tier).toLowerCase();
       if (['basic', 'pro', 'max'].includes(metaTier)) newTier = metaTier;
     }
 
+    const isAnnualTxPayPal = transaction.description?.includes('Annual');
     const endDate = new Date();
-    endDate.setDate(endDate.getDate() + 30);
+    endDate.setDate(endDate.getDate() + (isAnnualTxPayPal ? 365 : 30));
 
     // Update Transaction
     await supabase
@@ -403,7 +438,7 @@ router.post('/verify-paypal', async (req, res) => {
       })
       .eq('id', user.id);
 
-    console.log(`[PaymentVerify] Upgraded user ${user.id} to ${newTier.toUpperCase()} via PayPal.`);
+    console.log(`[PaymentVerify] Upgraded user ${user.id} to ${newTier.toUpperCase()} ${isAnnualTxPayPal ? 'annual' : 'monthly'} via PayPal.`);
 
     return res.json({ status: 'success', tier: newTier, transaction });
   } catch (error) {
@@ -436,14 +471,15 @@ router.post('/verify-flutterwave', async (req, res) => {
 
     let newTier = 'free';
     if (transaction.amount == 5000 || transaction.amount == 10) newTier = 'basic';
-    if (transaction.amount == 20000 || transaction.amount == 25) newTier = 'pro';
-    if (transaction.amount == 50000 || transaction.amount == 50) newTier = 'max';
+    if (transaction.amount == 15000 || transaction.amount == 20) newTier = 'pro';
+    if (transaction.amount == 45000 || transaction.amount == 45) newTier = 'max';
     if (newTier === 'free' && flwData.meta?.tier) {
       const metaTier = String(flwData.meta.tier).toLowerCase();
       if (['basic','pro','max'].includes(metaTier)) newTier = metaTier;
     }
 
-    const endDate = new Date(); endDate.setDate(endDate.getDate() + 30);
+    const isAnnualTxFlw = flwData.meta?.billing === 'annual' || transaction.description?.includes('Annual');
+    const endDate = new Date(); endDate.setDate(endDate.getDate() + (isAnnualTxFlw ? 365 : 30));
     await supabase.from('transactions').update({ status: 'PAID', updated_at: new Date() }).eq('id', transaction.id);
     await supabase.from('profiles').update({ subscription_tier: newTier, subscription_status: 'active', subscription_end_date: endDate, updated_at: new Date() }).eq('id', user.id);
     console.log(`[PaymentVerify] Upgraded user ${user.id} to ${newTier.toUpperCase()} via Flutterwave.`);

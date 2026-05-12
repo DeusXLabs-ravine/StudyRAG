@@ -6,12 +6,8 @@ import Onboarding from '../../pages/Onboarding';
 import { MorphingSquare } from '../ui/morphing-square';
 
 export default function AuthGuard({ children }) {
-  const { user, profile, loading, initialize } = useAuthStore();
+  const { user, profile, loading } = useAuthStore();
   const fetchSettings = useSettingsStore(state => state.fetchSettings);
-
-  useEffect(() => {
-    initialize();
-  }, [initialize]);
 
   const isTestMode = new URLSearchParams(window.location.search).get('test_mode') === 'true';
   if (isTestMode) return children;
