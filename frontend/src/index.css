@@ -197,19 +197,28 @@
     @apply sticky top-24 space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2;
   }
 
-  /* Custom scrollbar for sticky sidebar */
-  .sticky-sidebar::-webkit-scrollbar {
-    @apply w-1;
-  }
-
-  .sticky-sidebar::-webkit-scrollbar-track {
-    @apply bg-transparent;
-  }
-
-  .sticky-sidebar::-webkit-scrollbar-thumb {
-    @apply bg-gray-200 rounded-full;
-  }
+  /* sticky-sidebar scrollbar suppressed globally via * { scrollbar-width: none } */
 }
+
+/* Hide scrollbar rails globally — Android Chrome shows them by default */
+* {
+  scrollbar-width: none;       /* Firefox */
+  -ms-overflow-style: none;    /* IE / Edge */
+}
+*::-webkit-scrollbar {
+  display: none;               /* Chrome / Safari / Android WebView */
+}
+
+/* Re-enable a subtle scrollbar only where explicitly opted in */
+.show-scrollbar {
+  scrollbar-width: thin;
+}
+.show-scrollbar::-webkit-scrollbar {
+  display: block;
+  width: 4px;
+}
+.show-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.show-scrollbar::-webkit-scrollbar-thumb { @apply bg-gray-200 rounded-full; }
 
 body {
   margin: 0;
