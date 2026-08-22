@@ -24,7 +24,6 @@ import AchievementToast from '../components/chat/AchievementToast';
 import FormulaInput from '../components/chat/FormulaInput';
 import InputPreview from '../components/chat/InputPreview';
 import { getTutorGreeting, sendTutorMessage } from '../services/moduleService';
-import { prefetchAllChunks } from '../services/ttsService';
 import { listDiagrams, getModuleDiagrams, generateDiagramForTopic } from '../services/diagramService';
 import { getModuleMedicalResources } from '../services/medicalResourceService';
 import api from '../services/api';
@@ -43,7 +42,7 @@ export default function Learn() {
   const { documentId: routeDocId } = useParams();
   const [searchParams] = useSearchParams();
   const routeCourseId = searchParams.get('courseId');
-  const { modules, currentModule, loading: modulesLoading, generating, bridgeGeneratingModuleId, fetchModules, fetchCourseModules, stopPolling, setCurrentModule, regenerateQuestions, markModuleCompleted } = useModuleStore();
+  const { modules, currentModule, loading: modulesLoading, generating, bridgeGeneratingModuleId, adaptiveRewritingModuleId, fetchModules, fetchCourseModules, stopPolling, setCurrentModule, regenerateQuestions, markModuleCompleted } = useModuleStore();
   const { documents, fetchDocuments } = useDocumentStore();
   const { courses, fetchCourses } = useCourseStore();
   const { settings, tutorial_completed, setTutorialCompleted, fetchSettings } = useSettingsStore();
@@ -96,7 +95,6 @@ export default function Learn() {
   }, [fetchDocuments, fetchCourses]);
 
   const getVoiceId = useSettingsStore(state => state.getVoiceId);
-  const prefetchCancelRef = useRef(null);
 
   useEffect(() => {
     if (viewMode === 'course' && selectedCourseId) {
@@ -152,26 +150,21 @@ export default function Learn() {
     }
   }, [modules]);
 
-  // Background prefetch TTS audio chunks when module changes
-  useEffect(() => {
-    // Cancel any previous prefetch
-    if (prefetchCancelRef.current) {
-      prefetchCancelRef.current();
-      prefetchCancelRef.current = null;
-    }
-
-    if (currentModule?.content && !showQuiz) {
-      const voiceId = getVoiceId();
-      prefetchCancelRef.current = prefetchAllChunks(currentModule.content, voiceId);
-    }
-
-    return () => {
-      if (prefetchCancelRef.current) {
-        prefetchCancelRef.current();
-        prefetchCancelRef.current = null;
-      }
-    };
-  }, [currentModule?.id, showQuiz, getVoiceId]);
+  // TTS is no longer prefetched on module change.
+  //
+  // The old prefetch split the module into 800-character chunks and synthesized
+  // every one of them through the metered /tts/speak endpoint the moment a module
+  // opened — whether or not the student ever pressed play, and again whenever the
+  // quiz was toggled. That audio could never be used: playback streams the FULL
+  // module text through /tts/speak/stream, so it neither matched the prefetched
+  // chunks nor read the cache they populated. The only effect was cost — roughly
+  // eight metered calls per module open, which exhausted a Pro tier's entire
+  // monthly TTS allowance in about four opens without producing a second of
+  // audible audio (and a burst of silent 403s on tiers where TTS is disabled).
+  //
+  // Synthesis now happens only when the student actually presses play, and the
+  // server-side content-addressed cache (services/ttsCache.js) makes every repeat
+  // playback of the same text instant and free for every user.
 
   // Fetch tutor greeting when module changes (skip if already cached in store)
   useEffect(() => {
@@ -622,6 +615,7 @@ export default function Learn() {
                     getTopicIcon={getTopicIcon}
                     generating={generating}
                     bridgeGeneratingModuleId={bridgeGeneratingModuleId}
+            adaptiveRewritingModuleId={adaptiveRewritingModuleId}
                     sectionPodcasts={sectionPodcasts}
                     onSectionPodcastClick={handleSectionPodcastClick}
                   />
@@ -857,6 +851,7 @@ export default function Learn() {
                   getTopicIcon={getTopicIcon}
                   generating={generating}
                   bridgeGeneratingModuleId={bridgeGeneratingModuleId}
+            adaptiveRewritingModuleId={adaptiveRewritingModuleId}
                   sectionPodcasts={sectionPodcasts}
                   onSectionPodcastClick={(sp) => {
                     handleSectionPodcastClick(sp);
@@ -955,7 +950,7 @@ export default function Learn() {
   );
 }
 
-function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSelect, getTopicIcon, generating, bridgeGeneratingModuleId, sectionPodcasts, onSectionPodcastClick }) {
+function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSelect, getTopicIcon, generating, bridgeGeneratingModuleId, adaptiveRewritingModuleId, sectionPodcasts, onSectionPodcastClick }) {
   const moduleCount = (modules || []).length;
   return (
     <div className="flex flex-col gap-4">
@@ -1016,6 +1011,19 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
           <div>
             <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest leading-none mb-1">Sage is building</p>
             <h4 className="text-sm font-bold text-amber-900 leading-none">Review Module...</h4>
+          </div>
+        </div>
+      )}
+
+      {/* Adaptive rewrite in progress — this lesson is being re-taught for the learner */}
+      {adaptiveRewritingModuleId && (
+        <div className="bg-sky-50 border border-sky-100 rounded-2xl p-4 mb-2 flex items-center gap-4 shadow-sm">
+          <div className="w-8 h-8 rounded-xl bg-white border border-sky-200 flex items-center justify-center">
+            <Loader2 className="h-4 w-4 text-sky-500 animate-spin" />
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-sky-600 uppercase tracking-widest leading-none mb-1">Adapting to you</p>
+            <h4 className="text-sm font-bold text-sky-900 leading-none">Sage is rewriting this lesson to fit how you learn…</h4>
           </div>
         </div>
       )}
@@ -1087,6 +1095,14 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
                   <span className="truncate flex-1 font-medium">{mod.title}</span>
                   {isBridge && !isActive && (
                     <span className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-amber-200 text-amber-800 rounded-md">Review</span>
+                  )}
+                  {!isBridge && (mod.version || 1) > 1 && (
+                    <span
+                      title={`Rewritten for you${mod.regenReason ? ` — ${mod.regenReason}` : ''}`}
+                      className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-sky-100 text-sky-700 rounded-md"
+                    >
+                      For you · v{mod.version}
+                    </span>
                   )}
                 </button>
               );

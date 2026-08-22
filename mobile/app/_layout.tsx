@@ -86,6 +86,9 @@ function RootNavigator() {
     return () => sub.remove();
   }, [handleIncomingUrl]);
 
+  const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
+
   // Keep widgets fresh — sync on login and on foreground. syncWidgets() is a
   // no-op in Expo Go (no native bridge), so this is safe everywhere.
   useEffect(() => {
@@ -98,17 +101,10 @@ function RootNavigator() {
   }, [session?.user]);
 
   const fontsReady = outfitLoaded && kalamLoaded && caveatLoaded;
-  if (!fontsReady || loading) {
-    return <SplashState />;
-  }
-
   const topSegment = segments[0];
   const isIntroRoute = topSegment === '(intro)';
   const isAuthRoute = topSegment === '(auth)';
   const needsProfile = Boolean(session?.user && !profile?.onboardingCompleted);
-
-  const router = useRouter();
-  const rootNavigationState = useRootNavigationState();
 
   useEffect(() => {
     if (!fontsReady || loading || !rootNavigationState?.key) return;
@@ -121,6 +117,10 @@ function RootNavigator() {
       router.replace('/(tabs)');
     }
   }, [session?.user, needsProfile, isIntroRoute, isAuthRoute, pathname, fontsReady, loading, rootNavigationState?.key, router]);
+
+  if (!fontsReady || loading) {
+    return <SplashState />;
+  }
 
   return (
     <Stack screenOptions={{ headerShown: false }}>

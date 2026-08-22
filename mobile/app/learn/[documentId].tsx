@@ -52,12 +52,38 @@ export default function LearnDocumentScreen() {
     if (!documentId) return;
 
     getDocument(documentId).then(setDocument).catch(() => setDocument(null));
-    listModules(documentId)
-      .then(({ modules }) => {
-        setModules(modules || []);
-        setCurrentModule(modules?.[0] || null);
-      })
-      .catch(() => setModules([]));
+
+    // Poll modules while generation is in progress so they stream in one-by-one.
+    // Adaptive cadence: fast (~3s) while new modules keep arriving, backing off
+    // (cap 30s) during quiet stretches; stops once generating flips false.
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let lastCount = 0;
+
+    const poll = async (intervalMs: number) => {
+      try {
+        const { modules: mods, generating } = await listModules(documentId);
+        if (cancelled) return;
+        const next = mods || [];
+        setModules(next);
+        setCurrentModule(prev => prev || next[0] || null);
+        if (generating) {
+          const grew = next.length > lastCount;
+          lastCount = next.length;
+          const nextInterval = grew ? 3000 : Math.min(intervalMs * 1.5, 30000);
+          timer = setTimeout(() => poll(nextInterval), nextInterval);
+        }
+      } catch {
+        /* stop polling on error — keep whatever modules we already have */
+      }
+    };
+
+    poll(3000);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [documentId]);
 
   useEffect(() => {

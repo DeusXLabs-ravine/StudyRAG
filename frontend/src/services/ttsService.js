@@ -6,8 +6,11 @@ import { API_BASE } from './api';
 const audioCache = new Map();
 const MAX_CACHE_ENTRIES = 50;
 
+// Key on the full text, not a prefix. Keying on `length + first 100 chars` used
+// to collide: two different passages that share an opening and happen to be the
+// same length returned each other's audio — the student heard the wrong section.
 function cacheKey(text, voiceId) {
-  return `${voiceId}:${text.length}:${text.slice(0, 100)}`;
+  return `${voiceId}:${text}`;
 }
 
 /**

@@ -1,9 +1,8 @@
 const { v4: uuidv4 } = require('uuid');
 const supabase = require('../config/database');
+const r2 = require('../config/r2');
 const { withModelFallback, keyPool } = require('../config/gemini');
 const { synthesizeMultiSpeakerSpeech } = require('./ttsService');
-
-const STORAGE_BUCKET = 'documents';
 const MIN_SECTION_CHARS = 800; // skip sections with too little content
 
 const LEVEL_GUIDES = {
@@ -162,13 +161,9 @@ async function generateSectionPodcasts(docId, tree, pages, userId = null, teachi
         hostB.name, hostB.voice,
       );
 
-      // Upload audio to Storage
+      // Upload audio to R2
       const audioPath = `podcasts/${docId}/${i}.wav`;
-      const { error: uploadErr } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(audioPath, wavBuffer, { contentType: 'audio/wav', upsert: true });
-
-      if (uploadErr) throw new Error(`Storage upload: ${uploadErr.message}`);
+      await r2.uploadBuffer(audioPath, wavBuffer, 'audio/wav');
 
       // Mark ready
       await supabase.from('section_podcasts')
@@ -214,10 +209,7 @@ async function getSectionPodcasts(docId) {
   return Promise.all(data.map(async (row) => {
     let audioUrl = null;
     if (row.status === 'ready' && row.audio_path) {
-      const { data: signed } = await supabase.storage
-        .from('documents')
-        .createSignedUrl(row.audio_path, 3600); // 1 hour
-      audioUrl = signed?.signedUrl || null;
+      audioUrl = await r2.getSignedDownloadUrl(row.audio_path, 3600).catch(() => null); // 1 hour
     }
     return { ...row, audioUrl };
   }));

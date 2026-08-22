@@ -130,6 +130,9 @@ if (keys.length > 0) {
 // Primary models per tier. 3-pro is deprecated March 9 2026 → migrated to 3.1-pro.
 const MODELS = {
   fast: 'gemini-2.5-flash',
+  // Lower-latency tier for structurally-simple, quality-tolerant calls
+  // (page summaries, module outlines). ~30-50% faster per call than 'fast'.
+  fast_lite: 'gemini-2.5-flash-lite',
   standard: 'gemini-3.1-flash-lite',
   advanced: 'gemini-3.1-pro-preview', // 2.0 Flash is currently very strong, use exp for advanced features
   imageGen: [
@@ -143,6 +146,7 @@ const MODELS = {
 // models (Pro) gracefully degrade to free-tier models (Flash) on free API keys.
 const FALLBACK_MODELS = {
   fast: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash-lite'],
+  fast_lite: ['gemini-2.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.0-flash-lite', 'gemini-2.5-flash'],
   standard: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'],
   advanced: [
     'gemini-3.1-flash-lite',   // Flash: free tier, reliable — try before burning paid-only quota

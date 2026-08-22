@@ -12,7 +12,23 @@ const {
   buildDiagramInterestsSection,
 } = require('../utils/prompts');
 
-const STORAGE_BUCKET = 'diagram-images';
+const STORAGE_BUCKET = 'diagram-images'; // legacy Supabase key prefix, retained on image_storage_path
+const { v2: cloudinary } = require('cloudinary');
+const { cloudinaryCloudName, cloudinaryApiKey, cloudinaryApiSecret } = require('../config/env');
+if (cloudinaryCloudName && cloudinaryApiKey && cloudinaryApiSecret) {
+  cloudinary.config({ cloud_name: cloudinaryCloudName, api_key: cloudinaryApiKey, api_secret: cloudinaryApiSecret, secure: true });
+}
+
+/** Upload a diagram image buffer to Cloudinary; resolves to the upload result (secure_url, public_id). */
+function uploadImageToCloudinary(buffer, publicId) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { public_id: publicId, resource_type: 'image', overwrite: true, invalidate: true },
+      (err, result) => (err ? reject(err) : resolve(result)),
+    );
+    stream.end(buffer);
+  });
+}
 
 // ─── D2 CLI Availability Check ────────────────────────────────
 
@@ -71,18 +87,7 @@ async function renderD2ToSvg(d2Code) {
   }
 }
 
-// ─── Storage Bucket ───────────────────────────────────────────
-
-let bucketReady = false;
-async function ensureBucket() {
-  if (bucketReady) return;
-  const { data: existing } = await supabase.storage.getBucket(STORAGE_BUCKET);
-  if (!existing) {
-    const { error } = await supabase.storage.createBucket(STORAGE_BUCKET, { public: false });
-    if (error && !error.message?.includes('already exists')) throw error;
-  }
-  bucketReady = true;
-}
+// Diagram images now live on Cloudinary; no Supabase Storage bucket to provision.
 
 // ─── Auto-Select Diagram Type ─────────────────────────────────
 
@@ -353,17 +358,15 @@ async function generateDiagramForTopic({
     } else if (resolvedType === 'image') {
       const imgResult = await generateAIImage(topic, teachingLevel, interests, moduleContent);
       if (imgResult) {
-        await ensureBucket();
         const storagePath = `generated/${moduleId || 'global'}/${id}.png`;
-        const { error: uploadErr } = await supabase.storage
-          .from(STORAGE_BUCKET)
-          .upload(storagePath, imgResult.imageBuffer, { contentType: imgResult.mimeType });
-
-        if (uploadErr) throw new Error(`Image upload failed: ${uploadErr.message}`);
+        const publicId = `studyrag/diagrams/${moduleId || 'global'}/${id}`;
+        const uploaded = await uploadImageToCloudinary(imgResult.imageBuffer, publicId);
 
         updateData = {
           ...updateData,
           image_storage_path: storagePath,
+          image_url: uploaded.secure_url,
+          cloudinary_public_id: uploaded.public_id,
           image_prompt: imgResult.prompt,
           title: imgResult.title,
           description: imgResult.description,
@@ -468,13 +471,9 @@ async function getGeneratedDiagramById(id) {
 
 async function getGeneratedDiagramImageUrl(id) {
   const diagram = await getGeneratedDiagramById(id);
-  if (!diagram || !diagram.imageStoragePath) return null;
-
-  const { data, error } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .createSignedUrl(diagram.imageStoragePath, 3600);
-  if (error) throw error;
-  return data.signedUrl;
+  if (!diagram) return null;
+  // Images now live on Cloudinary (public secure_url stored on the row).
+  return diagram.imageUrl || null;
 }
 
 function formatGeneratedDiagram(row) {
@@ -490,6 +489,8 @@ function formatGeneratedDiagram(row) {
     diagramCode: row.diagram_code,
     renderedSvg: row.rendered_svg,
     imageStoragePath: row.image_storage_path,
+    imageUrl: row.image_url || null,
+    cloudinaryPublicId: row.cloudinary_public_id || null,
     imagePrompt: row.image_prompt,
     interestsUsed: row.interests_used,
     generationModel: row.generation_model,

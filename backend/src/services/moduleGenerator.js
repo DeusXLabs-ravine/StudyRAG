@@ -1,6 +1,6 @@
 const supabase = require('../config/database');
 const { getGenerativeModel, withRetryOnRateLimit } = require('../config/gemini');
-const { MODULE_GENERATION_PROMPT, MODULE_OUTLINE_PROMPT, MODULE_BATCH_GENERATION_PROMPT, QUESTION_REGENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection, buildLegalGroundingSection, getModuleDepthSection, getQuizDepthSection } = require('../utils/prompts');
+const { MODULE_GENERATION_PROMPT, MODULE_OUTLINE_PROMPT, MODULE_BATCH_GENERATION_PROMPT, QUESTION_REGENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection, buildLegalGroundingSection, getModuleDepthSection, getQuizDepthSection, PEDAGOGY_CORE, BACKWARD_DESIGN_BLOCK, RETRIEVAL_PRACTICE_BLOCK, QUIZ_HYGIENE_BLOCK, buildMissionSection, buildLearnerStateSection, buildFocusSection, buildInterleavingSection } = require('../utils/prompts');
 const { getUserTeachingLevel, getUserInterests, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
 const { prepareTextForLLM } = require('./chunkingService');
 const { moduleCache } = require('../config/cache');
@@ -12,7 +12,7 @@ const { extractJSON, tryExtractArrayItems } = require('../utils/jsonHelper');
 const SEGMENT_SIZE = 40000;
 const MAX_CONCURRENCY = 3;
 const BATCH_SIZE = 3;         // modules per LLM batch call in two-phase generation
-const BATCH_CONCURRENCY = 2;  // parallel batch calls within a segment
+const BATCH_CONCURRENCY = 5;  // parallel batch calls within a segment — higher so segment 0 lands in one wave (rate limiter/backoff guard the ceiling)
 
 // Track which documents currently have background module generation in progress.
 // Ephemeral — resets on server restart (which also kills background jobs).
@@ -86,6 +86,32 @@ async function withRetry(fn, retries = 1, label = '') {
 }
 
 /**
+ * Fill every pedagogy placeholder on a prompt template.
+ *
+ * `opts` carries adaptive, learner-specific context. When it is absent — the
+ * normal case for a brand-new document — the learner-specific sections collapse
+ * to empty strings and the prompt degrades cleanly to its non-adaptive form,
+ * while the universal teaching principles still apply.
+ *
+ * @param {string} prompt Template containing pedagogy placeholders.
+ * @param {object} [opts]
+ * @param {string} [opts.mission] Why this student is studying the material.
+ * @param {object} [opts.learnerState] See buildLearnerStateSection.
+ * @param {boolean} [opts.focusMode] Attention accommodations (ADHD focus mode).
+ * @param {string[]} [opts.priorTopics] Earlier topics to interleave into practice.
+ */
+function applyPedagogy(prompt, opts = {}) {
+  const { mission, learnerState, focusMode, priorTopics } = opts;
+  return prompt
+    .replace('{pedagogy_section}', `${PEDAGOGY_CORE}${BACKWARD_DESIGN_BLOCK}${RETRIEVAL_PRACTICE_BLOCK}`)
+    .replace('{quiz_hygiene_section}', QUIZ_HYGIENE_BLOCK)
+    .replace('{mission_section}', buildMissionSection(mission))
+    .replace('{learner_state_section}', buildLearnerStateSection(learnerState))
+    .replace('{focus_section}', buildFocusSection(focusMode))
+    .replace('{interleaving_section}', buildInterleavingSection(priorTopics));
+}
+
+/**
  * Phase 1: Generate a curriculum outline for a text segment.
  * Returns an array of { title, topic, description } — small output, fast.
  */
@@ -116,7 +142,8 @@ async function generateOutlineForSegment(segmentText, segmentIndex, totalSegment
     .replace('{min_modules}', String(minModules));
 
   const result = await withRetryOnRateLimit(async () => {
-    const model = getGenerativeModel('fast');
+    // Outline is structurally simple (titles/topics) — use the faster lite tier.
+    const model = getGenerativeModel('fast_lite');
     return model.generateContent(prompt);
   }, 3, 1);
   const text = result.response.text();
@@ -131,7 +158,7 @@ async function generateOutlineForSegment(segmentText, segmentIndex, totalSegment
  * Phase 2: Generate full module content for a batch of outlined modules.
  * Each batch is typically 3 modules — keeps output manageable per LLM call.
  */
-async function generateModuleBatch(segmentText, fullOutline, batchModules, batchStart, teachingLevel, interests, learningStyle, learningPace) {
+async function generateModuleBatch(segmentText, fullOutline, batchModules, batchStart, teachingLevel, interests, learningStyle, learningPace, pedagogyOpts = {}) {
   const outlineText = fullOutline
     .map((m, i) => `${i + 1}. "${m.title}" [${m.topic}]: ${m.description}`)
     .join('\n');
@@ -144,7 +171,7 @@ async function generateModuleBatch(segmentText, fullOutline, batchModules, batch
   const quizDepthSection = getQuizDepthSection(segmentText);
   const contentWordRange = domain ? '600-1200 words' : '200-400 words';
 
-  const prompt = MODULE_BATCH_GENERATION_PROMPT
+  const prompt = applyPedagogy(MODULE_BATCH_GENERATION_PROMPT, pedagogyOpts)
     .replace('{document_text}', segmentText)
     .replace('{teaching_level}', teachingLevel)
     .replace('{interests_section}', buildInterestsSection(interests, teachingLevel))
@@ -176,7 +203,7 @@ async function generateModuleBatch(segmentText, fullOutline, batchModules, batch
 /**
  * Legacy single-call generation — used as fallback when two-phase fails.
  */
-async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalSegments, teachingLevel, interests, learningStyle, learningPace) {
+async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalSegments, teachingLevel, interests, learningStyle, learningPace, pedagogyOpts = {}) {
   const segmentNote = totalSegments > 1
     ? `\n\nNote: This is section ${segmentIndex + 1} of ${totalSegments} from the document. Create modules only for the topics in THIS section.\n`
     : '';
@@ -185,7 +212,7 @@ async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalS
   const quizDepthSection = getQuizDepthSection(segmentText);
   const contentWordRange = domain ? '600-1200 words' : '200-400 words';
 
-  const prompt = MODULE_GENERATION_PROMPT
+  const prompt = applyPedagogy(MODULE_GENERATION_PROMPT, pedagogyOpts)
     .replace('{document_text}', segmentText + segmentNote)
     .replace('{teaching_level}', teachingLevel)
     .replace('{interests_section}', buildInterestsSection(interests, teachingLevel))
@@ -327,6 +354,10 @@ async function insertModuleResults(docId, segmentResults, startOrderIndex, opts 
         objectives: Array.isArray(mod.objectives) ? mod.objectives : [],
         content: mod.content || 'Content generation failed for this section.',
         takeaways: Array.isArray(mod.takeaways) ? mod.takeaways : [],
+        // Pedagogy metadata (backward design): the outcome the module teaches and
+        // its Bloom level. Nullable — older/stripped generations may omit them.
+        outcome: mod.outcome || null,
+        bloom_level: mod.bloomLevel || null,
       };
 
       if (opts.courseId) row.course_id = opts.courseId;
@@ -350,6 +381,7 @@ async function insertModuleResults(docId, segmentResults, startOrderIndex, opts 
           options: qOptions,
           correct: qCorrect,
           explanation: q.explanation || 'Answer based on the module content.',
+          misconception: q.misconception || null,
           topic: q.topic || row.topic,
         });
       }
@@ -748,6 +780,11 @@ function formatModule(row, questionRows) {
     objectives: row.objectives,
     content: row.content,
     takeaways: row.takeaways,
+    outcome: row.outcome || null,
+    bloomLevel: row.bloom_level || null,
+    version: row.version || 1,
+    regenReason: row.regen_reason || null,
+    regeneratedAt: row.regenerated_at || null,
     questions: questionRows.map(q => ({
       id: q.id,
       type: q.type,
@@ -874,6 +911,47 @@ async function regenerateQuestions(moduleId, userId = null) {
   return await getModuleById(moduleId);
 }
 
+/**
+ * Regenerate ONE existing module, taught differently for this specific learner.
+ *
+ * Grounded on the module's OWN current content — the facts stay the same, the
+ * teaching changes. What makes the new version different is `pedagogyOpts`:
+ * the learner's misconceptions, how many times they've already failed this
+ * material (attemptNumber), their pace, and their preferred analogy domain.
+ * Because attemptNumber > 1 triggers the "do not restate the previous
+ * explanation" rule in the prompt, the rewrite is forced to change approach.
+ *
+ * Returns a parsed module object ({ title, topic, outcome, bloomLevel,
+ * objectives, content, takeaways, questions }). Does NOT write to the DB —
+ * adaptiveLearningService owns the archive-and-swap.
+ */
+async function regenerateModuleContent(module, userId, pedagogyOpts = {}) {
+  const [teachingLevel, interests, learningStyle, learningPace] = await Promise.all([
+    getUserTeachingLevel(userId),
+    getUserInterests(userId),
+    getEffectiveLearningStyle(userId),
+    getEffectiveLearningPace(userId),
+  ]);
+
+  const takeaways = Array.isArray(module.takeaways) ? module.takeaways.join('\n- ') : '';
+  const grounding = `${module.content || ''}\n\nKey points:\n- ${takeaways}`;
+  const outline = [{
+    title: module.title,
+    topic: module.topic || module.title,
+    description: Array.isArray(module.objectives)
+      ? module.objectives.join('; ')
+      : (module.objectives || ''),
+  }];
+
+  const { modules } = await generateModuleBatch(
+    grounding, outline, outline, 0,
+    teachingLevel, interests, learningStyle, learningPace,
+    pedagogyOpts,
+  );
+  if (!modules || !modules.length) throw new Error('Regeneration produced no module');
+  return modules[0];
+}
+
 module.exports = {
   generateModules,
   generateInitialModules,
@@ -886,5 +964,6 @@ module.exports = {
   deleteModulesByDocument,
   enrichModulesWithResources,
   regenerateQuestions,
+  regenerateModuleContent,
   insertModuleResults,
 };

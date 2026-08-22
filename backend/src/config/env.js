@@ -31,6 +31,12 @@ const config = {
   cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME,
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY,
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET,
+  // Cloudflare R2 (S3-compatible) — primary blob storage for documents + podcast audio
+  r2AccountId: process.env.R2_ACCOUNT_ID,
+  r2AccessKeyId: process.env.R2_ACCESS_KEY_ID,
+  r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  r2Bucket: process.env.R2_BUCKET,
+  r2Endpoint: process.env.R2_ENDPOINT || (process.env.R2_ACCOUNT_ID ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : null),
   deepseekApiKey: process.env.DEEPSEEK_API_KEY,
   monnifyKey: process.env.MONNIFY_API_KEY,
   monnifySecret: process.env.MONNIFY_SECRET_KEY,

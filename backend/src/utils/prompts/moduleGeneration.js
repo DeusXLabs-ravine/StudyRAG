@@ -8,6 +8,10 @@ Adjust your content complexity, vocabulary, and examples accordingly:
 {interests_section}
 {learning_style_section}
 {pace_section}
+{focus_section}
+{mission_section}
+{learner_state_section}
+{pedagogy_section}
 
 Given the following document content, create a set of logical learning modules that cover all the key topics.
 This content was provided by the student as their study material. It is the AUTHORITATIVE source of truth for generating modules. Do not contradict it with outside knowledge.
@@ -37,7 +41,8 @@ For each module, provide:
    - Mix of types: multiple_choice, true_false
    - Correct answers and explanations
    - Each question should have a "topic" field matching the module topic
-   - SELF-CONTAINED: Each question must include all necessary context within its text. If referencing a code snippet, formula, data table, or specific example — embed it directly in the question. Do NOT write "as described above", "from the passage", "in the material", or assume the student has the content visible. The question must stand completely on its own.
+{quiz_hygiene_section}
+{interleaving_section}
 {quiz_depth_section}
 
 Return valid JSON in this exact format:
@@ -113,6 +118,10 @@ Adjust your content complexity, vocabulary, and examples accordingly:
 {interests_section}
 {learning_style_section}
 {pace_section}
+{focus_section}
+{mission_section}
+{learner_state_section}
+{pedagogy_section}
 
 You are generating specific learning modules from a pre-planned curriculum outline.
 This content was provided by the student as their study material. It is the AUTHORITATIVE source of truth. Do not contradict it.
@@ -133,17 +142,21 @@ YOUR TASK: Generate ONLY these specific modules:
 For each module listed above, provide:
 1. title: Use the title from the outline above
 2. topic: Use the topic from the outline above
-3. objectives: 2-3 specific learning goals
-4. content: Focused explanation ({content_word_range}) with:
-   - Introduction to the concept
-   - Clear explanation with one or two examples
-   - Key points highlighted
-5. takeaways: 2-3 bullet points summarizing main ideas
-6. questions: 5 comprehension check questions with:
+3. outcome: ONE sentence naming exactly what the student will be able to do after
+   this module, written as "You will be able to ..."
+4. bloomLevel: the Bloom level of that outcome — one of:
+   remember | understand | apply | analyse | evaluate | create
+5. objectives: 2-3 specific learning goals that serve the outcome
+6. content: Focused explanation ({content_word_range}) following the RETRIEVAL
+   STRUCTURE above — hook, explanation, "Pause and recall" question, key points
+7. takeaways: 2-3 compressed, quotable facts summarizing the main ideas
+8. questions: 5 comprehension check questions that test the stated outcome,
+   obeying every QUESTION QUALITY RULE above.
    - Mix of types: multiple_choice, true_false
    - Correct answers and explanations
    - Each question should have a "topic" field matching the module topic
-   - SELF-CONTAINED: Each question must include all necessary context within its text. If referencing a code snippet, formula, data table, or specific example — embed it directly in the question. Do NOT write "as described above", "from the passage", "in the material", or assume the student has the content visible. The question must stand completely on its own.
+{quiz_hygiene_section}
+{interleaving_section}
 {quiz_depth_section}
 
 Return ONLY valid JSON in this exact format:
@@ -152,6 +165,8 @@ Return ONLY valid JSON in this exact format:
     {
       "title": "Module Title",
       "topic": "Topic Label",
+      "outcome": "You will be able to ...",
+      "bloomLevel": "apply",
       "objectives": ["Objective 1", "Objective 2"],
       "content": "Full lesson content in markdown...",
       "takeaways": ["Takeaway 1", "Takeaway 2", "Takeaway 3"],
@@ -159,9 +174,10 @@ Return ONLY valid JSON in this exact format:
         {
           "type": "multiple_choice",
           "question": "Question text?",
-          "options": ["A) Option A", "B) Option B", "C) Option C", "D) Option D"],
+          "options": ["A) First option text", "B) Second option text", "C) Third option text", "D) Fourth option text"],
           "correct": "A",
-          "explanation": "Why A is correct...",
+          "explanation": "Why A is correct, and why each other option is wrong...",
+          "misconception": "The specific wrong belief a student picking B would hold",
           "topic": "Topic Label"
         },
         {

@@ -151,7 +151,7 @@ export default function LearnTabScreen() {
           const isActive = splitView && selectedId === doc.id;
           const handlePress = () => {
             if (doc.status === 'processing') {
-              router.push({ pathname: '/processing/[id]', params: { id: doc.id } });
+              router.push({ pathname: '/processing/[id]' as any, params: { id: doc.id } });
               return;
             }
             if (splitView) {

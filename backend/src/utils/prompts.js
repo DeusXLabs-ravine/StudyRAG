@@ -19,6 +19,7 @@ const { GAME_GENERATION_PROMPT, SIMULATION_GENERATION_PROMPT } = require('./prom
 const { BRIDGE_MODULE_GENERATION_PROMPT } = require('./prompts/bridge');
 const { buildInterestsSection, buildLearningStyleSection, buildPaceSection, buildLegalGroundingSection } = require('./prompts/helpers');
 const { getModuleDepthSection, getQuizDepthSection, getTutorDepthSection } = require('./prompts/depthRouter');
+const { PEDAGOGY_CORE, BACKWARD_DESIGN_BLOCK, RETRIEVAL_PRACTICE_BLOCK, QUIZ_HYGIENE_BLOCK, buildMissionSection, buildLearnerStateSection, buildFocusSection, buildInterleavingSection } = require('./prompts/pedagogy');
 
 module.exports = {
   // Module generation
@@ -91,4 +92,14 @@ module.exports = {
   getModuleDepthSection,
   getQuizDepthSection,
   getTutorDepthSection,
+
+  // Pedagogy (shared across every model — Gemini and DeepSeek alike)
+  PEDAGOGY_CORE,
+  BACKWARD_DESIGN_BLOCK,
+  RETRIEVAL_PRACTICE_BLOCK,
+  QUIZ_HYGIENE_BLOCK,
+  buildMissionSection,
+  buildLearnerStateSection,
+  buildFocusSection,
+  buildInterleavingSection,
 };

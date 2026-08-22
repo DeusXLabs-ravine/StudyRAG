@@ -28,7 +28,8 @@
       "expo-audio",
       "expo-asset",
       "@bacons/apple-targets",
-      "./plugins/withStudyRAGNativeExtensions"
+      "./plugins/withStudyRAGNativeExtensions",
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true
@@ -38,7 +39,9 @@
       "bundleIdentifier": "com.studyrag.app",
       "appleTeamId": "KJWN27VC5D",
       "entitlements": {
-        "com.apple.security.application-groups": ["group.com.studyrag.app"]
+        "com.apple.security.application-groups": [
+          "group.com.studyrag.app"
+        ]
       },
       "infoPlist": {
         "NSMicrophoneUsageDescription": "StudyRAG uses the microphone for the voice-based Teach mode so you can have live study conversations with your AI tutor.",
