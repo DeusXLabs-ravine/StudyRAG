@@ -1191,4 +1191,5 @@ module.exports = {
   regenerateQuestions,
   regenerateModuleContent,
   insertModuleResults,
+  applyPedagogy,
 };

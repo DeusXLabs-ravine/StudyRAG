@@ -180,6 +180,51 @@ async function upgradeIntroModule(docId, userId) {
 
 // ─── Fill queue ───────────────────────────────────────────────
 
+/**
+ * Atomically claim up to `limit` pending modules for a document, ordered
+ * prioritised-first then by document order, and mark them 'writing'.
+ *
+ * The claim is race-safe by construction: the UPDATE carries
+ * `WHERE content_status = 'pending'`, so of any two workers that read the same
+ * candidate rows, only one can flip a given row's status — Postgres resolves the
+ * conflicting concurrent UPDATEs, not application code. This function returns
+ * only the rows THIS caller actually won.
+ *
+ * Returns:
+ *   null        — the queue is empty, nothing left to claim
+ *   []          — candidates existed but another caller won all of them (a lost
+ *                 race — the caller should retry, not stop)
+ *   [rows...]   — the modules this caller claimed
+ *
+ * `client` defaults to the real Supabase singleton and is overridable so tests
+ * can exercise the exact claim/race logic against an in-memory fake, without
+ * fighting module-mocking interop across this codebase's CJS/ESM boundary.
+ */
+async function claimNextModuleBatch(docId, limit, client = supabase) {
+  const { data: next } = await client
+    .from('modules')
+    .select('id, title, topic, content, document_id, content_status')
+    .eq('document_id', docId)
+    .eq('content_status', 'pending')
+    .order('prioritized_at', { ascending: false, nullsFirst: false })
+    .order('order_index', { ascending: true })
+    .limit(limit);
+
+  const rows = next || [];
+  if (!rows.length) return null;
+
+  const ids = rows.map(r => r.id);
+  const { data: claimed } = await client
+    .from('modules')
+    .update({ content_status: 'writing', generation_started_at: new Date().toISOString() })
+    .in('id', ids)
+    .eq('content_status', 'pending')
+    .select('id');
+
+  const claimedIds = new Set((claimed || []).map(r => r.id));
+  return rows.filter(r => claimedIds.has(r.id));
+}
+
 /** Move a module to the front of the fill queue because the student opened it. */
 async function prioritizeModule(moduleId) {
   const { error } = await supabase
@@ -337,29 +382,8 @@ async function generateCourseProgressive(docId, documentText, userId, opts = {})
         let lostRaces = 0;
 
         for (;;) {
-          const { data: next } = await supabase
-            .from('modules')
-            .select('id, title, topic, content, document_id, content_status')
-            .eq('document_id', docId)
-            .eq('content_status', 'pending')
-            .order('prioritized_at', { ascending: false, nullsFirst: false })
-            .order('order_index', { ascending: true })
-            .limit(BATCH_SIZE);
-
-          const rows = next || [];
-          if (!rows.length) return;
-
-          // Claim immediately so concurrent workers don't pick the same rows.
-          const ids = rows.map(r => r.id);
-          const { data: claimed } = await supabase
-            .from('modules')
-            .update({ content_status: 'writing', generation_started_at: new Date().toISOString() })
-            .in('id', ids)
-            .eq('content_status', 'pending')
-            .select('id');
-
-          const claimedIds = new Set((claimed || []).map(r => r.id));
-          const mine = rows.filter(r => claimedIds.has(r.id));
+          const mine = await claimNextModuleBatch(docId, BATCH_SIZE);
+          if (mine === null) return; // queue is empty — nothing left to claim
           if (!mine.length) {
             // Another worker won this race. Retire only after losing repeatedly
             // in a row, which means the queue is genuinely being drained by peers
@@ -396,4 +420,5 @@ module.exports = {
   retryModule,
   reapStalledSkeletons,
   deriveHeadings,
+  claimNextModuleBatch,
 };
