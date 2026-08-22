@@ -53,7 +53,7 @@ function invalidateDocCache(docId) {
  * @param {object} metadata - Document metadata
  * @returns {{ tree: object, pages: Array<{pageNumber: number, text: string, heading: string|null, summary: string}> }}
  */
-async function buildPageIndex(rawPages, fullText, metadata) {
+function buildPages(rawPages, fullText, metadata) {
   let pages;
 
   if (rawPages && rawPages.length > 0) {
@@ -71,12 +71,45 @@ async function buildPageIndex(rawPages, fullText, metadata) {
   if (pages.length === 0) {
     pages = [{ pageNumber: 1, text: fullText, heading: null }];
   }
+  return pages;
+}
+
+/**
+ * Full page index: per-page summaries + LLM-assisted hierarchical tree.
+ * Slower (multiple Gemini calls) — used to ENRICH in the background.
+ */
+async function buildPageIndex(rawPages, fullText, metadata) {
+  const pages = buildPages(rawPages, fullText, metadata);
 
   // Generate per-page summaries at index time (#6)
   await addPageSummaries(pages);
 
   const tree = await buildTree(pages, metadata);
 
+  return { tree, pages };
+}
+
+/**
+ * Purely synchronous, no-LLM tree for the fast readiness path.
+ * Uses heading structure when available, else an even page split.
+ */
+function buildStructuralTree(pages) {
+  const headingTree = buildTreeFromHeadings(pages);
+  if (headingTree) return headingTree;
+  if (pages.length <= MAX_PAGES_PER_LEAF) {
+    return { title: 'Document', startPage: 1, endPage: pages.length, summary: '', children: [] };
+  }
+  return createEvenTree(pages);
+}
+
+/**
+ * Structural page index with ZERO LLM calls, so a document can be marked
+ * chat-ready in ~1-2s. Chat only needs page rows + a valid tree with page
+ * ranges; buildPageIndex() then runs in the background to enrich the tree.
+ */
+function buildPageIndexStructural(rawPages, fullText, metadata) {
+  const pages = buildPages(rawPages, fullText, metadata);
+  const tree = buildStructuralTree(pages);
   return { tree, pages };
 }
 
@@ -278,7 +311,8 @@ async function summarizeBatch(batchPages) {
 
   try {
     const result = await withRetryOnRateLimit(async () => {
-      const model = getGenerativeModel('fast');
+      // One-line page summaries are quality-tolerant — use the faster lite tier.
+      const model = getGenerativeModel('fast_lite');
       return model.generateContent(
         `Summarize each page below in ONE sentence (max 25 words each). Return ONLY a JSON array of strings, one summary per page, in order.\n\n${pagesText}\n\nReply ONLY with a JSON array like: ["summary1", "summary2", ...]`
       );
@@ -723,7 +757,8 @@ Return 3-5 most relevant pages. If the question is very broad, return up to 7 pa
 
   try {
     const result = await withRetryOnRateLimit(async () => {
-      const model = getGenerativeModel('fast');
+      // Page selection is structural — the faster lite tier cuts chat first-token latency.
+      const model = getGenerativeModel('fast_lite');
       return model.generateContent(prompt);
     }, 3, 1);
     const responseText = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
@@ -800,7 +835,8 @@ Select 1-3 most relevant documents. Use the 1-based index numbers from the list 
   let selectedIndices;
   try {
     const result = await withRetryOnRateLimit(async () => {
-      const model = getGenerativeModel('fast');
+      // Page selection is structural — the faster lite tier cuts chat first-token latency.
+      const model = getGenerativeModel('fast_lite');
       return model.generateContent(prompt);
     }, 3, 1);
     const responseText = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
@@ -838,6 +874,7 @@ function getTreePageCount(tree) {
 
 module.exports = {
   buildPageIndex,
+  buildPageIndexStructural,
   searchPageIndex,
   searchMultipleDocuments,
   invalidateDocCache,

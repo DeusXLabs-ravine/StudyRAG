@@ -43,3 +43,27 @@ export async function sendTutorMessage(moduleId, message, conversationHistory) {
   const { data } = await api.post(`/modules/${moduleId}/tutor/chat`, { message, conversationHistory });
   return { reply: data.reply, webSources: data.webSources || [] };
 }
+
+/**
+ * Fetch the module's full quiz, generating it server-side on first open.
+ *
+ * Modules ship with a single inline recall question so course generation does
+ * not pay for questions most students never see; the rest are written on demand,
+ * with distractors informed by this student's past mistakes.
+ */
+export async function ensureFullQuiz(moduleId) {
+  const { data } = await api.post(`/modules/${moduleId}/quiz`, {}, { timeout: 90000 });
+  return data;
+}
+
+/** Bump a not-yet-written module to the front of the generation queue. */
+export async function prioritizeModule(moduleId) {
+  const { data } = await api.post(`/modules/${moduleId}/prioritize`);
+  return data;
+}
+
+/** Re-generate a module whose content generation failed. */
+export async function retryModule(moduleId) {
+  const { data } = await api.post(`/modules/${moduleId}/retry`, {}, { timeout: 120000 });
+  return data;
+}

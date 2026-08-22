@@ -2,6 +2,7 @@ const { getGenerativeModel, getSearchGroundedModel, selectModelTier, withRetryOn
 const { isDeepSeekAvailable, callDeepSeekChat } = require('../config/deepseek');
 const { isSTEMQuery } = require('../utils/stemDetector');
 const { getTutorDepthSection } = require('../utils/prompts/depthRouter');
+const { PEDAGOGY_CORE, buildMissionSection, buildLearnerStateSection, buildFocusSection } = require('../utils/prompts/pedagogy');
 const vectorStore = require('./vectorStore');
 const { searchPageIndex, searchMultipleDocuments } = require('./pageIndexService');
 const { getUserTeachingLevel, getWeakTopics, getUserProfile, getUserInterests, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
@@ -10,13 +11,58 @@ const { getUserTeachingLevel, getWeakTopics, getUserProfile, getUserInterests, g
  * Get or create a Gemini Context Cache for a document.
  * Caches the entire document text to speed up future queries.
  */
+// Documents whose context cache is currently being built in the background,
+// so concurrent turns don't kick off duplicate creations.
+const _cacheCreating = new Set();
+
+/**
+ * Actually build the Gemini context cache for a document. Slow — it uploads the
+ * full document text — so this is only ever run in the background (see below).
+ */
+async function createGeminiCache(docId, metadata, now) {
+  const pages = await vectorStore.getDocumentPages(docId);
+  if (!pages || pages.length === 0) return;
+
+  const fullText = pages.map(p => `[Page ${p.pageNumber}]\n${p.text}`).join('\n\n');
+
+  // Gemini Context Caching requires a minimum of 32,768 tokens (~130k chars).
+  // Smaller documents fit comfortably in the inline prompt and gain nothing here.
+  if (fullText.length < 130000) return;
+
+  console.log(`[GeminiCache] Creating cache for document ${docId} (${fullText.length} chars)`);
+  const ttlSeconds = 3600; // 1 hour
+  const cache = await cacheManager.create({
+    model: MODELS.standard,
+    displayName: `studyrag-${docId}`,
+    contents: [{ role: 'user', parts: [{ text: fullText }] }],
+    ttlSeconds,
+  });
+
+  await vectorStore.updateDocumentStatus(docId, {
+    extractedMetadata: {
+      ...metadata,
+      geminiCacheName: cache.name,
+      geminiCacheExpiry: now + (ttlSeconds * 1000),
+    },
+  });
+}
+
+/**
+ * Return an existing, valid Gemini context cache for a document — or null.
+ *
+ * On a cache MISS the cache is built in the BACKGROUND rather than inline: cache
+ * creation uploads the entire document to Gemini and can take several seconds,
+ * which would otherwise stall the very first chat turn on a large document. This
+ * turn falls back to the inline-context prompt (already handled by the caller),
+ * and the next turn picks up the freshly-built cache.
+ */
 async function getOrCreateGeminiCache(docId, docMeta) {
   if (!cacheManager || !docId) return null;
 
   const metadata = docMeta?.extractedMetadata || {};
   const now = Date.now();
 
-  // 1. Check if existing cache is still valid
+  // 1. Existing, still-valid cache — the fast common case after the first turn.
   if (metadata.geminiCacheName && metadata.geminiCacheExpiry > now) {
     try {
       const cache = await cacheManager.get(metadata.geminiCacheName);
@@ -26,43 +72,20 @@ async function getOrCreateGeminiCache(docId, docMeta) {
     }
   }
 
-  // 2. Fetch full document text for caching
-  const pages = await vectorStore.getDocumentPages(docId);
-  if (!pages || pages.length === 0) return null;
-
-  const fullText = pages.map(p => `[Page ${p.pageNumber}]\n${p.text}`).join('\n\n');
-  
-  // Gemini Context Caching requires a minimum of 32,768 tokens.
-  // If the document is too small, caching isn't supported/needed.
-  // Approx 4 chars per token -> 131,072 chars.
-  if (fullText.length < 130000) {
-    return null; 
-  }
-
-  try {
-    console.log(`[GeminiCache] Creating cache for document ${docId} (${fullText.length} chars)`);
-    const ttlSeconds = 3600; // 1 hour
-    const cache = await cacheManager.create({
-      model: MODELS.standard,
-      displayName: `studyrag-${docId}`,
-      contents: [{ role: 'user', parts: [{ text: fullText }] }],
-      ttlSeconds,
-    });
-
-    // 3. Update document metadata with cache info
-    await vectorStore.updateDocumentStatus(docId, {
-      extractedMetadata: {
-        ...metadata,
-        geminiCacheName: cache.name,
-        geminiCacheExpiry: now + (ttlSeconds * 1000),
+  // 2. Miss — build in the background, don't block this turn.
+  if (!_cacheCreating.has(docId)) {
+    _cacheCreating.add(docId);
+    setImmediate(async () => {
+      try {
+        await createGeminiCache(docId, metadata, now);
+      } catch (err) {
+        console.error(`[GeminiCache] Background cache creation failed: ${err.message}`);
+      } finally {
+        _cacheCreating.delete(docId);
       }
     });
-
-    return cache;
-  } catch (err) {
-    console.error(`[GeminiCache] Failed to create cache: ${err.message}`);
-    return null;
   }
+  return null;
 }
 
 /**
@@ -680,7 +703,11 @@ async function tutorGreeting(moduleContent, moduleTitle, moduleTopic, userId) {
   return result.response.text();
 }
 
-async function tutorChat(moduleContent, moduleTitle, moduleTopic, message, conversationHistory, userId) {
+// `opts` carries adaptive learner context (mission, known misconceptions, focus
+// mode). It is optional: existing callers pass six arguments and the pedagogy
+// sections collapse to empty strings, leaving the prompt's universal teaching
+// principles in place.
+async function tutorChat(moduleContent, moduleTitle, moduleTopic, message, conversationHistory, userId, opts = {}) {
   const { TUTOR_CHAT_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection } = require('../utils/prompts');
 
   const [profile, interests, teachingLevel, weakTopicRows, learningStyle, learningPace] = await Promise.all([
@@ -767,6 +794,12 @@ async function tutorChat(moduleContent, moduleTitle, moduleTopic, message, conve
     .replace('{learning_style_section}', learningStyleSection)
     .replace('{pace_section}', paceSection)
     .replace('{weak_topics_section}', weakTopicsSection)
+    // Shared teaching principles — this same prompt string is handed to DeepSeek
+    // below, so both models tutor to the same pedagogy.
+    .replace('{pedagogy_section}', PEDAGOGY_CORE)
+    .replace('{focus_section}', buildFocusSection(opts.focusMode))
+    .replace('{mission_section}', buildMissionSection(opts.mission))
+    .replace('{learner_state_section}', buildLearnerStateSection(opts.learnerState))
     .replace('{tutor_depth_section}', tutorDepthSection)
     .replace('{module_title}', moduleTitle || 'this lesson')
     .replace('{module_topic}', moduleTopic || 'this topic')

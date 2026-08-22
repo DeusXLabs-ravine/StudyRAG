@@ -8,6 +8,10 @@ Adjust your content complexity, vocabulary, and examples accordingly:
 {interests_section}
 {learning_style_section}
 {pace_section}
+{focus_section}
+{mission_section}
+{learner_state_section}
+{pedagogy_section}
 
 Given the following document content, create a set of logical learning modules that cover all the key topics.
 This content was provided by the student as their study material. It is the AUTHORITATIVE source of truth for generating modules. Do not contradict it with outside knowledge.
@@ -33,11 +37,12 @@ For each module, provide:
    - Clear explanation with one or two examples
    - Key points highlighted
 5. takeaways: 2-3 bullet points summarizing main ideas
-6. questions: 5 comprehension check questions with:
+6. questions: {question_count} comprehension check question(s) with:
    - Mix of types: multiple_choice, true_false
    - Correct answers and explanations
    - Each question should have a "topic" field matching the module topic
-   - SELF-CONTAINED: Each question must include all necessary context within its text. If referencing a code snippet, formula, data table, or specific example — embed it directly in the question. Do NOT write "as described above", "from the passage", "in the material", or assume the student has the content visible. The question must stand completely on its own.
+{quiz_hygiene_section}
+{interleaving_section}
 {quiz_depth_section}
 
 Return valid JSON in this exact format:
@@ -113,6 +118,10 @@ Adjust your content complexity, vocabulary, and examples accordingly:
 {interests_section}
 {learning_style_section}
 {pace_section}
+{focus_section}
+{mission_section}
+{learner_state_section}
+{pedagogy_section}
 
 You are generating specific learning modules from a pre-planned curriculum outline.
 This content was provided by the student as their study material. It is the AUTHORITATIVE source of truth. Do not contradict it.
@@ -133,17 +142,21 @@ YOUR TASK: Generate ONLY these specific modules:
 For each module listed above, provide:
 1. title: Use the title from the outline above
 2. topic: Use the topic from the outline above
-3. objectives: 2-3 specific learning goals
-4. content: Focused explanation ({content_word_range}) with:
-   - Introduction to the concept
-   - Clear explanation with one or two examples
-   - Key points highlighted
-5. takeaways: 2-3 bullet points summarizing main ideas
-6. questions: 5 comprehension check questions with:
+3. outcome: ONE sentence naming exactly what the student will be able to do after
+   this module, written as "You will be able to ..."
+4. bloomLevel: the Bloom level of that outcome — one of:
+   remember | understand | apply | analyse | evaluate | create
+5. objectives: 2-3 specific learning goals that serve the outcome
+6. content: Focused explanation ({content_word_range}) following the RETRIEVAL
+   STRUCTURE above — hook, explanation, "Pause and recall" question, key points
+7. takeaways: 2-3 compressed, quotable facts summarizing the main ideas
+8. questions: {question_count} comprehension check question(s) that test the
+   stated outcome, obeying every QUESTION QUALITY RULE above.
    - Mix of types: multiple_choice, true_false
    - Correct answers and explanations
    - Each question should have a "topic" field matching the module topic
-   - SELF-CONTAINED: Each question must include all necessary context within its text. If referencing a code snippet, formula, data table, or specific example — embed it directly in the question. Do NOT write "as described above", "from the passage", "in the material", or assume the student has the content visible. The question must stand completely on its own.
+{quiz_hygiene_section}
+{interleaving_section}
 {quiz_depth_section}
 
 Return ONLY valid JSON in this exact format:
@@ -152,6 +165,8 @@ Return ONLY valid JSON in this exact format:
     {
       "title": "Module Title",
       "topic": "Topic Label",
+      "outcome": "You will be able to ...",
+      "bloomLevel": "apply",
       "objectives": ["Objective 1", "Objective 2"],
       "content": "Full lesson content in markdown...",
       "takeaways": ["Takeaway 1", "Takeaway 2", "Takeaway 3"],
@@ -159,9 +174,10 @@ Return ONLY valid JSON in this exact format:
         {
           "type": "multiple_choice",
           "question": "Question text?",
-          "options": ["A) Option A", "B) Option B", "C) Option C", "D) Option D"],
+          "options": ["A) First option text", "B) Second option text", "C) Third option text", "D) Fourth option text"],
           "correct": "A",
-          "explanation": "Why A is correct...",
+          "explanation": "Why A is correct, and why each other option is wrong...",
+          "misconception": "The specific wrong belief a student picking B would hold",
           "topic": "Topic Label"
         },
         {
@@ -176,8 +192,66 @@ Return ONLY valid JSON in this exact format:
   ]
 }`;
 
+/**
+ * Orientation module ("Module 0").
+ *
+ * Generated from the document's title and section headings only, so it can be
+ * produced in a couple of seconds — before the outline exists — giving the
+ * student something real to read while the course is still being written.
+ *
+ * Because it is NOT generated from the document's body text, it is explicitly
+ * forbidden from asserting subject facts. It may only orient: what this material
+ * covers, how it is laid out, and how to approach it. This keeps the one
+ * ungrounded module in the course from being able to state anything false — the
+ * model cannot be wrong about facts it never claims.
+ */
+const INTRO_MODULE_PROMPT = `You are writing a short orientation page that a student reads FIRST, before
+studying a document. The document itself is still being processed, so you have
+only its title and section headings — NOT its contents.
+
+DOCUMENT TITLE: {document_title}
+
+SECTION HEADINGS:
+{document_headings}
+
+{teaching_level_line}
+{mission_section}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ABSOLUTE CONSTRAINT — READ TWICE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+You have NOT read this document. You must NOT state any fact, definition,
+figure, date, mechanism, formula or claim about the subject matter.
+
+You may ONLY do these things:
+  - Describe what the material appears to COVER, based on its title and headings.
+  - Describe how the material is ORGANISED and the order of topics.
+  - Explain how to APPROACH studying it, and what to look out for.
+  - Set expectations about what the student will be able to do afterwards.
+
+Forbidden, without exception:
+  - "X is defined as…", "The three types of X are…", "X causes Y"
+  - Any specific number, date, name, or technical claim about the topic
+  - Any statement that would be wrong if the document disagreed with you
+  - Inventing sections, chapters or topics that are not in the headings above
+
+If you are tempted to teach something, stop. That is what the actual lessons are
+for. Your only job is to orient.
+
+Write warmly and briefly — this is a welcome, not a lecture. 150-250 words.
+
+Return ONLY valid JSON in this exact format:
+{
+  "title": "Start here: <short orienting title>",
+  "topic": "Overview",
+  "outcome": "You will be able to navigate this material and know what to expect.",
+  "content": "Orientation in markdown — what this covers, how it's organised, how to approach it.",
+  "takeaways": ["What this material covers", "How it is organised", "How to approach it"]
+}`;
+
 module.exports = {
   MODULE_GENERATION_PROMPT,
   MODULE_OUTLINE_PROMPT,
   MODULE_BATCH_GENERATION_PROMPT,
+  INTRO_MODULE_PROMPT,
 };

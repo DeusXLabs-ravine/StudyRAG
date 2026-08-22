@@ -1,7 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { extractTextFromBuffer, extractTextFromNote } = require('../services/fileProcessor');
 const { extractContentFromUrl } = require('../services/webScrapingService');
-const { buildPageIndex, invalidateDocCache } = require('../services/pageIndexService');
+const { buildPageIndex, buildPageIndexStructural, invalidateDocCache } = require('../services/pageIndexService');
 const vectorStore = require('../services/vectorStore');
 const { generateInitialModules, generateRemainingModules, deleteModulesByDocument, enrichModulesWithResources } = require('../services/moduleGenerator');
 const { researchDocument, getResourcesByDocument, deleteResourcesByDocument } = require('../services/webResearchService');
@@ -14,12 +14,12 @@ function getQAContentService() { return _qaContentService || (_qaContentService 
 function getProgrammingDocsService() { return _programmingDocsService || (_programmingDocsService = require('../services/programmingDocsService')); }
 const courseService = require('../services/courseService');
 const supabase = require('../config/database');
+const r2 = require('../config/r2');
 const { allowedFileTypes } = require('../config/env');
 const path = require('path');
 
 const { responseCache } = require('../config/cache');
 const { storeDocumentHash, findDocumentByHash, cloneDocumentArtefacts } = require('../services/sharedResearchCache');
-const STORAGE_BUCKET = 'documents';
 
 /**
  * Invalidate any cached document list responses for a user.
@@ -32,23 +32,10 @@ function invalidateDocListCache(userId) {
 }
 
 /**
- * Ensure the Supabase Storage bucket exists (lazy, runs once).
+ * No-op: the R2 bucket is provisioned out-of-band (Cloudflare dashboard / IaC),
+ * so there is no per-request bucket creation. Kept for call-site compatibility.
  */
-let bucketReady = false;
-async function ensureBucket() {
-  if (bucketReady) return;
-
-  // Check if bucket already exists
-  const { data: existing } = await supabase.storage.getBucket(STORAGE_BUCKET);
-  if (!existing) {
-    const { error } = await supabase.storage.createBucket(STORAGE_BUCKET, {
-      public: false,
-    });
-    if (error) throw error;
-  }
-
-  bucketReady = true;
-}
+async function ensureBucket() { /* R2 bucket pre-exists */ }
 
 /**
  * Build a sanitised storage path for a file.
@@ -75,10 +62,7 @@ async function uploadDocument(req, res, next) {
     await ensureBucket();
     const storagePath = buildStoragePath(file.originalname);
 
-    const { error: uploadError } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .upload(storagePath, file.buffer, { contentType: file.mimetype });
-    if (uploadError) throw uploadError;
+    await r2.uploadBuffer(storagePath, file.buffer, file.mimetype);
 
     await vectorStore.addDocument(docId, {
       originalName: file.originalname,
@@ -122,12 +106,7 @@ async function downloadChunk(storagePath) {
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const { data, error } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .download(storagePath);
-      if (error) throw new Error(`Storage download error: ${error.message}`);
-      const arrayBuffer = await data.arrayBuffer();
-      return Buffer.from(arrayBuffer);
+      return await r2.downloadBuffer(storagePath);
     } catch (err) {
       lastErr = err;
       console.warn(`Download attempt ${attempt + 1}/3 failed for ${storagePath}: ${err.message}`);
@@ -231,8 +210,11 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
   // The page index is all the chat system needs; modules are only for Learn.
   const pageIndexPromise = (async () => {
     const t = Date.now();
-    const { tree, pages } = await buildPageIndex(rawPages, text, metadata);
-    console.log(`${prefix} Page index built: ${pages.length} pages`);
+
+    // Fast path: build a no-LLM structural index so the doc becomes chat-ready
+    // in ~1-2s (chat only needs page rows + a tree with valid page ranges).
+    const { tree, pages } = buildPageIndexStructural(rawPages, text, metadata);
+    console.log(`${prefix} Structural page index built: ${pages.length} pages`);
 
     const pagesWithIds = pages.map(p => ({
       id: uuidv4(),
@@ -242,11 +224,26 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
     }));
     await vectorStore.addPages(docId, pagesWithIds);
     await vectorStore.addPageIndex(docId, tree, pages.length);
-    log('Page index + store', t);
+    log('Structural page index + store', t);
 
-    // Background: generate section podcasts for anyone with podcast access,
-    // including admin-unlimited users whose billing tier may still be lower.
+    // Background: enrich the tree with LLM page summaries + real hierarchy and
+    // re-upsert it (addPageIndex invalidates the cache so chat picks it up live),
+    // then generate section podcasts off the richer tree.
     setImmediate(async () => {
+      let enrichedTree = tree;
+      let enrichedPages = pages;
+      try {
+        const enriched = await buildPageIndex(rawPages, text, metadata);
+        enrichedTree = enriched.tree;
+        enrichedPages = enriched.pages;
+        await vectorStore.addPageIndex(docId, enrichedTree, enrichedPages.length);
+        console.log(`${prefix} Page index enriched (background)`);
+      } catch (err) {
+        console.warn(`${prefix} Page index enrichment failed (structural index stays): ${err.message}`);
+      }
+
+      // Section podcasts for anyone with podcast access (subscription-gated),
+      // built off the best available tree.
       try {
         if (!userId) {
           console.log(`${prefix} Skipping section podcasts — no user context available`);
@@ -261,7 +258,7 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
         const { generateSectionPodcasts } = require('../services/sectionPodcastService');
         const { getUserTeachingLevel } = require('../services/userProfileService');
         const tl = await getUserTeachingLevel(userId);
-        await generateSectionPodcasts(docId, tree, pages, userId, tl);
+        await generateSectionPodcasts(docId, enrichedTree, enrichedPages, userId, tl);
       } catch (err) {
         console.error(`${prefix} Section podcast generation failed: ${err.message}`);
       }
@@ -274,8 +271,26 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
 
   const modulesPromise = (async () => {
     const t = Date.now();
-    const result = await generateInitialModules(docId, text, userId);
-    log(`Initial modules (${result.moduleCount} modules, segment 1/${result.totalSegments})`, t);
+
+    // Progressive path: resolves as soon as the course MAP exists (orientation
+    // module + skeleton rows), rather than after every batch has been written.
+    // Content fills in the background. Falls back to the original pipeline if
+    // anything about the progressive flow fails, so a bad outline can never
+    // leave a document with no modules at all.
+    let result;
+    try {
+      const { generateCourseProgressive } = require('../services/progressiveCourseService');
+      result = await generateCourseProgressive(docId, text, userId, {
+        // Title intentionally omitted: extracted_metadata holds only { info, pages },
+        // so the service reads documents.original_name itself.
+        pages: rawPages || null,
+      });
+      log(`Course map ready (${result.moduleCount} modules, filling in background)`, t);
+    } catch (err) {
+      console.warn(`${prefix} Progressive generation failed, falling back: ${err.message}`);
+      result = await generateInitialModules(docId, text, userId);
+      log(`Initial modules (${result.moduleCount} modules, segment 1/${result.totalSegments})`, t);
+    }
 
     // After initial modules, update status to reflect partial modules available
     currentMetadata.modulesStatus = result.totalSegments > 1 ? 'partial' : 'complete';
@@ -451,10 +466,10 @@ async function deleteDocument(req, res, next) {
       return res.status(404).json({ error: 'Document not found' });
     }
 
-    // Delete from Supabase Storage
+    // Delete the raw file from R2
     if (doc.storagePath) {
       try {
-        await supabase.storage.from(STORAGE_BUCKET).remove([doc.storagePath]);
+        await r2.remove([doc.storagePath]);
       } catch (storageErr) {
         console.error(`Failed to delete from storage: ${storageErr.message}`);
         // Non-blocking: proceed with DB cleanup even if storage delete fails
@@ -557,12 +572,9 @@ async function getDocumentViewUrl(req, res, next) {
     if (!doc.storagePath) {
       return res.status(400).json({ error: 'This document has no rendered file (e.g. URL, note, or topic source).' });
     }
-    const { data, error } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .createSignedUrl(doc.storagePath, 60 * 30); // 30 min
-    if (error) throw error;
+    const signedUrl = await r2.getSignedDownloadUrl(doc.storagePath, 60 * 30); // 30 min
     res.json({
-      signedUrl: data.signedUrl,
+      signedUrl,
       fileType: doc.fileType || null,
       totalPages: doc.metadata?.pages || doc.pages || null,
     });
@@ -604,19 +616,15 @@ async function signUpload(req, res, next) {
       });
     }
 
-    await ensureBucket();
     const storagePath = buildStoragePath(filename);
 
-    const { data, error } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .createSignedUploadUrl(storagePath);
-
-    if (error) throw error;
+    // Presigned PUT — the frontend uploads the raw bytes directly to R2 via HTTP PUT.
+    const signedUrl = await r2.getSignedUploadUrl(storagePath);
 
     res.json({
-      signedUrl: data.signedUrl,
-      token: data.token,
+      signedUrl,
       storagePath,
+      method: 'PUT',
     });
   } catch (error) {
     next(error);

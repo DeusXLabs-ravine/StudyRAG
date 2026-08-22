@@ -23,8 +23,7 @@ import XpPopup from '../components/chat/XpPopup';
 import AchievementToast from '../components/chat/AchievementToast';
 import FormulaInput from '../components/chat/FormulaInput';
 import InputPreview from '../components/chat/InputPreview';
-import { getTutorGreeting, sendTutorMessage } from '../services/moduleService';
-import { prefetchAllChunks } from '../services/ttsService';
+import { getTutorGreeting, sendTutorMessage, prioritizeModule, retryModule } from '../services/moduleService';
 import { listDiagrams, getModuleDiagrams, generateDiagramForTopic } from '../services/diagramService';
 import { getModuleMedicalResources } from '../services/medicalResourceService';
 import api from '../services/api';
@@ -43,7 +42,7 @@ export default function Learn() {
   const { documentId: routeDocId } = useParams();
   const [searchParams] = useSearchParams();
   const routeCourseId = searchParams.get('courseId');
-  const { modules, currentModule, loading: modulesLoading, generating, bridgeGeneratingModuleId, fetchModules, fetchCourseModules, stopPolling, setCurrentModule, regenerateQuestions, markModuleCompleted } = useModuleStore();
+  const { modules, currentModule, loading: modulesLoading, generating, bridgeGeneratingModuleId, adaptiveRewritingModuleId, fetchModules, fetchCourseModules, stopPolling, setCurrentModule, regenerateQuestions, markModuleCompleted } = useModuleStore();
   const { documents, fetchDocuments } = useDocumentStore();
   const { courses, fetchCourses } = useCourseStore();
   const { settings, tutorial_completed, setTutorialCompleted, fetchSettings } = useSettingsStore();
@@ -96,7 +95,6 @@ export default function Learn() {
   }, [fetchDocuments, fetchCourses]);
 
   const getVoiceId = useSettingsStore(state => state.getVoiceId);
-  const prefetchCancelRef = useRef(null);
 
   useEffect(() => {
     if (viewMode === 'course' && selectedCourseId) {
@@ -152,26 +150,21 @@ export default function Learn() {
     }
   }, [modules]);
 
-  // Background prefetch TTS audio chunks when module changes
-  useEffect(() => {
-    // Cancel any previous prefetch
-    if (prefetchCancelRef.current) {
-      prefetchCancelRef.current();
-      prefetchCancelRef.current = null;
-    }
-
-    if (currentModule?.content && !showQuiz) {
-      const voiceId = getVoiceId();
-      prefetchCancelRef.current = prefetchAllChunks(currentModule.content, voiceId);
-    }
-
-    return () => {
-      if (prefetchCancelRef.current) {
-        prefetchCancelRef.current();
-        prefetchCancelRef.current = null;
-      }
-    };
-  }, [currentModule?.id, showQuiz, getVoiceId]);
+  // TTS is no longer prefetched on module change.
+  //
+  // The old prefetch split the module into 800-character chunks and synthesized
+  // every one of them through the metered /tts/speak endpoint the moment a module
+  // opened — whether or not the student ever pressed play, and again whenever the
+  // quiz was toggled. That audio could never be used: playback streams the FULL
+  // module text through /tts/speak/stream, so it neither matched the prefetched
+  // chunks nor read the cache they populated. The only effect was cost — roughly
+  // eight metered calls per module open, which exhausted a Pro tier's entire
+  // monthly TTS allowance in about four opens without producing a second of
+  // audible audio (and a burst of silent 403s on tiers where TTS is disabled).
+  //
+  // Synthesis now happens only when the student actually presses play, and the
+  // server-side content-addressed cache (services/ttsCache.js) makes every repeat
+  // playback of the same text instant and free for every user.
 
   // Fetch tutor greeting when module changes (skip if already cached in store)
   useEffect(() => {
@@ -209,6 +202,23 @@ export default function Learn() {
     setMedicalResources([]);
     setCurrentModule(module);
     setShowQuiz(false);
+
+    // Opening a lesson that hasn't been written yet bumps it to the front of the
+    // generation queue, so attention decides what gets written next rather than
+    // the student waiting on modules they don't care about. The outline text is
+    // already showing meanwhile, so there is something to read either way.
+    if (module.contentStatus === 'pending') {
+      prioritizeModule(module.id).catch(() => { /* queue order is best-effort */ });
+    }
+
+    // A module whose generation failed has no worker left to pick it up, so
+    // opening it triggers the write directly. Refresh once it lands.
+    if (module.contentStatus === 'failed') {
+      retryModule(module.id)
+        .then(() => { if (selectedDocId) fetchModules(selectedDocId); })
+        .catch(() => { /* surfaced by the failed state remaining */ });
+    }
+
     // Track reading interaction (non-blocking)
     recordLearningInteraction('text_explanation', 'view').catch(() => { });
   };
@@ -622,6 +632,7 @@ export default function Learn() {
                     getTopicIcon={getTopicIcon}
                     generating={generating}
                     bridgeGeneratingModuleId={bridgeGeneratingModuleId}
+            adaptiveRewritingModuleId={adaptiveRewritingModuleId}
                     sectionPodcasts={sectionPodcasts}
                     onSectionPodcastClick={handleSectionPodcastClick}
                   />
@@ -654,6 +665,11 @@ export default function Learn() {
               ) : (
                 <LessonViewer
                   module={currentModule}
+                  displayNumber={
+                    currentModule?.isIntro
+                      ? null
+                      : (modules || []).filter(m => !m.isIntro).findIndex(m => m.id === currentModule?.id) + 1
+                  }
                   diagrams={diagrams.filter(d => d.status === 'ready')}
                   teachingLevel={settings.teaching_level || 'intermediate'}
                   generatedDiagrams={generatedDiagrams}
@@ -857,6 +873,7 @@ export default function Learn() {
                   getTopicIcon={getTopicIcon}
                   generating={generating}
                   bridgeGeneratingModuleId={bridgeGeneratingModuleId}
+            adaptiveRewritingModuleId={adaptiveRewritingModuleId}
                   sectionPodcasts={sectionPodcasts}
                   onSectionPodcastClick={(sp) => {
                     handleSectionPodcastClick(sp);
@@ -955,7 +972,7 @@ export default function Learn() {
   );
 }
 
-function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSelect, getTopicIcon, generating, bridgeGeneratingModuleId, sectionPodcasts, onSectionPodcastClick }) {
+function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSelect, getTopicIcon, generating, bridgeGeneratingModuleId, adaptiveRewritingModuleId, sectionPodcasts, onSectionPodcastClick }) {
   const moduleCount = (modules || []).length;
   return (
     <div className="flex flex-col gap-4">
@@ -1020,6 +1037,19 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
         </div>
       )}
 
+      {/* Adaptive rewrite in progress — this lesson is being re-taught for the learner */}
+      {adaptiveRewritingModuleId && (
+        <div className="bg-sky-50 border border-sky-100 rounded-2xl p-4 mb-2 flex items-center gap-4 shadow-sm">
+          <div className="w-8 h-8 rounded-xl bg-white border border-sky-200 flex items-center justify-center">
+            <Loader2 className="h-4 w-4 text-sky-500 animate-spin" />
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-sky-600 uppercase tracking-widest leading-none mb-1">Adapting to you</p>
+            <h4 className="text-sm font-bold text-sky-900 leading-none">Sage is rewriting this lesson to fit how you learn…</h4>
+          </div>
+        </div>
+      )}
+
       {Object.entries(
         (modules || []).reduce((acc, mod) => {
           const topic = mod.topic || 'General';
@@ -1055,6 +1085,11 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
               const isActive = currentModule?.id === mod.id;
               const isCompleted = mod.progress?.completed;
               const isBridge = mod.moduleType === 'bridge';
+              // Skeleton from the outline — the lesson body hasn't been written
+              // yet. 'writing' means a worker has claimed it. Both are still
+              // selectable: opening shows the outline description meanwhile, and
+              // a 'pending' one also jumps the queue.
+              const isPending = mod.contentStatus === 'pending' || mod.contentStatus === 'writing';
 
               return (
                 <button
@@ -1087,6 +1122,30 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
                   <span className="truncate flex-1 font-medium">{mod.title}</span>
                   {isBridge && !isActive && (
                     <span className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-amber-200 text-amber-800 rounded-md">Review</span>
+                  )}
+                  {!isBridge && (mod.version || 1) > 1 && (
+                    <span
+                      title={`Rewritten for you${mod.regenReason ? ` — ${mod.regenReason}` : ''}`}
+                      className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-sky-100 text-sky-700 rounded-md"
+                    >
+                      For you · v{mod.version}
+                    </span>
+                  )}
+                  {isPending && !isActive && (
+                    <span
+                      title="This lesson is still being written. Open it to move it to the front of the queue."
+                      className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-gray-100 text-gray-500 rounded-md"
+                    >
+                      Writing…
+                    </span>
+                  )}
+                  {mod.contentStatus === 'failed' && !isActive && (
+                    <span
+                      title="This lesson couldn't be written. Open it to try again."
+                      className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-700 rounded-md"
+                    >
+                      Retry
+                    </span>
                   )}
                 </button>
               );

@@ -5,8 +5,8 @@
  * All existing `require('../utils/prompts')` calls continue to work unchanged.
  */
 
-const { MODULE_GENERATION_PROMPT, MODULE_OUTLINE_PROMPT, MODULE_BATCH_GENERATION_PROMPT } = require('./prompts/moduleGeneration');
-const { QUIZ_GENERATION_PROMPT, FLASHCARD_GENERATION_PROMPT, APTITUDE_TEST_PROMPT, QUESTION_REGENERATION_PROMPT, REVISION_QUESTIONS_PROMPT, PRACTICE_EXAM_PROMPT } = require('./prompts/quizAssessment');
+const { MODULE_GENERATION_PROMPT, MODULE_OUTLINE_PROMPT, MODULE_BATCH_GENERATION_PROMPT, INTRO_MODULE_PROMPT } = require('./prompts/moduleGeneration');
+const { QUIZ_GENERATION_PROMPT, FLASHCARD_GENERATION_PROMPT, APTITUDE_TEST_PROMPT, QUESTION_REGENERATION_PROMPT, REVISION_QUESTIONS_PROMPT, PRACTICE_EXAM_PROMPT, LAZY_QUIZ_PROMPT } = require('./prompts/quizAssessment');
 const { WEB_RESEARCH_TOPIC_EXTRACTION_PROMPT, WEB_RESEARCH_PROMPT, TOPIC_CURRICULUM_PROMPT, buildTopicPrompt } = require('./prompts/webResearch');
 const { SOLVER_PROMPT, SOLVER_FOLLOWUP_PROMPT } = require('./prompts/solver');
 const { EXAM_PATTERN_ANALYSIS_PROMPT, STUDY_GUIDE_GENERATION_PROMPT } = require('./prompts/examPrep');
@@ -19,12 +19,14 @@ const { GAME_GENERATION_PROMPT, SIMULATION_GENERATION_PROMPT } = require('./prom
 const { BRIDGE_MODULE_GENERATION_PROMPT } = require('./prompts/bridge');
 const { buildInterestsSection, buildLearningStyleSection, buildPaceSection, buildLegalGroundingSection } = require('./prompts/helpers');
 const { getModuleDepthSection, getQuizDepthSection, getTutorDepthSection } = require('./prompts/depthRouter');
+const { PEDAGOGY_CORE, BACKWARD_DESIGN_BLOCK, RETRIEVAL_PRACTICE_BLOCK, QUIZ_HYGIENE_BLOCK, buildMissionSection, buildLearnerStateSection, buildFocusSection, buildInterleavingSection } = require('./prompts/pedagogy');
 
 module.exports = {
   // Module generation
   MODULE_GENERATION_PROMPT,
   MODULE_OUTLINE_PROMPT,
   MODULE_BATCH_GENERATION_PROMPT,
+  INTRO_MODULE_PROMPT,
 
   // Quiz & assessment
   QUIZ_GENERATION_PROMPT,
@@ -33,6 +35,7 @@ module.exports = {
   QUESTION_REGENERATION_PROMPT,
   REVISION_QUESTIONS_PROMPT,
   PRACTICE_EXAM_PROMPT,
+  LAZY_QUIZ_PROMPT,
 
   // Web research & topic curriculum
   WEB_RESEARCH_TOPIC_EXTRACTION_PROMPT,
@@ -91,4 +94,14 @@ module.exports = {
   getModuleDepthSection,
   getQuizDepthSection,
   getTutorDepthSection,
+
+  // Pedagogy (shared across every model — Gemini and DeepSeek alike)
+  PEDAGOGY_CORE,
+  BACKWARD_DESIGN_BLOCK,
+  RETRIEVAL_PRACTICE_BLOCK,
+  QUIZ_HYGIENE_BLOCK,
+  buildMissionSection,
+  buildLearnerStateSection,
+  buildFocusSection,
+  buildInterleavingSection,
 };

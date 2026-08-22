@@ -1,6 +1,7 @@
 const supabase = require('../config/database');
 const { getAllModules, getModuleById, getModulesByDocument, getModulesByCourse, regenerateQuestions: regenerateModuleQuestions, isGeneratingModules } = require('../services/moduleGenerator');
 const { shouldGenerateBridge, triggerBridgeGeneration } = require('../services/bridgeModuleService');
+const { onQuizFailure, onTopicMastered, REGEN_SCORE_THRESHOLD } = require('../services/adaptiveLearningService');
 
 function formatProgress(row) {
   if (!row) return { completed: false, score: null, attempts: 0 };
@@ -137,8 +138,21 @@ async function updateProgress(req, res, next) {
       }
     }
 
+    // Adaptive learning: record what was struggled with, and — on a genuine fail
+    // — rewrite this module for the learner. Bridge ADDS a remedial module; this
+    // REWRITES the failed one to teach it differently. Fully fire-and-forget so it
+    // never adds latency to the submit response; the flag is informational for the
+    // UI ("we're adapting this lesson"), computed from the score directly.
+    const adaptiveRegenerating = Boolean(answers) && score < REGEN_SCORE_THRESHOLD;
+    if (answers && score < 70) {
+      onQuizFailure(module, score, answers, userId)
+        .catch(err => console.error(`[moduleController] onQuizFailure failed:`, err.message));
+    } else if (score >= 85) {
+      onTopicMastered(module, score, userId).catch(() => {});
+    }
+
     const progress = await getProgressForModule(id);
-    res.json({ moduleId: id, progress, bridgeGenerating });
+    res.json({ moduleId: id, progress, bridgeGenerating, adaptiveRegenerating });
   } catch (error) {
     next(error);
   }

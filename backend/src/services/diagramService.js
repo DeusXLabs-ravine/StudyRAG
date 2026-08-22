@@ -9,21 +9,23 @@ const {
 } = require('../utils/prompts');
 
 const VISION_CONCURRENCY = 3;
-const STORAGE_BUCKET = 'diagram-images';
 const TEACHING_LEVELS = ['dummy', 'beginner', 'intermediate', 'advanced'];
 const DEFAULT_ANALYSIS_LEVEL = 'intermediate';
 
-// ─── Storage Bucket ────────────────────────────────────────
-
-let bucketReady = false;
-async function ensureBucket() {
-  if (bucketReady) return;
-  const { data: existing } = await supabase.storage.getBucket(STORAGE_BUCKET);
-  if (!existing) {
-    const { error } = await supabase.storage.createBucket(STORAGE_BUCKET, { public: false });
-    if (error && !error.message?.includes('already exists')) throw error;
-  }
-  bucketReady = true;
+// ─── Cloudinary image storage ──────────────────────────────
+const { v2: cloudinary } = require('cloudinary');
+const { cloudinaryCloudName, cloudinaryApiKey, cloudinaryApiSecret } = require('../config/env');
+if (cloudinaryCloudName && cloudinaryApiKey && cloudinaryApiSecret) {
+  cloudinary.config({ cloud_name: cloudinaryCloudName, api_key: cloudinaryApiKey, api_secret: cloudinaryApiSecret, secure: true });
+}
+function uploadImageToCloudinary(buffer, publicId) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { public_id: publicId, resource_type: 'image', overwrite: true, invalidate: true },
+      (err, result) => (err ? reject(err) : resolve(result)),
+    );
+    stream.end(buffer);
+  });
 }
 
 // ─── JSON Parsing Helpers ──────────────────────────────────
@@ -139,20 +141,19 @@ async function processDocumentDiagrams(docId, buffer, ext, pageTexts) {
       return;
     }
 
-    // Step 3: Upload original images and create DB rows
-    await ensureBucket();
-
+    // Step 3: Upload original images to Cloudinary and create DB rows
     const diagramRows = [];
     for (const item of detected) {
       for (const diag of item.detectedDiagrams) {
         const id = uuidv4();
-        const storagePath = `${docId}/${id}.png`;
+        const publicId = `studyrag/doc-diagrams/${docId}/${id}`;
 
-        // Upload original page image
-        const { error: uploadErr } = await supabase.storage
-          .from(STORAGE_BUCKET)
-          .upload(storagePath, item.imageBuffer, { contentType: item.mimeType });
-        if (uploadErr) {
+        // Upload original page image to Cloudinary; store the secure_url on the row
+        let imageUrl;
+        try {
+          const uploaded = await uploadImageToCloudinary(item.imageBuffer, publicId);
+          imageUrl = uploaded.secure_url;
+        } catch (uploadErr) {
           console.warn(`${prefix} Failed to upload image for page ${item.pageNumber}: ${uploadErr.message}`);
           continue;
         }
@@ -168,7 +169,7 @@ async function processDocumentDiagrams(docId, buffer, ext, pageTexts) {
           labels: diag.labels || [],
           mermaid_code: {},
           simplified_descriptions: {},
-          original_image_path: storagePath,
+          original_image_path: imageUrl,
           status: 'analyzing',
         };
 
@@ -264,13 +265,9 @@ async function getDiagramById(id) {
 
 async function getDiagramImageUrl(id) {
   const diagram = await getDiagramById(id);
-  if (!diagram || !diagram.originalImagePath) return null;
-
-  const { data, error } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .createSignedUrl(diagram.originalImagePath, 3600); // 1hr expiry
-  if (error) throw error;
-  return data.signedUrl;
+  if (!diagram) return null;
+  // original_image_path now holds a public Cloudinary URL.
+  return diagram.originalImagePath || null;
 }
 
 async function regenerateDiagramLevel(id, level) {
@@ -308,21 +305,11 @@ async function regenerateDiagramLevel(id, level) {
 }
 
 async function deleteDiagramsByDocument(docId) {
-  // Get image paths to clean up storage
-  const { data: diagrams } = await supabase
-    .from('document_diagrams')
-    .select('original_image_path')
-    .eq('document_id', docId);
-
-  if (diagrams && diagrams.length > 0) {
-    const paths = diagrams.map(d => d.original_image_path).filter(Boolean);
-    if (paths.length > 0) {
-      try {
-        await supabase.storage.from(STORAGE_BUCKET).remove(paths);
-      } catch (err) {
-        console.warn(`[DiagramService] Failed to delete stored images: ${err.message}`);
-      }
-    }
+  // Best-effort cleanup of this document's Cloudinary images (uploaded under a per-doc prefix).
+  try {
+    await cloudinary.api.delete_resources_by_prefix(`studyrag/doc-diagrams/${docId}/`);
+  } catch (err) {
+    console.warn(`[DiagramService] Failed to delete stored images: ${err.message}`);
   }
 
   const { error } = await supabase

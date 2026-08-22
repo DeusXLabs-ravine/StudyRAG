@@ -1,6 +1,6 @@
 const supabase = require('../config/database');
 const { getGenerativeModel, withRetryOnRateLimit } = require('../config/gemini');
-const { MODULE_GENERATION_PROMPT, MODULE_OUTLINE_PROMPT, MODULE_BATCH_GENERATION_PROMPT, QUESTION_REGENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection, buildLegalGroundingSection, getModuleDepthSection, getQuizDepthSection } = require('../utils/prompts');
+const { MODULE_GENERATION_PROMPT, MODULE_OUTLINE_PROMPT, MODULE_BATCH_GENERATION_PROMPT, QUESTION_REGENERATION_PROMPT, buildInterestsSection, buildLearningStyleSection, buildPaceSection, buildLegalGroundingSection, getModuleDepthSection, getQuizDepthSection, PEDAGOGY_CORE, BACKWARD_DESIGN_BLOCK, RETRIEVAL_PRACTICE_BLOCK, QUIZ_HYGIENE_BLOCK, buildMissionSection, buildLearnerStateSection, buildFocusSection, buildInterleavingSection } = require('../utils/prompts');
 const { getUserTeachingLevel, getUserInterests, getEffectiveLearningStyle, getEffectiveLearningPace } = require('./userProfileService');
 const { prepareTextForLLM } = require('./chunkingService');
 const { moduleCache } = require('../config/cache');
@@ -12,7 +12,30 @@ const { extractJSON, tryExtractArrayItems } = require('../utils/jsonHelper');
 const SEGMENT_SIZE = 40000;
 const MAX_CONCURRENCY = 3;
 const BATCH_SIZE = 3;         // modules per LLM batch call in two-phase generation
-const BATCH_CONCURRENCY = 2;  // parallel batch calls within a segment
+const BATCH_CONCURRENCY = 8;  // parallel batch calls within a segment — sized so a typical segment lands in ONE wave (key pool supports ~210 concurrent)
+
+// Questions generated inline with a module. The full quiz is generated lazily
+// when the student actually opens it, which both removes ~40% of upload-time
+// output tokens and lets the distractors be built from that learner's real
+// past mistakes. One inline question keeps the retrieval-practice loop intact.
+const INLINE_QUESTION_COUNT = 1;
+const FULL_QUIZ_QUESTION_COUNT = 5;
+
+/**
+ * Content length for a module, chosen by learner rather than by subject.
+ *
+ * Generation time is roughly linear in output tokens, so this is the single
+ * biggest latency lever — but the reason it defaults short is pedagogical: a
+ * 1200-word wall of text is the failure mode this platform exists to fix.
+ * Depth is earned by learners who have demonstrated they want it.
+ */
+function getContentWordRange(teachingLevel, pedagogyOpts = {}) {
+  const wantsDepth = teachingLevel === 'advanced';
+  const needsShort = pedagogyOpts.focusMode || pedagogyOpts.learnerState?.pace === 'slow';
+  if (needsShort) return '250-400 words';
+  if (wantsDepth) return '600-1200 words';
+  return '300-500 words';
+}
 
 // Track which documents currently have background module generation in progress.
 // Ephemeral — resets on server restart (which also kills background jobs).
@@ -86,6 +109,32 @@ async function withRetry(fn, retries = 1, label = '') {
 }
 
 /**
+ * Fill every pedagogy placeholder on a prompt template.
+ *
+ * `opts` carries adaptive, learner-specific context. When it is absent — the
+ * normal case for a brand-new document — the learner-specific sections collapse
+ * to empty strings and the prompt degrades cleanly to its non-adaptive form,
+ * while the universal teaching principles still apply.
+ *
+ * @param {string} prompt Template containing pedagogy placeholders.
+ * @param {object} [opts]
+ * @param {string} [opts.mission] Why this student is studying the material.
+ * @param {object} [opts.learnerState] See buildLearnerStateSection.
+ * @param {boolean} [opts.focusMode] Attention accommodations (ADHD focus mode).
+ * @param {string[]} [opts.priorTopics] Earlier topics to interleave into practice.
+ */
+function applyPedagogy(prompt, opts = {}) {
+  const { mission, learnerState, focusMode, priorTopics } = opts;
+  return prompt
+    .replace('{pedagogy_section}', `${PEDAGOGY_CORE}${BACKWARD_DESIGN_BLOCK}${RETRIEVAL_PRACTICE_BLOCK}`)
+    .replace('{quiz_hygiene_section}', QUIZ_HYGIENE_BLOCK)
+    .replace('{mission_section}', buildMissionSection(mission))
+    .replace('{learner_state_section}', buildLearnerStateSection(learnerState))
+    .replace('{focus_section}', buildFocusSection(focusMode))
+    .replace('{interleaving_section}', buildInterleavingSection(priorTopics));
+}
+
+/**
  * Phase 1: Generate a curriculum outline for a text segment.
  * Returns an array of { title, topic, description } — small output, fast.
  */
@@ -116,8 +165,13 @@ async function generateOutlineForSegment(segmentText, segmentIndex, totalSegment
     .replace('{min_modules}', String(minModules));
 
   const result = await withRetryOnRateLimit(async () => {
-    const model = getGenerativeModel('fast');
-    return model.generateContent(prompt);
+    // Outline is structurally simple (titles/topics) — use the faster lite tier,
+    // with thinking disabled so the budget goes to JSON rather than reasoning.
+    const model = getGenerativeModel('fast_lite');
+    return model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 8192, temperature: 0.3, thinkingConfig: { thinkingBudget: 0 } },
+    });
   }, 3, 1);
   const text = result.response.text();
   const parsed = extractJSON(text);
@@ -131,7 +185,7 @@ async function generateOutlineForSegment(segmentText, segmentIndex, totalSegment
  * Phase 2: Generate full module content for a batch of outlined modules.
  * Each batch is typically 3 modules — keeps output manageable per LLM call.
  */
-async function generateModuleBatch(segmentText, fullOutline, batchModules, batchStart, teachingLevel, interests, learningStyle, learningPace) {
+async function generateModuleBatch(segmentText, fullOutline, batchModules, batchStart, teachingLevel, interests, learningStyle, learningPace, pedagogyOpts = {}) {
   const outlineText = fullOutline
     .map((m, i) => `${i + 1}. "${m.title}" [${m.topic}]: ${m.description}`)
     .join('\n');
@@ -140,11 +194,13 @@ async function generateModuleBatch(segmentText, fullOutline, batchModules, batch
     .map((m, i) => `${batchStart + i + 1}. "${m.title}" [${m.topic}]: ${m.description}`)
     .join('\n');
 
-  const { depthSection, domain } = getModuleDepthSection(segmentText);
+  const { depthSection } = getModuleDepthSection(segmentText);
   const quizDepthSection = getQuizDepthSection(segmentText);
-  const contentWordRange = domain ? '600-1200 words' : '200-400 words';
+  const contentWordRange = getContentWordRange(teachingLevel, pedagogyOpts);
+  const questionCount = pedagogyOpts.questionCount ?? INLINE_QUESTION_COUNT;
 
-  const prompt = MODULE_BATCH_GENERATION_PROMPT
+  const prompt = applyPedagogy(MODULE_BATCH_GENERATION_PROMPT, pedagogyOpts)
+    .replace('{question_count}', String(questionCount))
     .replace('{document_text}', segmentText)
     .replace('{teaching_level}', teachingLevel)
     .replace('{interests_section}', buildInterestsSection(interests, teachingLevel))
@@ -158,10 +214,27 @@ async function generateModuleBatch(segmentText, fullOutline, batchModules, batch
     .replace('{batch_modules}', batchText);
 
   const result = await withRetryOnRateLimit(async () => {
-    const model = getGenerativeModel('fast');
+    // Model + config here were derived from measurement, not preference:
+    //
+    // gemini-2.5-flash is a reasoning model and its THINKING tokens count against
+    // maxOutputTokens. A measured batch hit MAX_TOKENS having emitted only ~669
+    // visible tokens of a 16384 budget — the rest went to internal reasoning. The
+    // JSON was therefore always truncated, always failed to parse, and always
+    // retried, which is what turned a ~25s batch into ~148s.
+    //
+    // thinkingBudget: 0 removes that failure mode (measured finishReason STOP
+    // rather than MAX_TOKENS). flash-lite additionally measured 4.3x faster
+    // (15.7s vs 67.7s) with better JSON compliance (3/3 modules parsed vs 2/3),
+    // because it does not reason before answering — which structured extraction
+    // does not need.
+    const model = getGenerativeModel('fast_lite');
     return model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 8192, temperature: 0.2 },
+      generationConfig: {
+        maxOutputTokens: 16384,
+        temperature: 0.2,
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     });
   }, 3, 1);
   const text = result.response.text();
@@ -176,16 +249,18 @@ async function generateModuleBatch(segmentText, fullOutline, batchModules, batch
 /**
  * Legacy single-call generation — used as fallback when two-phase fails.
  */
-async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalSegments, teachingLevel, interests, learningStyle, learningPace) {
+async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalSegments, teachingLevel, interests, learningStyle, learningPace, pedagogyOpts = {}) {
   const segmentNote = totalSegments > 1
     ? `\n\nNote: This is section ${segmentIndex + 1} of ${totalSegments} from the document. Create modules only for the topics in THIS section.\n`
     : '';
 
-  const { depthSection, domain } = getModuleDepthSection(segmentText);
+  const { depthSection } = getModuleDepthSection(segmentText);
   const quizDepthSection = getQuizDepthSection(segmentText);
-  const contentWordRange = domain ? '600-1200 words' : '200-400 words';
+  const contentWordRange = getContentWordRange(teachingLevel, pedagogyOpts);
+  const questionCount = pedagogyOpts.questionCount ?? INLINE_QUESTION_COUNT;
 
-  const prompt = MODULE_GENERATION_PROMPT
+  const prompt = applyPedagogy(MODULE_GENERATION_PROMPT, pedagogyOpts)
+    .replace('{question_count}', String(questionCount))
     .replace('{document_text}', segmentText + segmentNote)
     .replace('{teaching_level}', teachingLevel)
     .replace('{interests_section}', buildInterestsSection(interests, teachingLevel))
@@ -197,10 +272,19 @@ async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalS
     .replace('{quiz_depth_section}', quizDepthSection);
 
   const result = await withRetryOnRateLimit(async () => {
-    const model = getGenerativeModel('fast');
+    // 'fast_lite', matching the primary path. Measured against a real 40k-char
+    // segment, 2.5-flash took 46.2s and returned output that would not parse,
+    // while 2.5-flash-lite produced a complete module in 7.2s. This is the
+    // fallback that runs when two-phase generation has already failed, so it is
+    // the last place that can afford to be slow or unreliable.
+    const model = getGenerativeModel('fast_lite');
     return model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 8192, temperature: 0.3 },
+      generationConfig: {
+        maxOutputTokens: 16384,
+        temperature: 0.3,
+        thinkingConfig: { thinkingBudget: 0 }, // see generateModuleBatch for why
+      },
     });
   }, 3, 1);
   const text = result.response.text();
@@ -256,10 +340,14 @@ async function generateModulesForSegment(segmentText, segmentIndex, totalSegment
     }
   }
 
-  // Phase 2: Generate modules in parallel batches
-  // Use smaller batches for high-depth domains to avoid hitting LLM output token limits
-  const { domain } = getModuleDepthSection(segmentText);
-  const effectiveBatchSize = domain ? 2 : BATCH_SIZE;
+  // Phase 2: Generate modules in parallel batches.
+  //
+  // High-depth domains used to halve the batch size to avoid truncation at the
+  // old 8192 output-token cap. With the cap now at 16384 and modules defaulting
+  // to 300-500 words with one inline question, that guard is over-tuned: it was
+  // doubling the batch count (and therefore the number of sequential waves) for
+  // no benefit. Measured at 8 batches / 2 waves / 247s before this change.
+  const effectiveBatchSize = BATCH_SIZE;
   
   const batches = [];
   for (let i = 0; i < outline.length; i += effectiveBatchSize) {
@@ -327,6 +415,10 @@ async function insertModuleResults(docId, segmentResults, startOrderIndex, opts 
         objectives: Array.isArray(mod.objectives) ? mod.objectives : [],
         content: mod.content || 'Content generation failed for this section.',
         takeaways: Array.isArray(mod.takeaways) ? mod.takeaways : [],
+        // Pedagogy metadata (backward design): the outcome the module teaches and
+        // its Bloom level. Nullable — older/stripped generations may omit them.
+        outcome: mod.outcome || null,
+        bloom_level: mod.bloomLevel || null,
       };
 
       if (opts.courseId) row.course_id = opts.courseId;
@@ -350,6 +442,7 @@ async function insertModuleResults(docId, segmentResults, startOrderIndex, opts 
           options: qOptions,
           correct: qCorrect,
           explanation: q.explanation || 'Answer based on the module content.',
+          misconception: q.misconception || null,
           topic: q.topic || row.topic,
         });
       }
@@ -748,6 +841,13 @@ function formatModule(row, questionRows) {
     objectives: row.objectives,
     content: row.content,
     takeaways: row.takeaways,
+    outcome: row.outcome || null,
+    bloomLevel: row.bloom_level || null,
+    contentStatus: row.content_status || 'ready',
+    isIntro: row.is_intro === true,
+    version: row.version || 1,
+    regenReason: row.regen_reason || null,
+    regeneratedAt: row.regenerated_at || null,
     questions: questionRows.map(q => ({
       id: q.id,
       type: q.type,
@@ -874,10 +974,213 @@ async function regenerateQuestions(moduleId, userId = null) {
   return await getModuleById(moduleId);
 }
 
+/**
+ * Regenerate ONE existing module, taught differently for this specific learner.
+ *
+ * Grounded on the module's OWN current content — the facts stay the same, the
+ * teaching changes. What makes the new version different is `pedagogyOpts`:
+ * the learner's misconceptions, how many times they've already failed this
+ * material (attemptNumber), their pace, and their preferred analogy domain.
+ * Because attemptNumber > 1 triggers the "do not restate the previous
+ * explanation" rule in the prompt, the rewrite is forced to change approach.
+ *
+ * Returns a parsed module object ({ title, topic, outcome, bloomLevel,
+ * objectives, content, takeaways, questions }). Does NOT write to the DB —
+ * adaptiveLearningService owns the archive-and-swap.
+ */
+async function regenerateModuleContent(module, userId, pedagogyOpts = {}) {
+  const [teachingLevel, interests, learningStyle, learningPace] = await Promise.all([
+    getUserTeachingLevel(userId),
+    getUserInterests(userId),
+    getEffectiveLearningStyle(userId),
+    getEffectiveLearningPace(userId),
+  ]);
+
+  const takeaways = Array.isArray(module.takeaways) ? module.takeaways.join('\n- ') : '';
+  const grounding = `${module.content || ''}\n\nKey points:\n- ${takeaways}`;
+  const outline = [{
+    title: module.title,
+    topic: module.topic || module.title,
+    description: Array.isArray(module.objectives)
+      ? module.objectives.join('; ')
+      : (module.objectives || ''),
+  }];
+
+  const { modules } = await generateModuleBatch(
+    grounding, outline, outline, 0,
+    teachingLevel, interests, learningStyle, learningPace,
+    pedagogyOpts,
+  );
+  if (!modules || !modules.length) throw new Error('Regeneration produced no module');
+  return modules[0];
+}
+
+// ─── Progressive (skeleton-first) generation ──────────────────
+//
+// The outline is persisted IMMEDIATELY as "pending" module rows, so the student
+// sees the whole course map within seconds instead of staring at a spinner until
+// every batch has finished. Content batches then UPDATE those rows in place.
+//
+// This ordering also removes the order_index collision hazard that previously
+// made per-batch writes unsafe: rows are inserted once, in order, up front, and
+// afterwards only updated — so there are no concurrent inserts to collide.
+
+/**
+ * Persist an outline as pending skeleton modules.
+ *
+ * The outline's description is stored as placeholder content so a student who
+ * opens a not-yet-written module still has something meaningful to read, rather
+ * than an empty page.
+ *
+ * @returns {Promise<object[]>} the inserted rows, in order
+ */
+async function insertSkeletonModules(docId, outline, startOrderIndex, opts = {}) {
+  const rows = outline.map((m, i) => ({
+    id: uuidv4(),
+    document_id: docId,
+    order_index: startOrderIndex + i,
+    title: m.title || 'Untitled Module',
+    topic: m.topic || m.title || 'General',
+    objectives: [],
+    content: m.description || 'This lesson is being written…',
+    takeaways: [],
+    content_status: 'pending',
+    ...(opts.courseId ? { course_id: opts.courseId } : {}),
+    ...(opts.sourceDocuments ? { source_documents: opts.sourceDocuments } : {}),
+  }));
+
+  const { error } = await supabase.from('modules').insert(rows);
+  if (error) throw error;
+
+  moduleCache.del(`byDoc:${docId}`);
+  moduleCache.del('allModules');
+  return rows;
+}
+
+/**
+ * Match generated modules back onto their skeleton rows.
+ *
+ * Prefers title matching over positional matching because a model may return
+ * fewer modules than requested, or return them reordered; blindly zipping by
+ * index would then write content onto the wrong lesson.
+ */
+function pairGeneratedWithSkeletons(skeletons, generated) {
+  const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const unused = [...generated];
+  const pairs = [];
+
+  for (const row of skeletons) {
+    const key = norm(row.title);
+    let idx = unused.findIndex(g => norm(g.title) === key);
+    if (idx === -1) idx = unused.findIndex(g => norm(g.title).includes(key) || key.includes(norm(g.title)));
+    if (idx === -1) continue;
+    pairs.push({ row, gen: unused[idx] });
+    unused.splice(idx, 1);
+  }
+
+  // Anything left unmatched falls back to filling remaining skeletons in order.
+  const matched = new Set(pairs.map(p => p.row.id));
+  const leftovers = skeletons.filter(r => !matched.has(r.id));
+  leftovers.forEach((row, i) => {
+    if (unused[i]) pairs.push({ row, gen: unused[i] });
+  });
+
+  return pairs;
+}
+
+/**
+ * Generate content for one batch of skeleton rows and write it in place.
+ * Marks the rows 'ready' on success, 'failed' on error so they can be retried
+ * rather than sitting pending forever.
+ */
+async function fillSkeletonBatch(skeletons, segmentText, fullOutline, batchStart, profile, pedagogyOpts = {}) {
+  const { teachingLevel, interests, learningStyle, learningPace } = profile;
+  const ids = skeletons.map(r => r.id);
+
+  await supabase.from('modules')
+    .update({ generation_started_at: new Date().toISOString() })
+    .in('id', ids);
+
+  const items = skeletons.map(r => ({ title: r.title, topic: r.topic, description: r.content }));
+
+  let generated;
+  try {
+    const result = await withRetry(
+      () => generateModuleBatch(segmentText, fullOutline, items, batchStart, teachingLevel, interests, learningStyle, learningPace, pedagogyOpts),
+      2,
+      `Fill ${batchStart + 1}-${batchStart + items.length}`,
+    );
+    generated = result.modules || [];
+  } catch (err) {
+    console.error(`[moduleGenerator] Fill failed for batch ${batchStart + 1}: ${err.message}`);
+    await supabase.from('modules').update({ content_status: 'failed' }).in('id', ids);
+    return 0;
+  }
+
+  const pairs = pairGeneratedWithSkeletons(skeletons, generated);
+  const questionRows = [];
+
+  await Promise.all(pairs.map(({ row, gen }) => {
+    for (const q of (gen.questions || [])) {
+      if (!q.question) continue;
+      const qType = q.type || (q.options ? 'multiple_choice' : 'true_false');
+      questionRows.push({
+        id: uuidv4(),
+        module_id: row.id,
+        type: qType,
+        question: q.question,
+        options: Array.isArray(q.options) ? q.options : null,
+        correct: String(q.correct ?? (qType === 'true_false' ? 'true' : 'A')),
+        explanation: q.explanation || 'Answer based on the module content.',
+        misconception: q.misconception || null,
+        topic: q.topic || row.topic,
+      });
+    }
+    return supabase.from('modules').update({
+      content: gen.content || row.content,
+      objectives: Array.isArray(gen.objectives) ? gen.objectives : [],
+      takeaways: Array.isArray(gen.takeaways) ? gen.takeaways : [],
+      outcome: gen.outcome || null,
+      bloom_level: gen.bloomLevel || null,
+      content_status: 'ready',
+    }).eq('id', row.id);
+  }));
+
+  if (questionRows.length) {
+    const { error } = await supabase.from('questions').insert(questionRows);
+    if (error) console.warn(`[moduleGenerator] Question insert failed: ${error.message}`);
+  }
+
+  // Any skeleton the model simply didn't return content for.
+  const filled = new Set(pairs.map(p => p.row.id));
+  const missed = ids.filter(id => !filled.has(id));
+  if (missed.length) {
+    await supabase.from('modules').update({ content_status: 'failed' }).in('id', missed);
+  }
+
+  moduleCache.del(`byDoc:${skeletons[0].document_id}`);
+  moduleCache.del('allModules');
+  pairs.forEach(p => moduleCache.del(`mod:${p.row.id}`));
+
+  return pairs.length;
+}
+
 module.exports = {
   generateModules,
   generateInitialModules,
   generateRemainingModules,
+  insertSkeletonModules,
+  fillSkeletonBatch,
+  pairGeneratedWithSkeletons,
+  generateOutlineForSegment,
+  splitIntoSegments,
+  runWithConcurrency,
+  getContentWordRange,
+  SEGMENT_SIZE,
+  BATCH_SIZE,
+  BATCH_CONCURRENCY,
+  INLINE_QUESTION_COUNT,
+  FULL_QUIZ_QUESTION_COUNT,
   isGeneratingModules,
   getModulesByDocument,
   getModulesByCourse,
@@ -886,5 +1189,7 @@ module.exports = {
   deleteModulesByDocument,
   enrichModulesWithResources,
   regenerateQuestions,
+  regenerateModuleContent,
   insertModuleResults,
+  applyPedagogy,
 };

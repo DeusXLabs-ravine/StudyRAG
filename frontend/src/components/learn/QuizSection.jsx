@@ -1,18 +1,48 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, CheckCircle, XCircle, HelpCircle, ArrowLeft, RotateCcw } from 'lucide-react';
+import { Trophy, CheckCircle, XCircle, HelpCircle, ArrowLeft, RotateCcw, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import useModuleStore from '../../store/moduleStore';
+import { ensureFullQuiz } from '../../services/moduleService';
+
+// Modules ship with one inline recall question; below this we ask the server to
+// write the rest on open, so a course isn't generated with questions nobody sees.
+const FULL_QUIZ_SIZE = 5;
 
 export default function QuizSection({ module, onBack, onComplete, startTime }) {
   const { submitProgress } = useModuleStore();
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [lazyQuestions, setLazyQuestions] = useState(null);
+  const [buildingQuiz, setBuildingQuiz] = useState(false);
 
-  const questions = module.questions || [];
+  const questions = lazyQuestions || module.questions || [];
+
+  // Build the full quiz the first time this module's quiz is opened.
+  useEffect(() => {
+    let cancelled = false;
+    setLazyQuestions(null);
+    setCurrentQ(0);
+    setAnswers({});
+    setSubmitted(false);
+
+    const have = module.questions?.length || 0;
+    if (!module.id || have >= FULL_QUIZ_SIZE) return;
+
+    setBuildingQuiz(true);
+    ensureFullQuiz(module.id)
+      .then(res => {
+        if (cancelled) return;
+        if (res?.questions?.length) setLazyQuestions(res.questions);
+      })
+      .catch(() => { /* fall back to whatever questions the module already has */ })
+      .finally(() => { if (!cancelled) setBuildingQuiz(false); });
+
+    return () => { cancelled = true; };
+  }, [module.id]);
 
   const handleAnswer = (questionId, answer) => {
     if (submitted) return;
@@ -48,6 +78,20 @@ export default function QuizSection({ module, onBack, onComplete, startTime }) {
     });
     return Math.round((correct / questions.length) * 100);
   })();
+
+  // Writing the quiz for the first time — questions are tailored to this
+  // student, so a brief wait here buys better questions than pre-generating.
+  if (buildingQuiz && questions.length === 0) {
+    return (
+      <div className="sleek-card p-20 text-center">
+        <div className="w-16 h-16 bg-sky-50 text-sky-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+        <p className="text-sm font-bold text-gray-900 mb-1">Writing your quiz…</p>
+        <p className="text-xs text-gray-500">Questions are being tailored to what you&apos;ve struggled with.</p>
+      </div>
+    );
+  }
 
   if (questions.length === 0) {
     return (

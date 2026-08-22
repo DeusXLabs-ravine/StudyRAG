@@ -19,9 +19,10 @@ const useModuleStore = create((set, get) => ({
       if (prev) clearTimeout(prev);
 
       if (generating && documentId) {
+        // First poll fires quickly so the first module batch surfaces fast.
         const timer = setTimeout(() => {
-          get()._pollRefresh(documentId, 5000);
-        }, 5000);
+          get()._pollRefresh(documentId, 3000);
+        }, 2500);
         set({ _pollTimer: timer });
       }
     } catch (error) {
@@ -40,9 +41,10 @@ const useModuleStore = create((set, get) => ({
   },
 
   // Silent refresh used by polling — updates modules without loading state.
-  // Uses exponential backoff (5s → 10s → 20s → cap 30s) to reduce server load
-  // as generation progresses. Skips the request if the tab is not visible.
-  _pollRefresh: async (documentId, intervalMs = 5000) => {
+  // Adaptive cadence: while new modules keep arriving, poll fast (~3s) so they
+  // surface within seconds of being written; only back off (×1.5, cap 30s) during
+  // quiet stretches where the count didn't change. Skips the request if hidden.
+  _pollRefresh: async (documentId, intervalMs = 3000) => {
     // Don't poll hidden tabs — wastes requests and battery
     if (document.visibilityState === 'hidden') {
       const timer = setTimeout(() => get()._pollRefresh(documentId, intervalMs), intervalMs);
@@ -50,12 +52,15 @@ const useModuleStore = create((set, get) => ({
       return;
     }
     try {
+      const prevCount = get().modules.length;
       const { modules, generating } = await moduleService.listModules(documentId);
-      set({ modules: Array.isArray(modules) ? modules : [], generating });
+      const nextModules = Array.isArray(modules) ? modules : [];
+      set({ modules: nextModules, generating });
 
       if (generating) {
-        // Exponential backoff capped at 30 s
-        const nextInterval = Math.min(intervalMs * 1.5, 30_000);
+        // Reset to a fast floor when new modules landed; otherwise back off (cap 30s).
+        const grew = nextModules.length > prevCount;
+        const nextInterval = grew ? 3000 : Math.min(intervalMs * 1.5, 30_000);
         const timer = setTimeout(() => get()._pollRefresh(documentId, nextInterval), nextInterval);
         set({ _pollTimer: timer });
       } else {
@@ -84,9 +89,14 @@ const useModuleStore = create((set, get) => ({
   },
 
   bridgeGeneratingModuleId: null,
+  // Module currently being rewritten for the learner after a failed check.
+  adaptiveRewritingModuleId: null,
 
   submitProgress: async (moduleId, score, answers = null, durationSeconds = null) => {
     try {
+      const before = get().modules.find(m => m.id === moduleId);
+      const beforeVersion = before?.version || 1;
+
       const result = await moduleService.updateProgress(moduleId, score, answers, durationSeconds);
       set(state => ({
         modules: state.modules.map(m =>
@@ -96,8 +106,28 @@ const useModuleStore = create((set, get) => ({
           ? { ...state.currentModule, progress: result.progress }
           : state.currentModule,
         // Set bridge generating state if backend confirms
-        bridgeGeneratingModuleId: result.bridgeGenerating ? moduleId : state.bridgeGeneratingModuleId
+        bridgeGeneratingModuleId: result.bridgeGenerating ? moduleId : state.bridgeGeneratingModuleId,
+        adaptiveRewritingModuleId: result.adaptiveRegenerating ? moduleId : state.adaptiveRewritingModuleId,
       }));
+
+      // If this module is being rewritten, poll until its version increments,
+      // then swap the fresh content in and clear the banner.
+      if (result.adaptiveRegenerating) {
+        const docId = before?.documentId || before?.document_id;
+        if (docId) {
+          [4000, 8000, 13000, 20000, 28000].forEach((delay, idx, arr) => {
+            setTimeout(async () => {
+              await get()._pollRefresh(docId);
+              const updated = get().modules.find(m => m.id === moduleId);
+              if ((updated?.version || 1) > beforeVersion || idx === arr.length - 1) {
+                set(state => (state.adaptiveRewritingModuleId === moduleId
+                  ? { adaptiveRewritingModuleId: null }
+                  : {}));
+              }
+            }, delay);
+          });
+        }
+      }
 
       // If a bridge module is being generated, poll for it to appear
       if (result.bridgeGenerating) {

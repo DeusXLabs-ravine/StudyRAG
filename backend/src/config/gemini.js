@@ -130,6 +130,9 @@ if (keys.length > 0) {
 // Primary models per tier. 3-pro is deprecated March 9 2026 → migrated to 3.1-pro.
 const MODELS = {
   fast: 'gemini-2.5-flash',
+  // Lower-latency tier for structurally-simple, quality-tolerant calls
+  // (page summaries, module outlines). ~30-50% faster per call than 'fast'.
+  fast_lite: 'gemini-2.5-flash-lite',
   standard: 'gemini-3.1-flash-lite',
   advanced: 'gemini-3.1-pro-preview', // 2.0 Flash is currently very strong, use exp for advanced features
   imageGen: [
@@ -139,17 +142,30 @@ const MODELS = {
   ],
 };
 
-// Fallback chains per tier. Includes cross-tier fallbacks so that paid-only
-// models (Pro) gracefully degrade to free-tier models (Flash) on free API keys.
+// Fallback chains per tier. Includes cross-tier fallbacks so paid-only models
+// degrade gracefully to free-tier models on free API keys.
+//
+// Every model here was probed live on 2026-08-22. gemini-2.0-flash-lite,
+// gemini-2.0-flash, gemini-3-pro-preview and gemini-2.5-pro have been
+// DECOMMISSIONED by Google and now return 404 — they were silently poisoning
+// these chains, so any request that fell through to them failed outright after
+// burning its retries. Removed rather than reordered.
+//
+// Verify with scripts/probe-models.js before adding a model here.
 const FALLBACK_MODELS = {
-  fast: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash-lite'],
-  standard: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'],
+  // NOTE: gemini-3.5-flash-lite is deliberately absent from these two chains.
+  // It is reachable, but REJECTS generationConfig.thinkingConfig.thinkingBudget = 0
+  // with a 400 — and every module/quiz generation call sets exactly that (thinking
+  // tokens otherwise consume the output budget and truncate the JSON). Leaving it
+  // here would produce a failure that only appears once the models above it are
+  // rate limited, i.e. under load.
+  fast: ['gemini-2.5-flash', 'gemini-2.5-flash-lite'],
+  fast_lite: ['gemini-2.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'],
+  standard: ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite'],
   advanced: [
-    'gemini-3.1-flash-lite',   // Flash: free tier, reliable — try before burning paid-only quota
-    'gemini-2.5-flash',         // Flash fallback
-    'gemini-2.5-flash-lite',    // Flash lite fallback
-    'gemini-3-pro-preview',     // Pro: only works with paid keys
-    'gemini-2.5-pro',           // Pro: only works with paid keys
+    'gemini-3.1-flash-lite',   // free tier, reliable — try before burning paid-only quota
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
   ],
 };
 
