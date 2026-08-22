@@ -19,6 +19,14 @@ router.post('/:id/prioritize', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+// Full quiz, generated on first open (modules ship with one inline question).
+router.post('/:id/quiz', async (req, res, next) => {
+  try {
+    const { ensureFullQuiz } = require('../services/adaptiveLearningService');
+    res.json(await ensureFullQuiz(req.params.id, req.user?.id || null));
+  } catch (error) { next(error); }
+});
+
 // Adaptive learning: version history + rewrite controls
 router.get('/:id/versions', async (req, res, next) => {
   try {

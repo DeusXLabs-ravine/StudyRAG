@@ -289,6 +289,25 @@ async function generateAIImage(topic, teachingLevel, interests, moduleContent) {
  * @param {string} opts.userId - User ID
  * @returns {Object} The generated diagram record
  */
+/**
+ * Whether this user may have AI-generated diagram IMAGES.
+ *
+ * Reuses the existing `proModels` entitlement (true for pro/max, false for
+ * free/basic) rather than inventing a parallel flag. Anonymous or unresolvable
+ * users get code-rendered diagrams, which is also the safe default on error.
+ */
+async function canUseImageDiagrams(userId) {
+  if (!userId) return false;
+  try {
+    const { getSubscriptionSnapshotForUser } = require('./subscriptionService');
+    const sub = await getSubscriptionSnapshotForUser(userId);
+    return Boolean(sub?.featureAccess?.canUseProModels);
+  } catch (err) {
+    console.warn(`[DiagramGen] Entitlement check failed, defaulting to code diagram: ${err.message}`);
+    return false;
+  }
+}
+
 async function generateDiagramForTopic({
   topic, moduleContent, moduleId, documentId,
   diagramType = 'auto', teachingLevel = 'intermediate',
@@ -324,6 +343,21 @@ async function generateDiagramForTopic({
         console.log(`${prefix} D2 not available, falling back to mermaid`);
         resolvedType = 'mermaid';
       }
+    }
+
+    // Code-first diagrams. Image generation left the Gemini free tier, so it is
+    // reserved for paid plans — and only for content the type selector judged
+    // genuinely spatial (anatomy, physical layout), which is the one case code
+    // rendering cannot serve. For process, hierarchy and comparison content
+    // Mermaid is not a downgrade but an upgrade: it is free, ~10x faster, and
+    // renders text labels accurately, which AI image models reliably garble.
+    //
+    // Gating here rather than inside generateAIImage matters: it avoids
+    // attempting an image model that will 429 or reject the key, burning retries
+    // and adding seconds before falling back to mermaid anyway.
+    if (resolvedType === 'image' && !(await canUseImageDiagrams(userId))) {
+      console.log(`${prefix} Image diagrams are a paid feature — rendering as mermaid`);
+      resolvedType = 'mermaid';
     }
 
     let updateData = { diagram_type: resolvedType };

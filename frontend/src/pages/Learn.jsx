@@ -23,7 +23,7 @@ import XpPopup from '../components/chat/XpPopup';
 import AchievementToast from '../components/chat/AchievementToast';
 import FormulaInput from '../components/chat/FormulaInput';
 import InputPreview from '../components/chat/InputPreview';
-import { getTutorGreeting, sendTutorMessage } from '../services/moduleService';
+import { getTutorGreeting, sendTutorMessage, prioritizeModule } from '../services/moduleService';
 import { listDiagrams, getModuleDiagrams, generateDiagramForTopic } from '../services/diagramService';
 import { getModuleMedicalResources } from '../services/medicalResourceService';
 import api from '../services/api';
@@ -202,6 +202,15 @@ export default function Learn() {
     setMedicalResources([]);
     setCurrentModule(module);
     setShowQuiz(false);
+
+    // Opening a lesson that hasn't been written yet bumps it to the front of the
+    // generation queue, so attention decides what gets written next rather than
+    // the student waiting on modules they don't care about. The outline text is
+    // already showing meanwhile, so there is something to read either way.
+    if (module.contentStatus === 'pending') {
+      prioritizeModule(module.id).catch(() => { /* queue order is best-effort */ });
+    }
+
     // Track reading interaction (non-blocking)
     recordLearningInteraction('text_explanation', 'view').catch(() => { });
   };
@@ -648,6 +657,11 @@ export default function Learn() {
               ) : (
                 <LessonViewer
                   module={currentModule}
+                  displayNumber={
+                    currentModule?.isIntro
+                      ? null
+                      : (modules || []).filter(m => !m.isIntro).findIndex(m => m.id === currentModule?.id) + 1
+                  }
                   diagrams={diagrams.filter(d => d.status === 'ready')}
                   teachingLevel={settings.teaching_level || 'intermediate'}
                   generatedDiagrams={generatedDiagrams}
@@ -1063,6 +1077,11 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
               const isActive = currentModule?.id === mod.id;
               const isCompleted = mod.progress?.completed;
               const isBridge = mod.moduleType === 'bridge';
+              // Skeleton from the outline — the lesson body hasn't been written
+              // yet. 'writing' means a worker has claimed it. Both are still
+              // selectable: opening shows the outline description meanwhile, and
+              // a 'pending' one also jumps the queue.
+              const isPending = mod.contentStatus === 'pending' || mod.contentStatus === 'writing';
 
               return (
                 <button
@@ -1102,6 +1121,14 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
                       className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-sky-100 text-sky-700 rounded-md"
                     >
                       For you · v{mod.version}
+                    </span>
+                  )}
+                  {isPending && !isActive && (
+                    <span
+                      title="This lesson is still being written. Open it to move it to the front of the queue."
+                      className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-gray-100 text-gray-500 rounded-md"
+                    >
+                      Writing…
                     </span>
                   )}
                 </button>

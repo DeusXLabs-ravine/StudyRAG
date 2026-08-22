@@ -252,6 +252,60 @@ Return valid JSON:
   ]
 }`;
 
+/**
+ * Full quiz, generated on demand when the student actually opens it.
+ *
+ * Modules ship with a single inline recall question so that generating a course
+ * does not pay for ~5 questions per module that most students never see. The
+ * rest are written here — which is also the better moment pedagogically: by now
+ * we know this learner's real mistakes, so the distractors can be built from
+ * them instead of being generic.
+ */
+const LAZY_QUIZ_PROMPT = `You are writing a comprehension quiz for a student who has just finished
+studying the lesson below.
+
+The student's level is: {teaching_level}
+Topic: {topic}
+
+LESSON CONTENT:
+{module_content}
+
+{learner_state_section}
+{already_asked_section}
+{quiz_depth_section}
+
+Write exactly {question_count} questions that test whether the student
+understood this lesson.
+{quiz_hygiene_section}
+
+For every multiple-choice question also provide a "misconception" field naming
+the specific false belief a student would hold if they picked a wrong option.
+Where this student's known misconceptions above are relevant to the lesson, build
+at least one distractor directly from them — a wrong answer they would actually
+be tempted by is far more diagnostic than an obviously wrong one.
+
+Return ONLY valid JSON in this exact format:
+{
+  "questions": [
+    {
+      "type": "multiple_choice",
+      "question": "Question text?",
+      "options": ["A) First option", "B) Second option", "C) Third option", "D) Fourth option"],
+      "correct": "A",
+      "explanation": "Why A is correct and why the others are wrong...",
+      "misconception": "The false belief behind the most tempting wrong answer",
+      "topic": "{topic}"
+    },
+    {
+      "type": "true_false",
+      "question": "Statement to evaluate?",
+      "correct": "true",
+      "explanation": "Why this is true/false...",
+      "topic": "{topic}"
+    }
+  ]
+}`;
+
 module.exports = {
   QUIZ_GENERATION_PROMPT,
   FLASHCARD_GENERATION_PROMPT,
@@ -259,4 +313,5 @@ module.exports = {
   QUESTION_REGENERATION_PROMPT,
   REVISION_QUESTIONS_PROMPT,
   PRACTICE_EXAM_PROMPT,
+  LAZY_QUIZ_PROMPT,
 };

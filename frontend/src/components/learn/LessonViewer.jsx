@@ -13,7 +13,7 @@ import MedicalResourcesPanel from './MedicalResourcesPanel';
 import useSettingsStore from '../../store/settingsStore';
 import { resolveThemeVars, getBoardType, parseThemeSetting } from '../../lib/boardThemes';
 
-export default function LessonViewer({ module, onStartQuiz, regeneratingQuestions, diagrams = [], teachingLevel, generatedDiagrams = [], onGenerateDiagram, generatingDiagram, medicalResources = [] }) {
+export default function LessonViewer({ module, onStartQuiz, regeneratingQuestions, diagrams = [], teachingLevel, generatedDiagrams = [], onGenerateDiagram, generatingDiagram, medicalResources = [], displayNumber = null }) {
   const settings = useSettingsStore(state => state.settings);
 
   const { themeVars, boardType } = useMemo(() => {
@@ -54,7 +54,12 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
                   border: 'var(--label-border)',
                 }}
               >
-                Module {module.orderIndex + 1}
+                {/* displayNumber is the module's position among real lessons,
+                    computed by the caller. Deriving it from orderIndex here
+                    would be wrong: courses with an orientation module reserve
+                    index 0 for it, while older courses start their first real
+                    lesson at 0. */}
+                {module.isIntro ? 'Start here' : `Module ${displayNumber ?? (module.orderIndex + 1)}`}
               </span>
               {module.topic && (
                 <span
@@ -78,6 +83,18 @@ export default function LessonViewer({ module, onStartQuiz, regeneratingQuestion
         </div>
 
         <div className="board-text board-writing">
+          {/* Lesson still being written — the text below is the outline summary,
+              and this module has been moved to the front of the queue. */}
+          {(module.contentStatus === 'pending' || module.contentStatus === 'writing') && (
+            <div className="mb-8 flex items-center gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
+              <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-sky-500" />
+              <p className="text-sm text-sky-900">
+                <span className="font-bold">Writing this lesson now.</span>{' '}
+                Here&apos;s what it will cover — the full lesson will replace this shortly.
+              </p>
+            </div>
+          )}
+
           {/* Learning Objectives */}
           {module.objectives?.length > 0 && (
             <div className="mb-8 md:mb-12 opacity-80">

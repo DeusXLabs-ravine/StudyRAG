@@ -185,13 +185,20 @@ async function prioritizeModule(moduleId) {
   return { prioritized: true };
 }
 
-/** Flip long-orphaned pending rows to 'failed' so they surface as retryable. */
+/**
+ * Flip long-orphaned rows to 'failed' so they surface as retryable rather than
+ * appearing to be in progress forever.
+ *
+ * Targets 'writing' — the status a worker sets when it claims a batch. A row
+ * stuck there means the worker that claimed it died mid-generation. Rows still
+ * 'pending' were simply never reached and are correct as they are.
+ */
 async function reapStalledSkeletons(docId) {
   const cutoff = new Date(Date.now() - FILL_TIMEOUT_MS).toISOString();
   await supabase.from('modules')
     .update({ content_status: 'failed' })
     .eq('document_id', docId)
-    .eq('content_status', 'pending')
+    .eq('content_status', 'writing')
     .lt('generation_started_at', cutoff);
 }
 
@@ -251,23 +258,50 @@ async function generateCourseProgressive(docId, documentText, userId, opts = {})
   // is released as soon as the map exists.
   setImmediate(async () => {
     try {
-      const batches = [];
-      for (let i = 0; i < skeletons.length; i += BATCH_SIZE) {
-        batches.push({ start: i, rows: skeletons.slice(i, i + BATCH_SIZE) });
-      }
+      // Queue-driven rather than a fixed batch list, so that a module the student
+      // opens mid-generation genuinely jumps ahead: each worker claims the next
+      // pending modules ordered by prioritised-first, then document order. A
+      // precomputed batch list would ignore prioritised_at entirely.
+      let claimedNothing = 0;
 
-      const tasks = batches.map(({ start, rows }) => async () => {
-        // Re-read status so a module the student already prioritised (and which
-        // was filled on demand) is not generated a second time.
-        const { data: fresh } = await supabase
-          .from('modules').select('id, title, topic, content, document_id, content_status')
-          .in('id', rows.map(r => r.id));
-        const stillPending = (fresh || []).filter(r => r.content_status === 'pending');
-        if (!stillPending.length) return 0;
-        return fillSkeletonBatch(stillPending, segments[0], outline, start, profile, pedagogyOpts);
-      });
+      const worker = async () => {
+        for (;;) {
+          const { data: next } = await supabase
+            .from('modules')
+            .select('id, title, topic, content, document_id, content_status')
+            .eq('document_id', docId)
+            .eq('content_status', 'pending')
+            .order('prioritized_at', { ascending: false, nullsFirst: false })
+            .order('order_index', { ascending: true })
+            .limit(BATCH_SIZE);
 
-      await runWithConcurrency(tasks, BATCH_CONCURRENCY);
+          const rows = next || [];
+          if (!rows.length) return;
+
+          // Claim immediately so concurrent workers don't pick the same rows.
+          const ids = rows.map(r => r.id);
+          const { data: claimed } = await supabase
+            .from('modules')
+            .update({ content_status: 'writing', generation_started_at: new Date().toISOString() })
+            .in('id', ids)
+            .eq('content_status', 'pending')
+            .select('id');
+
+          const claimedIds = new Set((claimed || []).map(r => r.id));
+          const mine = rows.filter(r => claimedIds.has(r.id));
+          if (!mine.length) {
+            // Another worker won the race; back off briefly then re-poll.
+            if (++claimedNothing > 20) return;
+            continue;
+          }
+
+          const startIdx = Math.max(0, outline.findIndex(o => o.title === mine[0].title));
+          await fillSkeletonBatch(mine, segments[0], outline, startIdx, profile, pedagogyOpts);
+        }
+      };
+
+      const workerCount = Math.max(1, Math.min(BATCH_CONCURRENCY, Math.ceil(skeletons.length / BATCH_SIZE)));
+      await Promise.all(Array.from({ length: workerCount }, () => worker()));
       log('all content filled');
 
       await reapStalledSkeletons(docId);

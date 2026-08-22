@@ -390,6 +390,107 @@ async function onTopicMastered(module, score, userId) {
   });
 }
 
+// ── Lazy quiz generation ─────────────────────────────────────
+
+/**
+ * Ensure a module has a full quiz, generating it on first open.
+ *
+ * Modules ship with a single inline recall question, so generating a course does
+ * not pay to write ~5 questions per module that most students never see. The
+ * remainder are written here, at the moment the student actually opens the quiz
+ * — which is also when the learner model is richest, so distractors can be built
+ * from that student's real past mistakes rather than being generic.
+ *
+ * Idempotent: once a module has a full set, later calls return immediately.
+ */
+async function ensureFullQuiz(moduleId, userId = null, { force = false } = {}) {
+  const { getGenerativeModel, withRetryOnRateLimit } = require('../config/gemini');
+  const { extractJSON } = require('../utils/jsonHelper');
+  const { LAZY_QUIZ_PROMPT, QUIZ_HYGIENE_BLOCK, getQuizDepthSection, buildLearnerStateSection } = require('../utils/prompts');
+  const { getUserTeachingLevel } = require('./userProfileService');
+  const { FULL_QUIZ_QUESTION_COUNT } = require('./moduleGenerator');
+
+  const module = await getModuleById(moduleId);
+  if (!module) throw new Error('Module not found');
+
+  const existing = module.questions || [];
+  if (!force && existing.length >= FULL_QUIZ_QUESTION_COUNT) {
+    return { generated: false, questions: existing };
+  }
+  // A module still being written has nothing to quiz on yet.
+  if (module.contentStatus && module.contentStatus !== 'ready') {
+    return { generated: false, pending: true, questions: existing };
+  }
+
+  const [teachingLevel, learnerState] = await Promise.all([
+    getUserTeachingLevel(userId).catch(() => 'intermediate'),
+    buildLearnerState(userId, { documentId: module.documentId, moduleId, topic: module.topic }),
+  ]);
+
+  const alreadyAsked = existing.length
+    ? `ALREADY ASKED (do not repeat these):\n${existing.map(q => `- ${q.question}`).join('\n')}\n`
+    : '';
+
+  const prompt = LAZY_QUIZ_PROMPT
+    .replace('{teaching_level}', teachingLevel)
+    .replace('{module_content}', module.content || '')
+    .replace('{learner_state_section}', buildLearnerStateSection(learnerState))
+    .replace('{already_asked_section}', alreadyAsked)
+    .replace('{quiz_depth_section}', getQuizDepthSection(module.content || ''))
+    .replace('{quiz_hygiene_section}', QUIZ_HYGIENE_BLOCK)
+    .replace('{question_count}', String(FULL_QUIZ_QUESTION_COUNT))
+    .replace(/\{topic\}/g, module.topic || module.title || 'this topic');
+
+  const result = await withRetryOnRateLimit(async () => {
+    // thinkingBudget 0: reasoning tokens count against maxOutputTokens and would
+    // truncate the JSON mid-object. See moduleGenerator.generateModuleBatch.
+    const model = getGenerativeModel('fast_lite');
+    return model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 8192, temperature: 0.3, thinkingConfig: { thinkingBudget: 0 } },
+    });
+  }, 3, 1);
+
+  const parsed = extractJSON(result.response.text());
+  const fresh = (parsed?.questions || []).filter(q => q.question);
+  if (!fresh.length) {
+    // Never leave the student with nothing — keep the inline question.
+    console.warn(`[adaptive] Lazy quiz produced no questions for ${moduleId.slice(0, 8)}`);
+    return { generated: false, questions: existing };
+  }
+
+  const rows = fresh.map(q => {
+    const qType = q.type || (q.options ? 'multiple_choice' : 'true_false');
+    return {
+      id: uuidv4(),
+      module_id: moduleId,
+      type: qType,
+      question: q.question,
+      options: Array.isArray(q.options) ? q.options : null,
+      correct: String(q.correct ?? (qType === 'true_false' ? 'true' : 'A')),
+      explanation: q.explanation || 'Answer based on the module content.',
+      misconception: q.misconception || null,
+      topic: q.topic || module.topic,
+    };
+  });
+
+  // Replace wholesale so the inline question is not duplicated by a near-identical
+  // generated one; the prompt was told what had already been asked.
+  if (existing.length) {
+    await supabase.from('questions').delete().eq('module_id', moduleId);
+  }
+  const { error } = await supabase.from('questions').insert(rows);
+  if (error) throw error;
+
+  moduleCache.del(`mod:${moduleId}`);
+  moduleCache.del(`byDoc:${module.documentId}`);
+  moduleCache.del('allModules');
+
+  console.log(`[adaptive] Lazy quiz generated for ${moduleId.slice(0, 8)} (${rows.length} questions)`);
+  const refreshed = await getModuleById(moduleId);
+  return { generated: true, questions: refreshed?.questions || [] };
+}
+
 // ── Version history + rollback ───────────────────────────────
 
 /** List archived versions of a module (metadata only), newest first. */
@@ -460,5 +561,6 @@ module.exports = {
   onTopicMastered,
   listModuleVersions,
   restoreModuleVersion,
+  ensureFullQuiz,
   REGEN_SCORE_THRESHOLD,
 };

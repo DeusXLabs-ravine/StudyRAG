@@ -144,16 +144,23 @@ const MODELS = {
 
 // Fallback chains per tier. Includes cross-tier fallbacks so that paid-only
 // models (Pro) gracefully degrade to free-tier models (Flash) on free API keys.
+// Fallback chains per tier.
+//
+// Every model here was probed live on 2026-08-22. gemini-2.0-flash-lite,
+// gemini-2.0-flash, gemini-3-pro-preview and gemini-2.5-pro have been
+// DECOMMISSIONED by Google and now return 404 — they were silently poisoning
+// these chains, so any request that fell through to them failed outright after
+// burning its retries. Removed rather than reordered.
+//
+// Verify with scripts/probe-models.js before adding a model here.
 const FALLBACK_MODELS = {
-  fast: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash-lite'],
-  fast_lite: ['gemini-2.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.0-flash-lite', 'gemini-2.5-flash'],
-  standard: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'],
+  fast: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.5-flash-lite'],
+  fast_lite: ['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'],
+  standard: ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite'],
   advanced: [
-    'gemini-3.1-flash-lite',   // Flash: free tier, reliable — try before burning paid-only quota
-    'gemini-2.5-flash',         // Flash fallback
-    'gemini-2.5-flash-lite',    // Flash lite fallback
-    'gemini-3-pro-preview',     // Pro: only works with paid keys
-    'gemini-2.5-pro',           // Pro: only works with paid keys
+    'gemini-3.1-flash-lite',   // free tier, reliable — try before burning paid-only quota
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
   ],
 };
 
