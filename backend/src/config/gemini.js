@@ -30,9 +30,9 @@ class GeminiKeyPool {
     return soonest;
   }
 
-  markRateLimited(entry) {
-    entry.rateLimitedUntil = Date.now() + this.cooldownMs;
-    console.warn(`[GeminiKeyPool] Key ${entry.key} rate-limited, cooldown ${this.cooldownMs}ms`);
+  markRateLimited(entry, cooldownMs = this.cooldownMs) {
+    entry.rateLimitedUntil = Date.now() + cooldownMs;
+    console.warn(`[GeminiKeyPool] Key ${entry.key} sidelined, cooldown ${cooldownMs}ms`);
   }
 }
 
@@ -415,6 +415,22 @@ function isOverloadError(err) {
 }
 
 /**
+ * Detect if an error means the specific API KEY used for this call is bad
+ * (revoked, deleted, malformed) — distinct from rate-limit/quota errors, which
+ * are about the key's usage, not its validity. Unlike a rate limit this never
+ * self-heals: the only fix is replacing the key's value and redeploying. Found
+ * live in production: 1 of 15 pooled keys had gone invalid, and every call that
+ * round-robined onto it failed outright with no retry, because this error class
+ * previously matched none of isRateLimitError/isOverloadError/isNetworkError —
+ * so ~1/15 of all generation calls silently failed instead of falling back to
+ * one of the 14 healthy keys still in the pool.
+ */
+function isInvalidKeyError(err) {
+  return err?.status === 400 &&
+    (err?.message?.includes('API_KEY_INVALID') || err?.message?.includes('API key not valid'));
+}
+
+/**
  * Detect if an error is a transient network/connection failure.
  */
 function isNetworkError(err) {
@@ -453,26 +469,33 @@ async function withRetryOnRateLimit(fn, maxRetries = 3, priority = 0) {
         const rateLimited = isRateLimitError(err);
         const overloaded = isOverloadError(err);
         const networkErr = isNetworkError(err);
+        const invalidKey = isInvalidKeyError(err);
 
-        if ((rateLimited || overloaded || networkErr) && attempt < maxRetries && keyPool) {
-          // Mark the API key as rate-limited
-          if (rateLimited) {
+        if ((rateLimited || overloaded || networkErr || invalidKey) && attempt < maxRetries && keyPool) {
+          // Sideline the API key that was used for this attempt. A bad key is
+          // permanent (only fixed by replacing its value and redeploying) so it
+          // gets a long cooldown, not the short one used for a transient rate
+          // limit — retrying it every 60s would just keep failing forever.
+          if (rateLimited || invalidKey) {
             const total = keyPool.entries.length;
             const usedIdx = (keyPool.index - 1 + total) % total;
-            keyPool.markRateLimited(keyPool.entries[usedIdx]);
+            keyPool.markRateLimited(keyPool.entries[usedIdx], invalidKey ? 24 * 60 * 60_000 : undefined);
           }
 
-          // Mark the specific model as unhealthy so getGenerativeModel() auto-falls back
+          // Mark the specific model as unhealthy so getGenerativeModel() auto-falls
+          // back. Not for invalidKey: the MODEL is fine, only this one KEY is bad,
+          // and sidelining the model too would wrongly punish the other 14 keys.
           const failedModel = extractModelFromError(err);
-          if (failedModel) {
+          if (failedModel && !invalidKey) {
             const isZeroQuota = err.message?.includes('limit: 0') || err.message?.includes('Not available');
             const cooldown = isZeroQuota ? 300_000 : 60_000; // 5 min for zero-quota, 1 min for rate limit
             markModelUnhealthy(failedModel, cooldown, rateLimited ? '429 rate limit' : '503 overloaded');
           }
 
-          const waitMs = (overloaded || networkErr) ? 2000 * (attempt + 1) : 1000 * (attempt + 1);
-          console.warn(`[GeminiRetry] ${networkErr ? 'Network error' : (overloaded ? '503 overloaded' : 'Rate limited')}${failedModel ? ` (${failedModel})` : ''}, retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`);
-          await new Promise(r => setTimeout(r, waitMs));
+          const waitMs = invalidKey ? 0 : (overloaded || networkErr) ? 2000 * (attempt + 1) : 1000 * (attempt + 1);
+          const label = invalidKey ? 'Invalid API key' : networkErr ? 'Network error' : overloaded ? '503 overloaded' : 'Rate limited';
+          console.warn(`[GeminiRetry] ${label}${failedModel ? ` (${failedModel})` : ''}, retrying${waitMs ? ` in ${waitMs}ms` : ''} with a different key (attempt ${attempt + 1}/${maxRetries})`);
+          if (waitMs) await new Promise(r => setTimeout(r, waitMs));
           continue;
         }
 
