@@ -272,7 +272,12 @@ async function generateModulesForSegmentLegacy(segmentText, segmentIndex, totalS
     .replace('{quiz_depth_section}', quizDepthSection);
 
   const result = await withRetryOnRateLimit(async () => {
-    const model = getGenerativeModel('fast');
+    // 'fast_lite', matching the primary path. Measured against a real 40k-char
+    // segment, 2.5-flash took 46.2s and returned output that would not parse,
+    // while 2.5-flash-lite produced a complete module in 7.2s. This is the
+    // fallback that runs when two-phase generation has already failed, so it is
+    // the last place that can afford to be slow or unreliable.
+    const model = getGenerativeModel('fast_lite');
     return model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: {

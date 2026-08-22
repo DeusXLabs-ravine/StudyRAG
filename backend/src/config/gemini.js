@@ -142,9 +142,8 @@ const MODELS = {
   ],
 };
 
-// Fallback chains per tier. Includes cross-tier fallbacks so that paid-only
-// models (Pro) gracefully degrade to free-tier models (Flash) on free API keys.
-// Fallback chains per tier.
+// Fallback chains per tier. Includes cross-tier fallbacks so paid-only models
+// degrade gracefully to free-tier models on free API keys.
 //
 // Every model here was probed live on 2026-08-22. gemini-2.0-flash-lite,
 // gemini-2.0-flash, gemini-3-pro-preview and gemini-2.5-pro have been
@@ -154,8 +153,14 @@ const MODELS = {
 //
 // Verify with scripts/probe-models.js before adding a model here.
 const FALLBACK_MODELS = {
-  fast: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.5-flash-lite'],
-  fast_lite: ['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'],
+  // NOTE: gemini-3.5-flash-lite is deliberately absent from these two chains.
+  // It is reachable, but REJECTS generationConfig.thinkingConfig.thinkingBudget = 0
+  // with a 400 — and every module/quiz generation call sets exactly that (thinking
+  // tokens otherwise consume the output budget and truncate the JSON). Leaving it
+  // here would produce a failure that only appears once the models above it are
+  // rate limited, i.e. under load.
+  fast: ['gemini-2.5-flash', 'gemini-2.5-flash-lite'],
+  fast_lite: ['gemini-2.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'],
   standard: ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash-lite'],
   advanced: [
     'gemini-3.1-flash-lite',   // free tier, reliable — try before burning paid-only quota

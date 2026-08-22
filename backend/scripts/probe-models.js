@@ -29,19 +29,36 @@ const ids = [...new Set([
 
 (async () => {
   const dead = [];
+  const incompat = [];
   for (const id of ids) {
     try {
-      await genAI.getGenerativeModel({ model: id }).generateContent('hi');
+      // Probe with the SAME generationConfig the app uses. Reachability alone is
+      // not enough: gemini-3.5-flash-lite answers a plain call but rejects
+      // thinkingConfig.thinkingBudget = 0 with a 400, and every module and quiz
+      // generation call sets exactly that. A model that is "up" but refuses our
+      // calling convention fails only once the models above it are rate limited.
+      await genAI.getGenerativeModel({ model: id }).generateContent({
+        contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+        generationConfig: { maxOutputTokens: 256, thinkingConfig: { thinkingBudget: 0 } },
+      });
       console.log('OK    ', id);
     } catch (err) {
       const msg = err.message || '';
       const gone = msg.includes('404') || msg.includes('no longer available');
+      const incompatible = msg.includes('400');
       if (gone) dead.push(id);
-      console.log(gone ? 'DEAD  ' : 'ERR   ', id, '|', (msg.split('] ')[1] || msg).slice(0, 90));
+      else if (incompatible) incompat.push(id);
+      console.log(gone ? 'DEAD  ' : incompatible ? 'INCOMP' : 'ERR   ', id, '|', (msg.split('] ')[1] || msg).slice(0, 90));
     }
   }
 
   console.log();
+  if (incompat.length) {
+    console.log(`${incompat.length} model(s) reachable but incompatible with our generationConfig:`);
+    incompat.forEach(d => console.log('  -', d, '(rejects thinkingBudget: 0)'));
+    console.log('Keep these out of the fast / fast_lite chains.');
+    console.log();
+  }
   if (dead.length) {
     console.log(`${dead.length} decommissioned model(s) still referenced in config:`);
     dead.forEach(d => console.log('  -', d));
