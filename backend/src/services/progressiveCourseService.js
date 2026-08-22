@@ -285,8 +285,21 @@ async function generateCourseProgressive(docId, documentText, userId, opts = {})
     try {
       if (!opts.pages || !opts.pages.length) return null;
       const headings = deriveHeadings(opts.pages);
+
+      // The document's name lives in the documents.original_name COLUMN, not in
+      // extracted_metadata (which holds only { info, pages }). Reading it from
+      // metadata silently yielded "Untitled document" for every course — and the
+      // title is the orientation module's primary input, so that quietly gutted
+      // the one thing this module is built from.
+      let title = opts.title;
+      if (!title) {
+        const { data: doc } = await supabase
+          .from('documents').select('original_name').eq('id', docId).maybeSingle();
+        title = doc?.original_name || null;
+      }
+
       const mod = await generateIntroModule(docId, {
-        title: opts.title, headings, userId, mission: opts.mission,
+        title, headings, userId, mission: opts.mission,
       });
       log('intro module ready');
       return mod;

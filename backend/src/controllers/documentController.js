@@ -281,7 +281,8 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
     try {
       const { generateCourseProgressive } = require('../services/progressiveCourseService');
       result = await generateCourseProgressive(docId, text, userId, {
-        title: metadata?.originalName || metadata?.title || null,
+        // Title intentionally omitted: extracted_metadata holds only { info, pages },
+        // so the service reads documents.original_name itself.
         pages: rawPages || null,
       });
       log(`Course map ready (${result.moduleCount} modules, filling in background)`, t);
