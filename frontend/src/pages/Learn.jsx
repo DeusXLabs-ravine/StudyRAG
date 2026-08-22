@@ -23,7 +23,7 @@ import XpPopup from '../components/chat/XpPopup';
 import AchievementToast from '../components/chat/AchievementToast';
 import FormulaInput from '../components/chat/FormulaInput';
 import InputPreview from '../components/chat/InputPreview';
-import { getTutorGreeting, sendTutorMessage, prioritizeModule } from '../services/moduleService';
+import { getTutorGreeting, sendTutorMessage, prioritizeModule, retryModule } from '../services/moduleService';
 import { listDiagrams, getModuleDiagrams, generateDiagramForTopic } from '../services/diagramService';
 import { getModuleMedicalResources } from '../services/medicalResourceService';
 import api from '../services/api';
@@ -209,6 +209,14 @@ export default function Learn() {
     // already showing meanwhile, so there is something to read either way.
     if (module.contentStatus === 'pending') {
       prioritizeModule(module.id).catch(() => { /* queue order is best-effort */ });
+    }
+
+    // A module whose generation failed has no worker left to pick it up, so
+    // opening it triggers the write directly. Refresh once it lands.
+    if (module.contentStatus === 'failed') {
+      retryModule(module.id)
+        .then(() => { if (selectedDocId) fetchModules(selectedDocId); })
+        .catch(() => { /* surfaced by the failed state remaining */ });
     }
 
     // Track reading interaction (non-blocking)
@@ -1129,6 +1137,14 @@ function ModuleList({ modules, currentModule, isModuleAccessible, handleModuleSe
                       className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-gray-100 text-gray-500 rounded-md"
                     >
                       Writing…
+                    </span>
+                  )}
+                  {mod.contentStatus === 'failed' && !isActive && (
+                    <span
+                      title="This lesson couldn't be written. Open it to try again."
+                      className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-700 rounded-md"
+                    >
+                      Retry
                     </span>
                   )}
                 </button>

@@ -75,6 +75,12 @@ function deriveHeadings(pages, limit = 40) {
  * Fast by construction: tiny input (title + headings), small bounded output.
  */
 async function generateIntroModule(docId, { title, headings, userId, mission }) {
+  // Idempotent: a document that gets reprocessed must not accumulate a second
+  // orientation module at order_index 0.
+  const { data: existing } = await supabase
+    .from('modules').select('id').eq('document_id', docId).eq('is_intro', true).maybeSingle();
+  if (existing) return existing;
+
   const teachingLevel = await getUserTeachingLevel(userId).catch(() => 'intermediate');
 
   const prompt = INTRO_MODULE_PROMPT
@@ -186,6 +192,55 @@ async function prioritizeModule(moduleId) {
 }
 
 /**
+ * Re-generate a module whose fill failed.
+ *
+ * The background workers exit once the queue drains, so simply resetting the row
+ * to 'pending' would leave it stranded with nobody to pick it up. This writes the
+ * module directly instead.
+ *
+ * Grounding is preserved by re-reading the document's own page text rather than
+ * regenerating from the skeleton's outline description, which would otherwise
+ * quietly produce a lesson sourced from a one-line summary.
+ */
+async function retryModule(moduleId) {
+  const { data: row } = await supabase
+    .from('modules')
+    .select('id, title, topic, content, document_id, content_status')
+    .eq('id', moduleId)
+    .single();
+  if (!row) throw new Error('Module not found');
+  if (row.content_status === 'ready') return { retried: false, reason: 'already_ready' };
+
+  const { data: doc } = await supabase
+    .from('documents').select('user_id').eq('id', row.document_id).single();
+  const userId = doc?.user_id || null;
+
+  const { data: pages } = await supabase
+    .from('pages').select('text').eq('doc_id', row.document_id).order('page_number');
+  const segmentText = (pages || []).map(p => p.text).join('\n\n').slice(0, SEGMENT_SIZE);
+  if (!segmentText) throw new Error('No document text available to regenerate from');
+
+  const [teachingLevel, interests, learningStyle, learningPace] = await Promise.all([
+    getUserTeachingLevel(userId).catch(() => 'intermediate'),
+    getUserInterests(userId).catch(() => []),
+    getEffectiveLearningStyle(userId).catch(() => null),
+    getEffectiveLearningPace(userId).catch(() => null),
+  ]);
+
+  await supabase.from('modules')
+    .update({ content_status: 'writing', generation_started_at: new Date().toISOString() })
+    .eq('id', moduleId);
+
+  const outline = [{ title: row.title, topic: row.topic, description: row.content }];
+  const filled = await fillSkeletonBatch(
+    [row], segmentText, outline, 0,
+    { teachingLevel, interests, learningStyle, learningPace }, {},
+  );
+
+  return { retried: filled > 0 };
+}
+
+/**
  * Flip long-orphaned rows to 'failed' so they surface as retryable rather than
  * appearing to be in progress forever.
  *
@@ -262,9 +317,12 @@ async function generateCourseProgressive(docId, documentText, userId, opts = {})
       // opens mid-generation genuinely jumps ahead: each worker claims the next
       // pending modules ordered by prioritised-first, then document order. A
       // precomputed batch list would ignore prioritised_at entirely.
-      let claimedNothing = 0;
-
       const worker = async () => {
+        // Per-worker, and reset on every successful claim. Shared across the pool
+        // it would be a bug: a handful of lost races spread over the whole run
+        // would retire every worker while modules were still unwritten.
+        let lostRaces = 0;
+
         for (;;) {
           const { data: next } = await supabase
             .from('modules')
@@ -290,10 +348,13 @@ async function generateCourseProgressive(docId, documentText, userId, opts = {})
           const claimedIds = new Set((claimed || []).map(r => r.id));
           const mine = rows.filter(r => claimedIds.has(r.id));
           if (!mine.length) {
-            // Another worker won the race; back off briefly then re-poll.
-            if (++claimedNothing > 20) return;
+            // Another worker won this race. Retire only after losing repeatedly
+            // in a row, which means the queue is genuinely being drained by peers
+            // rather than that this worker has been unlucky over a long run.
+            if (++lostRaces > 20) return;
             continue;
           }
+          lostRaces = 0;
 
           const startIdx = Math.max(0, outline.findIndex(o => o.title === mine[0].title));
           await fillSkeletonBatch(mine, segments[0], outline, startIdx, profile, pedagogyOpts);
@@ -319,6 +380,7 @@ module.exports = {
   generateIntroModule,
   upgradeIntroModule,
   prioritizeModule,
+  retryModule,
   reapStalledSkeletons,
   deriveHeadings,
 };

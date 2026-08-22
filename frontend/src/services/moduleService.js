@@ -61,3 +61,9 @@ export async function prioritizeModule(moduleId) {
   const { data } = await api.post(`/modules/${moduleId}/prioritize`);
   return data;
 }
+
+/** Re-generate a module whose content generation failed. */
+export async function retryModule(moduleId) {
+  const { data } = await api.post(`/modules/${moduleId}/retry`, {}, { timeout: 120000 });
+  return data;
+}

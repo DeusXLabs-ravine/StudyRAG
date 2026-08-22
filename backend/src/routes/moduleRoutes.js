@@ -19,6 +19,15 @@ router.post('/:id/prioritize', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+// Re-generate a module whose content generation failed. Writes directly rather
+// than re-queueing, because the background workers have already exited by then.
+router.post('/:id/retry', async (req, res, next) => {
+  try {
+    const { retryModule } = require('../services/progressiveCourseService');
+    res.json(await retryModule(req.params.id));
+  } catch (error) { next(error); }
+});
+
 // Full quiz, generated on first open (modules ship with one inline question).
 router.post('/:id/quiz', async (req, res, next) => {
   try {

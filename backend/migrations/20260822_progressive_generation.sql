@@ -16,8 +16,13 @@
 
 -- Fill state for a module's content.
 --   pending  — skeleton exists (title/topic/objectives from the outline), no content yet
+--   writing  — a generation worker has claimed this row (claimed atomically by
+--              UPDATE ... WHERE content_status = 'pending', so two workers can
+--              never write the same module)
 --   ready    — content generated
---   failed   — generation failed; needs retry
+--   failed   — generation failed or the claiming worker died; retryable
+-- Deliberately no CHECK constraint: statuses are owned by the application, and a
+-- constraint here would turn adding one into a migration.
 -- Existing rows default to 'ready', which is correct: they already have content.
 ALTER TABLE modules ADD COLUMN IF NOT EXISTS content_status TEXT NOT NULL DEFAULT 'ready';
 
