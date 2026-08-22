@@ -5,7 +5,7 @@
  * All existing `require('../utils/prompts')` calls continue to work unchanged.
  */
 
-const { MODULE_GENERATION_PROMPT, MODULE_OUTLINE_PROMPT, MODULE_BATCH_GENERATION_PROMPT } = require('./prompts/moduleGeneration');
+const { MODULE_GENERATION_PROMPT, MODULE_OUTLINE_PROMPT, MODULE_BATCH_GENERATION_PROMPT, INTRO_MODULE_PROMPT } = require('./prompts/moduleGeneration');
 const { QUIZ_GENERATION_PROMPT, FLASHCARD_GENERATION_PROMPT, APTITUDE_TEST_PROMPT, QUESTION_REGENERATION_PROMPT, REVISION_QUESTIONS_PROMPT, PRACTICE_EXAM_PROMPT } = require('./prompts/quizAssessment');
 const { WEB_RESEARCH_TOPIC_EXTRACTION_PROMPT, WEB_RESEARCH_PROMPT, TOPIC_CURRICULUM_PROMPT, buildTopicPrompt } = require('./prompts/webResearch');
 const { SOLVER_PROMPT, SOLVER_FOLLOWUP_PROMPT } = require('./prompts/solver');
@@ -26,6 +26,7 @@ module.exports = {
   MODULE_GENERATION_PROMPT,
   MODULE_OUTLINE_PROMPT,
   MODULE_BATCH_GENERATION_PROMPT,
+  INTRO_MODULE_PROMPT,
 
   // Quiz & assessment
   QUIZ_GENERATION_PROMPT,

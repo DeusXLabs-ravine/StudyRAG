@@ -10,6 +10,15 @@ router.get('/:id', cacheResponse(2 * 60_000), getModule);   // 2 min cache
 router.put('/:id/progress', updateProgress);
 router.post('/:id/regenerate-questions', regenerateQuestions);
 
+// Progressive generation: a student opening a not-yet-written module bumps it
+// to the front of the fill queue, so nobody waits on lessons they don't want.
+router.post('/:id/prioritize', async (req, res, next) => {
+  try {
+    const { prioritizeModule } = require('../services/progressiveCourseService');
+    res.json(await prioritizeModule(req.params.id));
+  } catch (error) { next(error); }
+});
+
 // Adaptive learning: version history + rewrite controls
 router.get('/:id/versions', async (req, res, next) => {
   try {

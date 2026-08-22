@@ -271,8 +271,25 @@ async function runProcessingPipeline(docId, text, metadata, rawPages = null, buf
 
   const modulesPromise = (async () => {
     const t = Date.now();
-    const result = await generateInitialModules(docId, text, userId);
-    log(`Initial modules (${result.moduleCount} modules, segment 1/${result.totalSegments})`, t);
+
+    // Progressive path: resolves as soon as the course MAP exists (orientation
+    // module + skeleton rows), rather than after every batch has been written.
+    // Content fills in the background. Falls back to the original pipeline if
+    // anything about the progressive flow fails, so a bad outline can never
+    // leave a document with no modules at all.
+    let result;
+    try {
+      const { generateCourseProgressive } = require('../services/progressiveCourseService');
+      result = await generateCourseProgressive(docId, text, userId, {
+        title: metadata?.originalName || metadata?.title || null,
+        pages: rawPages || null,
+      });
+      log(`Course map ready (${result.moduleCount} modules, filling in background)`, t);
+    } catch (err) {
+      console.warn(`${prefix} Progressive generation failed, falling back: ${err.message}`);
+      result = await generateInitialModules(docId, text, userId);
+      log(`Initial modules (${result.moduleCount} modules, segment 1/${result.totalSegments})`, t);
+    }
 
     // After initial modules, update status to reflect partial modules available
     currentMetadata.modulesStatus = result.totalSegments > 1 ? 'partial' : 'complete';
